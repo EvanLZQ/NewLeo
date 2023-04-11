@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "AdminSite.apps.AdminsiteConfig",
+    "UserSite.apps.UsersiteConfig",
 ]
 
 CORS_ORIGIN_ALL_ALL = True

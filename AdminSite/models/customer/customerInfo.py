@@ -1,6 +1,9 @@
 from django.db import models
 from phonenumber_field.modelfields import PhoneNumberField
 
+from ..product import ProductInfo
+from .shoppingList import ShoppingList
+
 
 class CustomerInfo(models.Model):
     email = models.EmailField(unique=True)
@@ -15,8 +18,7 @@ class CustomerInfo(models.Model):
     icon_url = models.CharField(blank=True)
     store_credit = models.IntegerField(default=0)
     level = models.IntegerField(default=0)
-    # TODO product model
-    # wish_list = models.ManyToManyField()
+    wish_list = models.ManyToManyField(ProductInfo, through=ShoppingList)
     # TODO address model
     # address = models.ForeignKey()
     in_blacklist = models.BooleanField(default=False)

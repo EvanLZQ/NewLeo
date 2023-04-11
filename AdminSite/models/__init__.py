@@ -1,2 +1,4 @@
-from .reviewInfo import ReviewInfo
-from .customerInfo import CustomerInfo
+from .customer import *
+from .product import *
+from .order import *
+from .address import Address
