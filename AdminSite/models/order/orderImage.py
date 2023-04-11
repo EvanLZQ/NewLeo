@@ -1,10 +1,11 @@
 from django.db import models
 
-from .orderInfo import OrderInfo
+# from .orderInfo import OrderInfo
 
 
 class OrderImage(models.Model):
-    OrderID = models.ForeignKey(OrderInfo, on_delete=models.CASCADE)
+    OrderID = models.ForeignKey(
+        'AdminSite.OrderInfo', on_delete=models.CASCADE)
     image_type = models.CharField(max_length=20)
     name = models.CharField(max_length=20)
     path = models.URLField()

@@ -1,10 +1,11 @@
 from django.db import models
 
-from .orderInfo import OrderInfo
+# from .orderInfo import OrderInfo
 
 
 class OrderTax(models.Model):
-    OrderID = models.ForeignKey(OrderInfo, on_delete=models.CASCADE)
+    OrderID = models.ForeignKey(
+        'AdminSite.OrderInfo', on_delete=models.CASCADE)
     tax_number = models.CharField(max_length=100)
     total_amount = models.DecimalField(max_digits=5, decimal_places=2)
     gst = models.DecimalField(max_digits=5, decimal_places=2, default=0)

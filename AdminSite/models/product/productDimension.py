@@ -1,10 +1,10 @@
 from django.db import models
-from .productInfo import ProductInfo
+# from .productInfo import ProductInfo
 
 
 class ProductDimension(models.Model):
     productID = models.ForeignKey(
-        ProductInfo, on_delete=models.CASCADE, related_name='product_dimension')
+        'AdminSite.ProductInfo', on_delete=models.CASCADE, related_name='product_dimension')
     frame_width = models.IntegerField()
     lens_width = models.IntegerField()
     bridge = models.IntegerField()

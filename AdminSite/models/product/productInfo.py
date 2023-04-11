@@ -11,50 +11,51 @@ class ProductInfo(models.Model):
     price = models.DecimalField(max_digits=5, decimal_places=2)
     description = models.TextField(null=True)
     # Multiple size?
-    letter_size = models.CharField(choices=['XS', 'S', 'M', 'L', 'XL'])
+    letter_size = models.CharField(max_length=10, choices=[(
+        'XS', 'xs'), ('S', 's'), ('M', 'm'), ('L', 'l'), ('XL', 'xl')])
     string_size = models.CharField(max_length=10)
     frame_weight = models.IntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(999)])
     bifocal = models.BooleanField(default=False)
-    material = models.CharField(
-        choices=[
-            'Acetate',
-            'Titanium',
-            'Plastic',
-            'Carbon Fiber',
-            'Mixed',
-            'Metal',
-            'Aluminium Alloy',
-            'Wood',
-            'TR90',
-            'Ultem',
-            'Memory Titanium',
-            'Stainless Steel'])
-    shape = models.CharField(
-        choices=[
-            'Rectangle',
-            'Round',
-            'Square',
-            'Oval',
-            'Cat-Eye',
-            'Aviator',
-            'Horn',
-            'Browline',
-            'Geometric',
-            'Heart',
-            'Butterfly',
-            'Irregular',
-            'Other'])
-    gender = models.CharField(
-        choices=["Male", "Female", "Unisex"], default="Unisex")
-    nose_pad = models.CharField(
-        choices=['Standard', 'Asian Fit', 'Adjustable'])
-    frame_style = models.CharField(
-        choices=['Full-Rim', 'Semi-Rimless', 'Rimless'])
+    material = models.CharField(max_length=50,
+                                choices=[
+                                    ('ACETATE', 'Acetate'),
+                                    ('TITANIUM', 'Titanium'),
+                                    ('PLASTIC', 'Plastic'),
+                                    ('CARBONFIBER', 'Carbon Fiber'),
+                                    ('MIXED', 'Mixed'),
+                                    ('METAL', 'Metal'),
+                                    ('ALUMINIUMALLOY', 'Aluminium Alloy'),
+                                    ('WOOD', 'Wood'),
+                                    ('TR90', 'tr90'),
+                                    ('ULTEM', 'Ultem'),
+                                    ('MEMORYTITANIUM', 'Memory Titanium'),
+                                    ('STAINLESSSTEEL', 'Stainless Steel')])
+    shape = models.CharField(max_length=50,
+                             choices=[
+                                 ('RECTANGLE', 'Rectangle'),
+                                 ('ROUND', 'Round'),
+                                 ('SQUARE', 'Square'),
+                                 ('OVAL', 'Oval'),
+                                 ('CATEYE', 'Cat-Eye'),
+                                 ('AVIATOR', 'Aviator'),
+                                 ('HORN', 'Horn'),
+                                 ('BROWLINE', 'Browline'),
+                                 ('GEOMETRIC', 'Geometric'),
+                                 ('HEART', 'Heart'),
+                                 ('BUTTERFLY', 'Butterfly'),
+                                 ('IRREGULAR', 'Irregular'),
+                                 ('OTHER', 'Other')])
+    gender = models.CharField(max_length=20,
+                              choices=[('MALE', 'Male'), ('FEMALE', 'Female'), ('UNISEX', 'Unisex')], default='UNISEX')
+    nose_pad = models.CharField(max_length=20,
+                                choices=[('STANDARD', 'Standard'), ('ASIANFIT', 'Asian Fit'), ('ADJUSTABLE', 'Adjustable')])
+    frame_style = models.CharField(max_length=20,
+                                   choices=[('FULLRIM', 'Full-Rim'), ('SEMIRIMLESS', 'Semi-Rimless'), ('RIMLESS', 'Rimless')])
     pd_upper_range = models.IntegerField(default=80)
     pd_lower_range = models.IntegerField(default=30)
     color_name = models.CharField(max_length=50)
-    online = models.CharField(default=False)
+    online = models.BooleanField(default=False)
     reduced_price = models.DecimalField(
         max_digits=5, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)

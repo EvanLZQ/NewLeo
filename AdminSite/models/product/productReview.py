@@ -2,11 +2,12 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
 
-from .productInfo import ProductInfo
+# from .productInfo import ProductInfo
 
 
 class ProductReview(models.Model):
-    ProductID = models.ForeignKey(ProductInfo, on_delete=models.CASCADE)
+    ProductID = models.ForeignKey(
+        'AdminSite.ProductInfo', on_delete=models.CASCADE)
     title = models.CharField(max_length=50)
     content = models.TextField(blank=True)
     user_email = models.EmailField()

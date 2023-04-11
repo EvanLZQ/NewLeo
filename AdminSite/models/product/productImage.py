@@ -1,9 +1,10 @@
 from django.db import models
-from .productInfo import ProductInfo
+# from .productInfo import ProductInfo
 
 
 class ProductImage(models.Model):
-    productID = models.ForeignKey(ProductInfo, on_delete=models.CASCADE)
+    productID = models.ForeignKey(
+        'AdminSite.ProductInfo', on_delete=models.CASCADE)
     image_type = models.CharField(max_length=50)
     name = models.CharField(max_length=20)
     path = models.URLField()
