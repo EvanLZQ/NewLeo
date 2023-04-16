@@ -8,3 +8,8 @@ class ProductTag(models.Model):
     description = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ProductTag'
+        verbose_name = 'Product Tag'
+        verbose_name_plural = 'Product Tags'

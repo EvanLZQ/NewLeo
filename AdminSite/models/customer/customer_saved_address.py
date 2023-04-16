@@ -9,3 +9,6 @@ class CustomerSavedAddress(models.Model):
         'AdminSite.CustomerInfo', on_delete=models.CASCADE)
     AddressID = models.ForeignKey(
         'AdminSite.Address', on_delete=models.CASCADE)
+
+    class Meta:
+        db_table = 'customer_saved_address'

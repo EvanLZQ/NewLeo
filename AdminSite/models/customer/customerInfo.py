@@ -28,3 +28,8 @@ class CustomerInfo(models.Model):
     # payment_method = models.ManyToManyField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'CustomerInfo'
+        verbose_name = 'Customer'
+        verbose_name_plural = 'Customers'

@@ -11,3 +11,8 @@ class ProductImage(models.Model):
     description = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ProductImage'
+        verbose_name = 'Product Image'
+        verbose_name_plural = 'Product Images'

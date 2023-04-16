@@ -10,3 +10,6 @@ class OrderHasAddress(models.Model):
         'AdminSite.Address', on_delete=models.CASCADE)
     OrderID = models.ForeignKey(
         'AdminSite.OrderInfo', on_delete=models.CASCADE)
+
+    class Meta:
+        db_table = 'order_has_address'

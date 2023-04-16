@@ -12,3 +12,8 @@ class OrderImage(models.Model):
     description = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'OrderImage'
+        verbose_name = 'Order Image'
+        verbose_name_plural = 'Order Images'

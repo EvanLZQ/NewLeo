@@ -14,3 +14,8 @@ class ProductDimension(models.Model):
     lower_wearable_width = models.IntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ProductDimension'
+        verbose_name = 'Product Dimension'
+        verbose_name_plural = 'Product Dimensions'

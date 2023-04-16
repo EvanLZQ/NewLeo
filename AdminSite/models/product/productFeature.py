@@ -10,3 +10,8 @@ class ProductFeature(models.Model):
     image = models.URLField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ProductFeature'
+        verbose_name = 'Product Feature'
+        verbose_name_plural = 'Product Features'

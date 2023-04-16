@@ -13,3 +13,8 @@ class ShoppingList(models.Model):
         default=1, validators=[MinValueValidator(1), MaxValueValidator(99)])
     list_type = models.CharField(max_length=30,
                                  choices=[('SHOPPINGCART', 'Shopping Cart'), ('WISHLIST', 'Wish List')])
+
+    class Meta:
+        db_table = 'ShoppingList'
+        verbose_name = 'Shopping List'
+        verbose_name_plural = 'Shopping Lists'

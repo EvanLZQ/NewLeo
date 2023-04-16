@@ -1,6 +1,7 @@
 from django.db import models
 from phonenumber_field.modelfields import PhoneNumberField
 
+
 class Address(models.Model):
     full_name = models.CharField(max_length=50)
     phone = PhoneNumberField()
@@ -13,3 +14,7 @@ class Address(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        db_table = 'Address'
+        verbose_name = 'Address'
+        verbose_name_plural = 'Addresses'

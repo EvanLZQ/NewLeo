@@ -12,3 +12,6 @@ class OrderLineItem(models.Model):
         'AdminSite.OrderInfo', on_delete=models.CASCADE)
     quantity = models.IntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(99)], default=0)
+
+    class Meta:
+        db_table = 'order_line_item'

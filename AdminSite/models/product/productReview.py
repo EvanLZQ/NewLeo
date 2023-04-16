@@ -17,3 +17,8 @@ class ProductReview(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     approved_by = models.ManyToManyField(User, blank=True)
+
+    class Meta:
+        db_table = 'ProductReview'
+        verbose_name = 'Product Review'
+        verbose_name_plural = 'Product Reviews'

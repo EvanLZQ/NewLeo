@@ -39,3 +39,8 @@ class OrderInfo(models.Model):
     issue_order = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'OrderInfo'
+        verbose_name = 'Order'
+        verbose_name_plural = 'Orders'
