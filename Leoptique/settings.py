@@ -39,8 +39,12 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "corsheaders",
-    "AdminSite.apps.AdminsiteConfig",
-    "UserSite.apps.UsersiteConfig",
+    "Customer.apps.CustomerConfig",
+    "Product.apps.ProductConfig",
+    "Order.apps.OrderConfig",
+    "General.apps.GeneralConfig",
+    # "AdminSite.apps.AdminsiteConfig",
+    # "UserSite.apps.UsersiteConfig",
 ]
 
 CORS_ORIGIN_ALL_ALL = True
@@ -85,9 +89,9 @@ DATABASES = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": 'railway',
         "USER": 'postgres',
-        "PASSWORD": 'E3oCHYKQllnk8pqRKmAU',
-        "HOST": 'containers-us-west-184.railway.app',
-        "PORT": '6296',
+        "PASSWORD": 'RT9RNTLPsNR0sglJ5BWX',
+        "HOST": 'containers-us-west-151.railway.app',
+        "PORT": '6193',
     }
 }
 
