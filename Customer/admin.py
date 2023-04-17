@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import CustomerInfo
+
+from .models import CustomerInfo, ShoppingList
 
 # Register your models here.
 
@@ -8,4 +9,4 @@ class CustomerAdmin(admin.ModelAdmin):
     list_display = ('email', 'full_name', 'phone')
 
 
-admin.register(CustomerInfo, CustomerAdmin)
+admin.site.register(CustomerInfo, CustomerAdmin)

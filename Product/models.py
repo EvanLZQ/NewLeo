@@ -2,6 +2,9 @@ from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.contrib.auth.models import User
 
+__all__ = ['ProductDimension', 'ProductTag', 'ProductFeature',
+           'ProductImage', 'ProductInfo', 'ProductReview']
+
 
 class ProductDimension(models.Model):
     productID = models.ForeignKey(
