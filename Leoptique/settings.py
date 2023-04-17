@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "Product.apps.ProductConfig",
     "Order.apps.OrderConfig",
     "General.apps.GeneralConfig",
+    "UserSite",
     # "AdminSite.apps.AdminsiteConfig",
     # "UserSite.apps.UsersiteConfig",
 ]
@@ -65,7 +66,9 @@ ROOT_URLCONF = "Leoptique.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [
+            BASE_DIR / "templates"
+        ],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
