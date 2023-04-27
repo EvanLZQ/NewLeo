@@ -1,10 +1,11 @@
 from django.db import models
 
 # Create your models here.
+__all__ = ['LensOptions', 'LensProperty']
 
 
 class LensOptions(models.Model):
-    CompleteSetID = models.ForeignKey(
+    completeSetID = models.ForeignKey(
         'Order.CompleteSet', on_delete=models.CASCADE)
     name = models.CharField(max_length=50)
     description = models.TextField()
@@ -15,7 +16,7 @@ class LensOptions(models.Model):
 
 
 class LensProperty(models.Model):
-    CompleteSetID = models.ForeignKey(
+    completeSetID = models.ForeignKey(
         'Order.CompleteSet', on_delete=models.CASCADE)
     name = models.CharField(max_length=50)
     description = models.TextField()

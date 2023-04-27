@@ -9,6 +9,7 @@ __all__ = ['ProductDimension', 'ProductTag', 'ProductFeature',
 class ProductDimension(models.Model):
     productID = models.ForeignKey(
         'Product.ProductInfo', on_delete=models.CASCADE, related_name='product_dimension')
+    slug = models.SlugField(max_length=200, unique=True, null=True)
     frame_width = models.IntegerField()
     lens_width = models.IntegerField()
     bridge = models.IntegerField()
@@ -27,6 +28,7 @@ class ProductDimension(models.Model):
 
 class ProductFeature(models.Model):
     product = models.ManyToManyField('Product.ProductInfo')
+    slug = models.SlugField(max_length=200, unique=True, null=True)
     name = models.CharField(max_length=20)
     description = models.TextField()
     image = models.URLField(blank=True)
@@ -42,6 +44,7 @@ class ProductFeature(models.Model):
 class ProductImage(models.Model):
     productID = models.ForeignKey(
         'Product.ProductInfo', on_delete=models.CASCADE)
+    slug = models.SlugField(max_length=200, unique=True, null=True)
     image_type = models.CharField(max_length=50)
     name = models.CharField(max_length=20)
     path = models.URLField()
@@ -56,6 +59,7 @@ class ProductImage(models.Model):
 
 
 class ProductInfo(models.Model):
+    slug = models.SlugField(max_length=200, unique=True, null=True)
     model_number = models.CharField(max_length=20)
     sku = models.CharField(unique=True, max_length=20)
     stock = models.IntegerField(
@@ -123,6 +127,7 @@ class ProductInfo(models.Model):
 class ProductReview(models.Model):
     ProductID = models.ForeignKey(
         'Product.ProductInfo', on_delete=models.CASCADE)
+    slug = models.SlugField(max_length=200, unique=True, null=True)
     title = models.CharField(max_length=50)
     content = models.TextField(blank=True)
     user_email = models.EmailField()
@@ -140,6 +145,7 @@ class ProductReview(models.Model):
 
 
 class ProductTag(models.Model):
+    slug = models.SlugField(max_length=200, unique=True, null=True)
     product = models.ManyToManyField('Product.ProductInfo')
     name = models.CharField(max_length=20)
     description = models.TextField()

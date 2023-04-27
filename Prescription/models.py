@@ -1,5 +1,7 @@
 from django.db import models
 
+__all__ = ['PrescriptionInfo', 'PrescriptionPrism']
+
 
 class PrescriptionInfo(models.Model):
     pd_l = models.DecimalField(max_digits=5, decimal_places=2)
@@ -20,7 +22,7 @@ class PrescriptionInfo(models.Model):
 
 
 class PrescriptionPrism(models.Model):
-    PrescriptionID = models.ForeignKey(
+    prescriptionID = models.ForeignKey(
         'PrescriptionInfo', on_delete=models.CASCADE)
     horizontal_value_l = models.DecimalField(max_digits=5, decimal_places=2)
     horizontal_direction_l = models.DecimalField(

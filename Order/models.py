@@ -79,6 +79,21 @@ class OrderImage(models.Model):
         verbose_name_plural = 'Order Images'
 
 
+class OrderUpdates(models.Model):
+    OrderID = models.ForeignKey(
+        'Order.OrderInfo', on_delete=models.CASCADE)
+    title = models.CharField(max_length=50)
+    details = models.TextField()
+    by = models.CharField(max_length=50)
+
+    class Meta:
+        db_table = 'OrderUpdates'
+        verbose_name = 'Order Update'
+        verbose_name_plural = 'Order Updates'
+
+
+# Transaction tables:
+
 class OrderHasAddress(models.Model):
     AddressID = models.ForeignKey(
         'General.Address', on_delete=models.CASCADE)
