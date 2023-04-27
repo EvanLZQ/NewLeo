@@ -51,8 +51,8 @@ class CustomerInfo(models.Model):
 
 
 class ShoppingList(models.Model):
-    customer = models.ForeignKey('CustomerInfo', on_delete=models.CASCADE)
-    product = models.ForeignKey(
+    CustomerID = models.ForeignKey('CustomerInfo', on_delete=models.CASCADE)
+    ProductID = models.ForeignKey(
         'Product.ProductInfo', on_delete=models.CASCADE)
     quantity = models.IntegerField(
         default=1, validators=[MinValueValidator(1), MaxValueValidator(99)])
@@ -63,3 +63,12 @@ class ShoppingList(models.Model):
         db_table = 'ShoppingList'
         verbose_name = 'Shopping List'
         verbose_name_plural = 'Shopping Lists'
+
+
+class CustomerSavedPrescription(models.Model):
+    CustomerID = models.ForeignKey('CustomerInfo', on_delete=models.CASCADE)
+    PrescriptionID = models.ForeignKey(
+        'Prescription.PrescriptionInfo', on_delete=models.CASCADE)
+
+    class Meta:
+        db_table = 'customer_saved_prescription'

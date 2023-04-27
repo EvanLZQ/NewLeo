@@ -99,3 +99,25 @@ class OrderLineItem(models.Model):
 
     class Meta:
         db_table = 'order_line_item'
+
+
+class CompleteSet(models.Model):
+    OrderID = models.ForeignKey(
+        'Order.OrderInfo', on_delete=models.CASCADE)
+    ProductID = models.ForeignKey(
+        'Product.ProductInfo', on_delete=models.CASCADE)
+    usage = models.CharField(max_length=100)
+    color = models.CharField(max_length=100)
+    index = models.CharField(max_length=100)
+    customization = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class OrderCompletePrescription(models.Model):
+    CompleteSetID = models.ForeignKey('CompleteSet', on_delete=models.CASCADE)
+    PrescriptionID = models.ForeignKey(
+        'Prescription.PrescriptionInfo', on_delete=models.CASCADE)
+
+    class Meta:
+        db_table = 'order_complete_prescription'

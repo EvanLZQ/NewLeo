@@ -44,6 +44,8 @@ INSTALLED_APPS = [
     "Order.apps.OrderConfig",
     "General.apps.GeneralConfig",
     "UserSite",
+    "Lens",
+    "Prescription",
     # "AdminSite.apps.AdminsiteConfig",
     # "UserSite.apps.UsersiteConfig",
 ]
@@ -90,11 +92,11 @@ WSGI_APPLICATION = "Leoptique.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": 'railway',
+        "NAME": 'Leoptique',
         "USER": 'postgres',
-        "PASSWORD": 'RT9RNTLPsNR0sglJ5BWX',
-        "HOST": 'containers-us-west-151.railway.app',
-        "PORT": '6193',
+        "PASSWORD": '000110gg',
+        "HOST": 'localhost',
+        "PORT": '5432',
     }
 }
 
