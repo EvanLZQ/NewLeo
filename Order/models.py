@@ -2,6 +2,9 @@ from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 # Create your models here.
 
+__all__ = ['OrderInfo', 'OrderTax',
+           'OrderImage', 'OrderUpdates', 'CompleteSet']
+
 
 class OrderInfo(models.Model):
     product = models.ManyToManyField(
@@ -127,6 +130,10 @@ class CompleteSet(models.Model):
     customization = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Complete Set'
+        verbose_name_plural = 'Complete Sets'
 
 
 class OrderCompletePrescription(models.Model):

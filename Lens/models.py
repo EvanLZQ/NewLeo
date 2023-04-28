@@ -14,6 +14,10 @@ class LensOptions(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        verbose_name = 'Lens Option'
+        verbose_name_plural = 'Lens Options'
+
 
 class LensProperty(models.Model):
     completeSetID = models.ForeignKey(
@@ -24,3 +28,7 @@ class LensProperty(models.Model):
         max_digits=5, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Lens Property'
+        verbose_name_plural = 'Lens Properties'

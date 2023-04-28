@@ -20,6 +20,10 @@ class PrescriptionInfo(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        verbose_name = 'Presctiption'
+        verbose_name_plural = 'Presctiptions'
+
 
 class PrescriptionPrism(models.Model):
     prescriptionID = models.ForeignKey(
@@ -34,3 +38,7 @@ class PrescriptionPrism(models.Model):
     vertical_direction_l = models.DecimalField(max_digits=5, decimal_places=2)
     vertical_value_r = models.DecimalField(max_digits=5, decimal_places=2)
     vertical_direction_r = models.DecimalField(max_digits=5, decimal_places=2)
+
+    class Meta:
+        verbose_name = 'Prism'
+        verbose_name_plural = 'Prism'

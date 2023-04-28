@@ -10,3 +10,4 @@ class CustomerAdmin(admin.ModelAdmin):
 
 
 admin.site.register(CustomerInfo, CustomerAdmin)
+admin.site.register(ShoppingList)
