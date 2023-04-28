@@ -8,7 +8,7 @@ __all__ = ['OrderInfo', 'OrderTax',
 
 class OrderInfo(models.Model):
     product = models.ManyToManyField(
-        'Product.ProductInfo', through='Order.OrderLineItem')
+        'Product.ProductInfo', through='Order.OrderLineItem', blank=True)
     email = models.EmailField()
     order_number = models.CharField(max_length=20)
     order_status = models.CharField(max_length=50,

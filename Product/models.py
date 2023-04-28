@@ -27,7 +27,7 @@ class ProductDimension(models.Model):
 
 
 class ProductFeature(models.Model):
-    product = models.ManyToManyField('Product.ProductInfo')
+    product = models.ManyToManyField('Product.ProductInfo', blank=True)
     slug = models.SlugField(max_length=200, unique=True, null=True)
     name = models.CharField(max_length=20)
     description = models.TextField()
@@ -146,7 +146,7 @@ class ProductReview(models.Model):
 
 class ProductTag(models.Model):
     slug = models.SlugField(max_length=200, unique=True, null=True)
-    product = models.ManyToManyField('Product.ProductInfo')
+    product = models.ManyToManyField('Product.ProductInfo', blank=True)
     name = models.CharField(max_length=20)
     description = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)

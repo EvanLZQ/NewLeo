@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "UserSite",
     "Lens",
     "Prescription",
+    "Accessory",
     # "AdminSite.apps.AdminsiteConfig",
     # "UserSite.apps.UsersiteConfig",
 ]
