@@ -32,6 +32,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -40,16 +41,15 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "corsheaders",
-    "Customer.apps.CustomerConfig",
-    "Product.apps.ProductConfig",
-    "Order.apps.OrderConfig",
-    "General.apps.GeneralConfig",
+    "Customer",
+    "Product",
+    "Order",
+    "General",
     "UserSite",
     "Lens",
     "Prescription",
     "Accessory",
-    # "AdminSite.apps.AdminsiteConfig",
-    # "UserSite.apps.UsersiteConfig",
+    "Supplier",
 ]
 
 CORS_ORIGIN_ALL_ALL = True

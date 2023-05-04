@@ -7,6 +7,8 @@ __all__ = ['ProductDimension', 'ProductTag', 'ProductFeature',
 
 
 class ProductInfo(models.Model):
+    supplierID = models.ForeignKey(
+        'Supplier.SupplierInfo', on_delete=models.SET_NULL, null=True)
     slug = models.SlugField(unique=True, default='', null=False,
                             db_index=True, help_text='Do not edit this field!')
     model_number = models.CharField(max_length=20)
