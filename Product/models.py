@@ -6,68 +6,19 @@ __all__ = ['ProductDimension', 'ProductTag', 'ProductFeature',
            'ProductImage', 'ProductInfo', 'ProductReview']
 
 
-class ProductDimension(models.Model):
-    productID = models.ForeignKey(
-        'Product.ProductInfo', on_delete=models.CASCADE, related_name='product_dimension')
-    slug = models.SlugField(max_length=200, unique=True, null=True)
-    frame_width = models.IntegerField()
-    lens_width = models.IntegerField()
-    bridge = models.IntegerField()
-    temple_length = models.IntegerField()
-    lens_height = models.IntegerField()
-    upper_wearable_width = models.IntegerField()
-    lower_wearable_width = models.IntegerField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'ProductDimension'
-        verbose_name = 'Product Dimension'
-        verbose_name_plural = 'Product Dimensions'
-
-
-class ProductFeature(models.Model):
-    product = models.ManyToManyField('Product.ProductInfo', blank=True)
-    slug = models.SlugField(max_length=200, unique=True, null=True)
-    name = models.CharField(max_length=20)
-    description = models.TextField()
-    image = models.URLField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'ProductFeature'
-        verbose_name = 'Product Feature'
-        verbose_name_plural = 'Product Features'
-
-
-class ProductImage(models.Model):
-    productID = models.ForeignKey(
-        'Product.ProductInfo', on_delete=models.CASCADE)
-    slug = models.SlugField(max_length=200, unique=True, null=True)
-    image_type = models.CharField(max_length=50)
-    name = models.CharField(max_length=20)
-    path = models.URLField()
-    description = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'ProductImage'
-        verbose_name = 'Product Image'
-        verbose_name_plural = 'Product Images'
-
-
 class ProductInfo(models.Model):
-    slug = models.SlugField(max_length=200, unique=True, null=True)
+    slug = models.SlugField(unique=True, default='', null=False,
+                            db_index=True, help_text='Do not edit this field!')
     model_number = models.CharField(max_length=20)
+    name = models.CharField(max_length=100, blank=True)
     sku = models.CharField(unique=True, max_length=20)
+    original_price = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0)
     stock = models.IntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(100)],
         default=0)
     price = models.DecimalField(max_digits=5, decimal_places=2)
     description = models.TextField(null=True)
-    # Multiple size?
     letter_size = models.CharField(max_length=10, choices=[(
         'XS', 'xs'), ('S', 's'), ('M', 'm'), ('L', 'l'), ('XL', 'xl')])
     string_size = models.CharField(max_length=10)
@@ -118,10 +69,65 @@ class ProductInfo(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return self.sku
+
     class Meta:
         db_table = 'ProductInfo'
         verbose_name = 'Product'
         verbose_name_plural = 'Products'
+
+
+class ProductDimension(models.Model):
+    productID = models.ForeignKey(
+        'Product.ProductInfo', on_delete=models.CASCADE, related_name='product_dimension')
+    slug = models.SlugField(max_length=200, unique=True, null=True)
+    frame_width = models.IntegerField()
+    lens_width = models.IntegerField()
+    bridge = models.IntegerField()
+    temple_length = models.IntegerField()
+    lens_height = models.IntegerField()
+    upper_wearable_width = models.IntegerField()
+    lower_wearable_width = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ProductDimension'
+        verbose_name = 'Product Dimension'
+        verbose_name_plural = 'Product Dimensions'
+
+
+class ProductFeature(models.Model):
+    product = models.ManyToManyField('Product.ProductInfo', blank=True)
+    slug = models.SlugField(max_length=200, unique=True, null=True)
+    name = models.CharField(max_length=20)
+    description = models.TextField()
+    image = models.URLField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ProductFeature'
+        verbose_name = 'Product Feature'
+        verbose_name_plural = 'Product Features'
+
+
+class ProductImage(models.Model):
+    productID = models.ForeignKey(
+        'Product.ProductInfo', on_delete=models.CASCADE)
+    slug = models.SlugField(max_length=200, unique=True, null=True)
+    image_type = models.CharField(max_length=50)
+    name = models.CharField(max_length=20)
+    path = models.URLField()
+    description = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ProductImage'
+        verbose_name = 'Product Image'
+        verbose_name_plural = 'Product Images'
 
 
 class ProductReview(models.Model):
