@@ -9,6 +9,8 @@ __all__ = ['ProductDimension', 'ProductTag', 'ProductFeature',
 class ProductInfo(models.Model):
     supplierID = models.ForeignKey(
         'Supplier.SupplierInfo', on_delete=models.SET_NULL, null=True)
+    colorID = models.ForeignKey(
+        'Color.ColorInfo', on_delete=models.CASCADE, null=True)
     slug = models.SlugField(unique=True, default='', null=False,
                             db_index=True, help_text='Do not edit this field!')
     model_number = models.CharField(max_length=20)
@@ -64,7 +66,6 @@ class ProductInfo(models.Model):
                                    choices=[('FULLRIM', 'Full-Rim'), ('SEMIRIMLESS', 'Semi-Rimless'), ('RIMLESS', 'Rimless')])
     pd_upper_range = models.IntegerField(default=80)
     pd_lower_range = models.IntegerField(default=30)
-    color_name = models.CharField(max_length=50)
     online = models.BooleanField(default=False)
     reduced_price = models.DecimalField(
         max_digits=5, decimal_places=2, default=0)

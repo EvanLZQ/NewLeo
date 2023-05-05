@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "Prescription",
     "Accessory",
     "Supplier",
+    "Color",
 ]
 
 CORS_ORIGIN_ALL_ALL = True
