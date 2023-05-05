@@ -3,7 +3,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.contrib.auth.models import User
 
 __all__ = ['ProductDimension', 'ProductTag', 'ProductFeature',
-           'ProductImage', 'ProductInfo', 'ProductReview']
+           'ProductImage', 'ProductInfo', 'ProductReview', 'ProductCollection']
 
 
 class ProductInfo(models.Model):
@@ -81,6 +81,29 @@ class ProductInfo(models.Model):
         verbose_name_plural = 'Products'
 
 
+class ProductCollection(models.Model):
+    product = models.ManyToManyField('Product.ProductInfo', blank=True)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    slug = models.SlugField(unique=True, default='', null=False,
+                            db_index=True, help_text='Do not edit this field!')
+    is_featured = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=False)
+    display_order = models.IntegerField(validators=[MinValueValidator(1)],
+                                        default=1)
+    image_url = models.URLField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        db_table = 'ProductCollection'
+        verbose_name = 'Product Collection'
+        verbose_name_plural = 'Product Collections'
+
+
 class ProductDimension(models.Model):
     productID = models.ForeignKey(
         'Product.ProductInfo', on_delete=models.CASCADE, related_name='product_dimension')
@@ -95,6 +118,9 @@ class ProductDimension(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return self.name
+
     class Meta:
         db_table = 'ProductDimension'
         verbose_name = 'Product Dimension'
@@ -104,11 +130,14 @@ class ProductDimension(models.Model):
 class ProductFeature(models.Model):
     product = models.ManyToManyField('Product.ProductInfo', blank=True)
     slug = models.SlugField(max_length=200, unique=True, null=True)
-    name = models.CharField(max_length=20)
+    name = models.CharField(max_length=100)
     description = models.TextField()
     image = models.URLField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
 
     class Meta:
         db_table = 'ProductFeature'
@@ -121,11 +150,14 @@ class ProductImage(models.Model):
         'Product.ProductInfo', on_delete=models.CASCADE)
     slug = models.SlugField(max_length=200, unique=True, null=True)
     image_type = models.CharField(max_length=50)
-    name = models.CharField(max_length=20)
+    name = models.CharField(max_length=100)
     path = models.URLField()
     description = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
 
     class Meta:
         db_table = 'ProductImage'
@@ -147,6 +179,9 @@ class ProductReview(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     approved_by = models.ManyToManyField(User, blank=True)
 
+    def __str__(self):
+        return self.title
+
     class Meta:
         db_table = 'ProductReview'
         verbose_name = 'Product Review'
@@ -156,10 +191,13 @@ class ProductReview(models.Model):
 class ProductTag(models.Model):
     slug = models.SlugField(max_length=200, unique=True, null=True)
     product = models.ManyToManyField('Product.ProductInfo', blank=True)
-    name = models.CharField(max_length=20)
+    name = models.CharField(max_length=100)
     description = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
 
     class Meta:
         db_table = 'ProductTag'

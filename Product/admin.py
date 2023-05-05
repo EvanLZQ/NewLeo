@@ -15,6 +15,7 @@ class ProductAdmin(admin.ModelAdmin):
 
 
 admin.site.register(ProductInfo, ProductAdmin)
+admin.site.register(ProductCollection)
 admin.site.register(ProductDimension)
 admin.site.register(ProductFeature)
 admin.site.register(ProductImage)
