@@ -23,4 +23,5 @@ admin.site.index_title = 'Home Page'
 urlpatterns = [
     path("", include("UserSite.urls")),
     path("admin/", admin.site.urls),
+    path("cart/", include("Customer.urls")),
 ]
