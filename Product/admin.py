@@ -8,10 +8,10 @@ from .models import *
 class ProductAdmin(admin.ModelAdmin):
     prepopulated_fields = {'slug': ['sku']}
 
-    def get_readonly_fields(self, request, obj=None):
-        if obj:
-            return self.readonly_fields + ('slug',)
-        return self.readonly_fields
+    # def get_readonly_fields(self, request, obj=None):
+    #     if obj:
+    #         return self.readonly_fields + ('slug',)
+    #     return self.readonly_fields
 
 
 admin.site.register(ProductInfo, ProductAdmin)

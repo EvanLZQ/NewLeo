@@ -10,7 +10,11 @@ class ProductInfo(models.Model):
     supplierID = models.ForeignKey(
         'Supplier.SupplierInfo', on_delete=models.SET_NULL, null=True)
     colorID = models.ForeignKey(
-        'Color.ColorInfo', on_delete=models.CASCADE, null=True)
+        'Color.ColorInfo', on_delete=models.CASCADE, null=True, related_name='productcolor')
+    dimensionID = models.ForeignKey(
+        'Product.ProductDimension', null=True, on_delete=models.SET_NULL, related_name='productdimension')
+    imageID = models.ForeignKey(
+        'Product.ProductImage', on_delete=models.SET_NULL, null=True, related_name='productimage')
     slug = models.SlugField(unique=True, default='', null=False,
                             db_index=True, help_text='Do not edit this field!')
     model_number = models.CharField(max_length=20)
@@ -105,8 +109,6 @@ class ProductCollection(models.Model):
 
 
 class ProductDimension(models.Model):
-    productID = models.ForeignKey(
-        'Product.ProductInfo', on_delete=models.CASCADE, related_name='product_dimension')
     slug = models.SlugField(max_length=200, unique=True, null=True)
     frame_width = models.IntegerField()
     lens_width = models.IntegerField()
@@ -119,7 +121,7 @@ class ProductDimension(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.name
+        return self.slug
 
     class Meta:
         db_table = 'ProductDimension'
@@ -146,8 +148,6 @@ class ProductFeature(models.Model):
 
 
 class ProductImage(models.Model):
-    productID = models.ForeignKey(
-        'Product.ProductInfo', on_delete=models.CASCADE)
     slug = models.SlugField(max_length=200, unique=True, null=True)
     image_type = models.CharField(max_length=50)
     name = models.CharField(max_length=100)
@@ -166,7 +166,7 @@ class ProductImage(models.Model):
 
 
 class ProductReview(models.Model):
-    ProductID = models.ForeignKey(
+    productID = models.ForeignKey(
         'Product.ProductInfo', on_delete=models.CASCADE)
     slug = models.SlugField(max_length=200, unique=True, null=True)
     title = models.CharField(max_length=50)
