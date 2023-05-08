@@ -9,18 +9,14 @@ __all__ = ['ProductDimension', 'ProductTag', 'ProductFeature',
 class ProductInfo(models.Model):
     supplierID = models.ForeignKey(
         'Supplier.SupplierInfo', on_delete=models.SET_NULL, null=True)
-    colorID = models.ForeignKey(
-        'Color.ColorInfo', on_delete=models.CASCADE, null=True, related_name='productcolor')
     dimensionID = models.ForeignKey(
         'Product.ProductDimension', null=True, on_delete=models.SET_NULL, related_name='productdimension')
-    imageID = models.ForeignKey(
-        'Product.ProductImage', on_delete=models.SET_NULL, null=True, related_name='productimage')
     slug = models.SlugField(unique=True, default='', null=False,
                             db_index=True, help_text='Do not edit this field!')
     model_number = models.CharField(max_length=20)
     name = models.CharField(max_length=100, blank=True)
     sku = models.CharField(unique=True, max_length=20)
-    original_price = models.DecimalField(
+    base_price = models.DecimalField(
         max_digits=5, decimal_places=2, default=0)
     stock = models.IntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(100)],
@@ -148,10 +144,14 @@ class ProductFeature(models.Model):
 
 
 class ProductImage(models.Model):
+    productID: models.ForeignKey(
+        'Product.ProductInfo', on_delete=models.CASCADE, related_name='product')
+    colorID: models.ForeignKey(
+        'Color.ColorInfo', on_delete=models.CASCADE, related_name='color')
     slug = models.SlugField(max_length=200, unique=True, null=True)
     image_type = models.CharField(max_length=50)
     name = models.CharField(max_length=100)
-    path = models.URLField()
+    image_url = models.URLField()
     description = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -166,8 +166,10 @@ class ProductImage(models.Model):
 
 
 class ProductReview(models.Model):
+    approved_by = models.ForeignKey(
+        User, blank=True, related_name='approvedby', on_delete=models.SET_NULL, null=True)
     productID = models.ForeignKey(
-        'Product.ProductInfo', on_delete=models.CASCADE)
+        'Product.ProductInfo', on_delete=models.CASCADE, related_name='productinfo')
     slug = models.SlugField(max_length=200, unique=True, null=True)
     title = models.CharField(max_length=50)
     content = models.TextField(blank=True)
@@ -177,7 +179,6 @@ class ProductReview(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(5)], default=5)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    approved_by = models.ManyToManyField(User, blank=True)
 
     def __str__(self):
         return self.title
