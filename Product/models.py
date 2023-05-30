@@ -144,10 +144,10 @@ class ProductFeature(models.Model):
 
 
 class ProductImage(models.Model):
-    productID: models.ForeignKey(
-        'Product.ProductInfo', on_delete=models.CASCADE, related_name='product')
-    colorID: models.ForeignKey(
-        'Color.ColorInfo', on_delete=models.CASCADE, related_name='color')
+    productID = models.ForeignKey(
+        'Product.ProductInfo', on_delete=models.CASCADE, related_name='productimage', null=True)
+    colorID = models.ForeignKey(
+        'Color.ColorInfo', on_delete=models.CASCADE, related_name='productimage', null=True)
     slug = models.SlugField(max_length=200, unique=True, null=True)
     image_type = models.CharField(max_length=50)
     name = models.CharField(max_length=100)

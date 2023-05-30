@@ -5,8 +5,16 @@ from .models import *
 # Register your models here.
 
 
+class ImageInline(admin.TabularInline):
+    model = ProductImage
+
+
 class ProductAdmin(admin.ModelAdmin):
     prepopulated_fields = {'slug': ['sku']}
+
+    inlines = [
+        ImageInline,
+    ]
 
     # def get_readonly_fields(self, request, obj=None):
     #     if obj:
