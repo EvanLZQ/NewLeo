@@ -1,6 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.contrib.auth.models import User
+from django.utils.safestring import mark_safe
 
 __all__ = ['ProductDimension', 'ProductTag', 'ProductFeature',
            'ProductImage', 'ProductInfo', 'ProductReview', 'ProductCollection']
@@ -155,6 +156,9 @@ class ProductImage(models.Model):
     description = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def product_image(self):
+        return mark_safe('<img src="%s" width="300"  />' % (self.image_url))
 
     def __str__(self):
         return self.name
