@@ -2,7 +2,6 @@ from rest_framework import serializers
 
 from .models import *
 from Supplier.serializer import SupplierSerializer
-from Color.serializer import ColorSerializer
 
 
 class ProductDimensionSerializer(serializers.ModelSerializer):
@@ -18,38 +17,30 @@ class ProductDimensionSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class ProductImageSerializer(serializers.ModelSerializer):
-    color = ColorSerializer(source="colorID", many=False)
+# class ProductImageSerializer(serializers.ModelSerializer):
 
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        rep.pop('created_at', None)
-        rep.pop('updated_at', None)
-        return rep
+#     def to_representation(self, instance):
+#         rep = super().to_representation(instance)
+#         rep.pop('created_at', None)
+#         rep.pop('updated_at', None)
+#         return rep
 
-    class Meta:
-        model = ProductImage
-        fields = [
-            'id',
-            'slug',
-            'image_type',
-            'name',
-            'image_url',
-            'description',
-            'color',
-        ]
+#     class Meta:
+#         model = ProductImage
+#         fields = [
+#             'id',
+#             'slug',
+#             'image_type',
+#             'name',
+#             'image_url',
+#             'description',
+#         ]
 
 
 class ProductSerializer(serializers.ModelSerializer):
     dimension = ProductDimensionSerializer(source="dimensionID", many=False)
     supplier = SupplierSerializer(source="supplierID", many=False)
-    productimage = ProductImageSerializer(many=True)
-    product_color_list = serializers.SerializerMethodField()
-
-    def get_product_color_list(self, obj):
-        unique_colors = set((image.colorID.display_name, image.colorID.base_name)
-                            for image in obj.productimage.all())
-        return [{'display_name': display_name, 'base_name': base_name} for display_name, base_name in unique_colors]
+    # productimage = ProductImageSerializer(many=True)
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
@@ -81,6 +72,5 @@ class ProductSerializer(serializers.ModelSerializer):
             'pd_upper_range',
             'pd_lower_range',
             'supplier',
-            'productimage',
-            'product_color_list'
+            # 'productimage',
         ]

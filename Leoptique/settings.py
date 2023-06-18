@@ -46,12 +46,10 @@ INSTALLED_APPS = [
     "Product",
     "Order",
     "General",
-    "UserSite",
     "Lens",
     "Prescription",
     "Accessory",
     "Supplier",
-    "Color",
 ]
 
 
@@ -72,7 +70,7 @@ TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [
-            BASE_DIR / "templates"
+            BASE_DIR
         ],
         "APP_DIRS": True,
         "OPTIONS": {

@@ -21,8 +21,6 @@ admin.site.site_title = 'Leoptique Admin'
 admin.site.index_title = 'Home Page'
 
 urlpatterns = [
-    path("", include("UserSite.urls")),
     path("admin/", admin.site.urls),
-    path("cart/", include("Customer.urls")),
     path("api/", include("Product.urls")),
 ]

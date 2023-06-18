@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django.utils.safestring import mark_safe
 
 __all__ = ['ProductDimension', 'ProductTag', 'ProductFeature',
-           'ProductImage', 'ProductInfo', 'ProductReview', 'ProductCollection']
+           'ProductInstance', 'ProductInfo', 'ProductReview', 'ProductCollection']
 
 
 class ProductInfo(models.Model):
@@ -16,12 +16,8 @@ class ProductInfo(models.Model):
                             db_index=True, help_text='Do not edit this field!')
     model_number = models.CharField(max_length=20)
     name = models.CharField(max_length=100, blank=True)
-    sku = models.CharField(unique=True, max_length=20)
     base_price = models.DecimalField(
         max_digits=5, decimal_places=2, default=0)
-    stock = models.IntegerField(
-        validators=[MinValueValidator(0), MaxValueValidator(100)],
-        default=0)
     price = models.DecimalField(max_digits=5, decimal_places=2)
     description = models.TextField(null=True)
     letter_size = models.CharField(max_length=10, choices=[(
@@ -144,29 +140,53 @@ class ProductFeature(models.Model):
         verbose_name_plural = 'Product Features'
 
 
-class ProductImage(models.Model):
+class ProductInstance(models.Model):
+    COLOR_CHOICES = (
+        ('aqua', 'Aqua'),
+        ('black', 'Black'),
+        ('blue', 'Blue'),
+        ('fuchsia', 'Fuchsia'),
+        ('gray', 'Gray'),
+        ('green', 'Green'),
+        ('lime', 'Lime'),
+        ('maroon', 'Maroon'),
+        ('navy', 'Navy'),
+        ('olive', 'Olive'),
+        ('orange', 'Orange'),
+        ('purple', 'Purple'),
+        ('red', 'Red'),
+        ('silver', 'Silver'),
+        ('teal', 'Teal'),
+        ('white', 'White'),
+        ('yellow', 'Yellow'),
+    )
     productID = models.ForeignKey(
-        'Product.ProductInfo', on_delete=models.CASCADE, related_name='productimage', null=True)
-    colorID = models.ForeignKey(
-        'Color.ColorInfo', on_delete=models.CASCADE, related_name='productimage', null=True)
+        'Product.ProductInfo', on_delete=models.CASCADE, related_name='productInstance', null=True)
     slug = models.SlugField(max_length=200, unique=True, null=True)
-    image_type = models.CharField(max_length=50)
-    name = models.CharField(max_length=100)
-    image_url = models.URLField()
+    sku = models.CharField(unique=True, max_length=20)
+    stock = models.IntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        default=0)
+    price = models.DecimalField(max_digits=5, decimal_places=2, blank=True)
+    carousel_img = models.CharField(max_length=1000)
+    detail_img = models.CharField(max_length=1000)
+    color_img_url = models.URLField()
+    color_base_name = models.CharField(max_length=20, choices=COLOR_CHOICES)
+    color_display_name = models.CharField(max_length=100)
     description = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def product_image(self):
-        return mark_safe('<img src="%s" width="300"  />' % (self.image_url))
+    # def product_image(self):
+    #     return mark_safe('<img src="%s" width="300"  />' % (self.image_url))
 
     def __str__(self):
         return self.name
 
     class Meta:
-        db_table = 'ProductImage'
-        verbose_name = 'Product Image'
-        verbose_name_plural = 'Product Images'
+        db_table = 'ProductInstance'
+        verbose_name = 'Product Instance'
+        verbose_name_plural = 'Product Instances'
 
 
 class ProductReview(models.Model):
