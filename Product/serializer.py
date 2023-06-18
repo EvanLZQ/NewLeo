@@ -2,31 +2,67 @@ from rest_framework import serializers
 
 from .models import *
 from Supplier.serializer import SupplierSerializer
+from Color.serializer import ColorSerializer
 
 
 class ProductDimensionSerializer(serializers.ModelSerializer):
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep.pop('created_at', None)
+        rep.pop('updated_at', None)
+        return rep
+
     class Meta:
         model = ProductDimension
         fields = '__all__'
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
+    color = ColorSerializer(source="colorID", many=False)
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep.pop('created_at', None)
+        rep.pop('updated_at', None)
+        return rep
+
     class Meta:
         model = ProductImage
-        fields = '__all__'
+        fields = [
+            'id',
+            'slug',
+            'image_type',
+            'name',
+            'image_url',
+            'description',
+            'color',
+        ]
 
 
 class ProductSerializer(serializers.ModelSerializer):
-    dimensionID = ProductDimensionSerializer()
-    supplierID = SupplierSerializer()
+    dimension = ProductDimensionSerializer(source="dimensionID", many=False)
+    supplier = SupplierSerializer(source="supplierID", many=False)
     productimage = ProductImageSerializer(many=True)
+    product_color_list = serializers.SerializerMethodField()
+
+    def get_product_color_list(self, obj):
+        unique_colors = set((image.colorID.display_name, image.colorID.base_name)
+                            for image in obj.productimage.all())
+        return [{'display_name': display_name, 'base_name': base_name} for display_name, base_name in unique_colors]
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep.pop('created_at', None)
+        rep.pop('updated_at', None)
+        return rep
 
     class Meta:
         model = ProductInfo
         fields = [
             'id',
             'slug',
-            'dimensionID',
+            'dimension',
             'model_number',
             'sku',
             'stock',
@@ -44,6 +80,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'frame_style',
             'pd_upper_range',
             'pd_lower_range',
-            'supplierID',
-            'productimage'
+            'supplier',
+            'productimage',
+            'product_color_list'
         ]

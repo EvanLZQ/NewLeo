@@ -54,9 +54,6 @@ INSTALLED_APPS = [
     "Color",
 ]
 
-CORS_ORIGIN_ALL_ALL = True
-
-X_FRAME_OPTIONS = 'SAMEORIGIN'
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
@@ -151,3 +148,5 @@ STATICFILES_DIR = [
 ]
 
 JAZZMIN_SETTINGS = JAZZMIN_SETTINGS
+
+CORS_ALLOW_ALL_ORIGINS = True

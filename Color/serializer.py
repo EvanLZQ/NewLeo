@@ -1,8 +1,8 @@
 from rest_framework import serializers
-from .models import SupplierInfo
+from .models import ColorInfo
 
 
-class SupplierSerializer(serializers.ModelSerializer):
+class ColorSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
@@ -11,5 +11,10 @@ class SupplierSerializer(serializers.ModelSerializer):
         return rep
 
     class Meta:
-        model = SupplierInfo
-        fields = '__all__'
+        model = ColorInfo
+        fields = [
+            'id',
+            'display_name',
+            'base_name',
+            'image_url',
+        ]
