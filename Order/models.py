@@ -8,7 +8,7 @@ __all__ = ['OrderInfo', 'OrderTax',
 
 class OrderInfo(models.Model):
     product = models.ManyToManyField(
-        'Product.ProductInfo', through='Order.OrderLineItem', blank=True)
+        'Product.ProductInstance', through='Order.OrderLineItem', blank=True)
     email = models.EmailField()
     order_number = models.CharField(max_length=20)
     order_status = models.CharField(max_length=50,
@@ -49,7 +49,7 @@ class OrderInfo(models.Model):
 
 
 class OrderTax(models.Model):
-    OrderID = models.ForeignKey(
+    order = models.ForeignKey(
         'Order.OrderInfo', on_delete=models.CASCADE)
     tax_number = models.CharField(max_length=100)
     total_amount = models.DecimalField(max_digits=5, decimal_places=2)
@@ -67,7 +67,7 @@ class OrderTax(models.Model):
 
 
 class OrderImage(models.Model):
-    OrderID = models.ForeignKey(
+    order = models.ForeignKey(
         'Order.OrderInfo', on_delete=models.CASCADE)
     image_type = models.CharField(max_length=20)
     name = models.CharField(max_length=20)
@@ -83,7 +83,7 @@ class OrderImage(models.Model):
 
 
 class OrderUpdates(models.Model):
-    OrderID = models.ForeignKey(
+    order = models.ForeignKey(
         'Order.OrderInfo', on_delete=models.CASCADE)
     title = models.CharField(max_length=50)
     details = models.TextField()
@@ -98,9 +98,9 @@ class OrderUpdates(models.Model):
 # Transaction tables:
 
 class OrderHasAddress(models.Model):
-    AddressID = models.ForeignKey(
+    address = models.ForeignKey(
         'General.Address', on_delete=models.CASCADE)
-    OrderID = models.ForeignKey(
+    order = models.ForeignKey(
         'Order.OrderInfo', on_delete=models.CASCADE)
 
     class Meta:
@@ -108,9 +108,9 @@ class OrderHasAddress(models.Model):
 
 
 class OrderLineItem(models.Model):
-    ProductID = models.ForeignKey(
-        'Product.ProductInfo', on_delete=models.CASCADE)
-    OrderID = models.ForeignKey(
+    product = models.ForeignKey(
+        'Product.ProductInstance', on_delete=models.CASCADE)
+    order = models.ForeignKey(
         'Order.OrderInfo', on_delete=models.CASCADE)
     quantity = models.IntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(99)], default=0)
@@ -120,12 +120,11 @@ class OrderLineItem(models.Model):
 
 
 class CompleteSet(models.Model):
-    OrderID = models.ForeignKey(
+    order = models.ForeignKey(
         'Order.OrderInfo', on_delete=models.CASCADE)
-    ProductID = models.ForeignKey(
-        'Product.ProductInfo', on_delete=models.CASCADE)
+    frame = models.ForeignKey(
+        'Product.ProductInstance', on_delete=models.CASCADE)
     usage = models.CharField(max_length=100)
-    color = models.CharField(max_length=100)
     index = models.CharField(max_length=100)
     customization = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -137,8 +136,9 @@ class CompleteSet(models.Model):
 
 
 class OrderCompletePrescription(models.Model):
-    CompleteSetID = models.ForeignKey('CompleteSet', on_delete=models.CASCADE)
-    PrescriptionID = models.ForeignKey(
+    completeSet = models.ForeignKey(
+        'Order.CompleteSet', on_delete=models.CASCADE)
+    prescription = models.ForeignKey(
         'Prescription.PrescriptionInfo', on_delete=models.CASCADE)
 
     class Meta:

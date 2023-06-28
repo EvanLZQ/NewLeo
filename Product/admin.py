@@ -1,10 +1,16 @@
 from django.contrib import admin
-from django.utils.html import format_html
-
-
 from .models import *
 
-# Register your models here.
+
+class ProductInstanceAdmin(admin.ModelAdmin):
+
+    @admin.display(description="Model Number")
+    def get_model_number(self, obj):
+        return obj.productID.model_number
+
+    list_display = ['get_model_number', 'sku', 'online']
+    readonly_fields = ['color_image_preview',
+                       'carousel_image_preview', 'detail_image_preview']
 
 
 # class ImageInline(admin.TabularInline):
@@ -45,10 +51,10 @@ from .models import *
 
 
 admin.site.register(ProductInfo)
-admin.site.register(ProductCollection)
-admin.site.register(ProductDimension)
-admin.site.register(ProductFeature)
+admin.site.register(ProductPromotion)
+# admin.site.register(ProductDimension)
+# admin.site.register(ProductFeature)
 # admin.site.register(ProductImage, ProductImageAdmin)
-admin.site.register(ProductInstance)
+admin.site.register(ProductInstance, ProductInstanceAdmin)
 admin.site.register(ProductReview)
 admin.site.register(ProductTag)

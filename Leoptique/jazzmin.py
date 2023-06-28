@@ -24,7 +24,7 @@ JAZZMIN_SETTINGS = {
     "site_icon": None,
 
     # Welcome text on the login screen
-    "welcome_sign": "Welcome to the library",
+    "welcome_sign": "Welcome to the Leoptique Admin Site",
 
     # Copyright on the footer
     "copyright": "Leoptique.com",
@@ -107,9 +107,8 @@ JAZZMIN_SETTINGS = {
         "Product.ProductTag": "fas fa-tags",
         "Product.ProductReview": "fas fa-pen-nib",
         "Product.ProductInstance": "fas fa-image",
-        "Product.ProductFeature": "fas fa-star",
         "Product.ProductDimension": "fas fa-ruler",
-        "Product.ProductCollection": "fas fa-folder",
+        "Product.ProductPromotion": "fas fa-folder",
         "Customer.CustomerInfo": "fas fa-user",
         "Customer.ShoppingList": "fas fa-list",
         "Accessory.AccessoryInfo": "fas fa-gift",

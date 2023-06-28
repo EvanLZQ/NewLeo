@@ -23,7 +23,8 @@ class AccessoryInfo(models.Model):
 
 
 class AccessoryImage(models.Model):
-    accessoryID = models.ForeignKey('AccessoryInfo', on_delete=models.CASCADE)
+    accessory = models.ForeignKey(
+        'Accessory.AccessoryInfo', on_delete=models.CASCADE)
     image_type = models.CharField(max_length=200, blank=True)
     name = models.CharField(max_length=100)
     path = models.URLField()

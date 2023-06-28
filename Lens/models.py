@@ -5,7 +5,7 @@ __all__ = ['LensOptions', 'LensProperty']
 
 
 class LensOptions(models.Model):
-    completeSetID = models.ForeignKey(
+    completeSet = models.ForeignKey(
         'Order.CompleteSet', on_delete=models.CASCADE)
     name = models.CharField(max_length=50)
     description = models.TextField()
@@ -20,7 +20,7 @@ class LensOptions(models.Model):
 
 
 class LensProperty(models.Model):
-    completeSetID = models.ForeignKey(
+    completeSet = models.ForeignKey(
         'Order.CompleteSet', on_delete=models.CASCADE)
     name = models.CharField(max_length=50)
     description = models.TextField()

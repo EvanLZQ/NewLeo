@@ -3,20 +3,16 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.contrib.auth.models import User
 from django.utils.safestring import mark_safe
 
-__all__ = ['ProductDimension', 'ProductTag', 'ProductFeature',
-           'ProductInstance', 'ProductInfo', 'ProductReview', 'ProductCollection']
+__all__ = ['ProductTag', 'ProductInstance', 'ProductPromotion',
+           'ProductInfo', 'ProductReview']
 
 
 class ProductInfo(models.Model):
-    supplierID = models.ForeignKey(
+    supplier = models.ForeignKey(
         'Supplier.SupplierInfo', on_delete=models.SET_NULL, null=True)
-    dimensionID = models.ForeignKey(
-        'Product.ProductDimension', null=True, on_delete=models.SET_NULL, related_name='productdimension')
-    slug = models.SlugField(unique=True, default='', null=False,
-                            db_index=True, help_text='Do not edit this field!')
     model_number = models.CharField(max_length=20)
     name = models.CharField(max_length=100, blank=True)
-    base_price = models.DecimalField(
+    rmb_price = models.DecimalField(
         max_digits=5, decimal_places=2, default=0)
     price = models.DecimalField(max_digits=5, decimal_places=2)
     description = models.TextField(null=True)
@@ -26,35 +22,13 @@ class ProductInfo(models.Model):
     frame_weight = models.IntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(999)])
     bifocal = models.BooleanField(default=False)
-    material = models.CharField(max_length=50,
-                                choices=[
-                                    ('ACETATE', 'Acetate'),
-                                    ('TITANIUM', 'Titanium'),
-                                    ('PLASTIC', 'Plastic'),
-                                    ('CARBONFIBER', 'Carbon Fiber'),
-                                    ('MIXED', 'Mixed'),
-                                    ('METAL', 'Metal'),
-                                    ('ALUMINIUMALLOY', 'Aluminium Alloy'),
-                                    ('WOOD', 'Wood'),
-                                    ('TR90', 'tr90'),
-                                    ('ULTEM', 'Ultem'),
-                                    ('MEMORYTITANIUM', 'Memory Titanium'),
-                                    ('STAINLESSSTEEL', 'Stainless Steel')])
-    shape = models.CharField(max_length=50,
-                             choices=[
-                                 ('RECTANGLE', 'Rectangle'),
-                                 ('ROUND', 'Round'),
-                                 ('SQUARE', 'Square'),
-                                 ('OVAL', 'Oval'),
-                                 ('CATEYE', 'Cat-Eye'),
-                                 ('AVIATOR', 'Aviator'),
-                                 ('HORN', 'Horn'),
-                                 ('BROWLINE', 'Browline'),
-                                 ('GEOMETRIC', 'Geometric'),
-                                 ('HEART', 'Heart'),
-                                 ('BUTTERFLY', 'Butterfly'),
-                                 ('IRREGULAR', 'Irregular'),
-                                 ('OTHER', 'Other')])
+    frame_width = models.IntegerField()
+    lens_width = models.IntegerField()
+    bridge = models.IntegerField()
+    temple_length = models.IntegerField()
+    lens_height = models.IntegerField()
+    upper_wearable_width = models.IntegerField()
+    lower_wearable_width = models.IntegerField()
     gender = models.CharField(max_length=20,
                               choices=[('MALE', 'Male'), ('FEMALE', 'Female'), ('UNISEX', 'Unisex')], default='UNISEX')
     nose_pad = models.CharField(max_length=20,
@@ -63,14 +37,11 @@ class ProductInfo(models.Model):
                                    choices=[('FULLRIM', 'Full-Rim'), ('SEMIRIMLESS', 'Semi-Rimless'), ('RIMLESS', 'Rimless')])
     pd_upper_range = models.IntegerField(default=80)
     pd_lower_range = models.IntegerField(default=30)
-    online = models.BooleanField(default=False)
-    reduced_price = models.DecimalField(
-        max_digits=5, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.sku
+        return self.model_number
 
     class Meta:
         db_table = 'ProductInfo'
@@ -78,17 +49,21 @@ class ProductInfo(models.Model):
         verbose_name_plural = 'Products'
 
 
-class ProductCollection(models.Model):
-    product = models.ManyToManyField('Product.ProductInfo', blank=True)
+class ProductPromotion(models.Model):
+    productInstance = models.ManyToManyField(
+        'Product.ProductInstance', blank=True)
     name = models.CharField(max_length=100)
+    code = models.CharField(max_length=20)
+    promo_type = models.CharField(max_length=50, choices=[(
+        '1+1', '1+1'), ('priceoff', 'Price-Off'), ('percentoff', 'Percentage-Off')], default='priceoff')
+    promo_value = models.IntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(100)], default=0)
     description = models.TextField(blank=True)
     slug = models.SlugField(unique=True, default='', null=False,
                             db_index=True, help_text='Do not edit this field!')
     is_featured = models.BooleanField(default=False)
     is_active = models.BooleanField(default=False)
-    display_order = models.IntegerField(validators=[MinValueValidator(1)],
-                                        default=1)
-    image_url = models.URLField(blank=True)
+    promo_img = models.CharField(max_length=1000, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -96,48 +71,9 @@ class ProductCollection(models.Model):
         return self.name
 
     class Meta:
-        db_table = 'ProductCollection'
-        verbose_name = 'Product Collection'
-        verbose_name_plural = 'Product Collections'
-
-
-class ProductDimension(models.Model):
-    slug = models.SlugField(max_length=200, unique=True, null=True)
-    frame_width = models.IntegerField()
-    lens_width = models.IntegerField()
-    bridge = models.IntegerField()
-    temple_length = models.IntegerField()
-    lens_height = models.IntegerField()
-    upper_wearable_width = models.IntegerField()
-    lower_wearable_width = models.IntegerField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.slug
-
-    class Meta:
-        db_table = 'ProductDimension'
-        verbose_name = 'Product Dimension'
-        verbose_name_plural = 'Product Dimensions'
-
-
-class ProductFeature(models.Model):
-    product = models.ManyToManyField('Product.ProductInfo', blank=True)
-    slug = models.SlugField(max_length=200, unique=True, null=True)
-    name = models.CharField(max_length=100)
-    description = models.TextField()
-    image = models.URLField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        db_table = 'ProductFeature'
-        verbose_name = 'Product Feature'
-        verbose_name_plural = 'Product Features'
+        db_table = 'ProductPromotion'
+        verbose_name = 'Product Promotion'
+        verbose_name_plural = 'Product Promotions'
 
 
 class ProductInstance(models.Model):
@@ -160,28 +96,46 @@ class ProductInstance(models.Model):
         ('white', 'White'),
         ('yellow', 'Yellow'),
     )
-    productID = models.ForeignKey(
+    product = models.ForeignKey(
         'Product.ProductInfo', on_delete=models.CASCADE, related_name='productInstance', null=True)
     slug = models.SlugField(max_length=200, unique=True, null=True)
     sku = models.CharField(unique=True, max_length=20)
     stock = models.IntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(100)],
         default=0)
-    price = models.DecimalField(max_digits=5, decimal_places=2, blank=True)
+    reduced_price = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0)
+    price = models.DecimalField(
+        max_digits=5, decimal_places=2, blank=True, null=True)
     carousel_img = models.CharField(max_length=1000)
     detail_img = models.CharField(max_length=1000)
     color_img_url = models.URLField()
     color_base_name = models.CharField(max_length=20, choices=COLOR_CHOICES)
     color_display_name = models.CharField(max_length=100)
-    description = models.TextField()
+    description = models.TextField(blank=True)
+    online = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # def product_image(self):
-    #     return mark_safe('<img src="%s" width="300"  />' % (self.image_url))
+    def carousel_image_preview(self):
+        images = self.carousel_img.split(',') if self.carousel_img else []
+        html = ""
+        for image in images:
+            html += f'<img src="{image}" style="max-width: 300px; margin: 5px;">'
+        return mark_safe(html)
+
+    def detail_image_preview(self):
+        images = self.detail_img.split(',') if self.detail_img else []
+        html = ""
+        for image in images:
+            html += f'<img src="{image}" style="max-width: 300px; margin: 5px;">'
+        return mark_safe(html)
+
+    def color_image_preview(self):
+        return mark_safe(f'<img src="{self.color_img_url}" style="max-width: 300px; margin: 5px; border-style: solid;">')
 
     def __str__(self):
-        return self.name
+        return self.sku
 
     class Meta:
         db_table = 'ProductInstance'
@@ -192,12 +146,13 @@ class ProductInstance(models.Model):
 class ProductReview(models.Model):
     approved_by = models.ForeignKey(
         User, blank=True, related_name='approvedby', on_delete=models.SET_NULL, null=True)
-    productID = models.ForeignKey(
-        'Product.ProductInfo', on_delete=models.CASCADE, related_name='productinfo')
+    product = models.ForeignKey(
+        'Product.ProductInfo', on_delete=models.CASCADE, related_name='productReview')
+    customer = models.ForeignKey(
+        'Customer.CustomerInfo', on_delete=models.SET_NULL, related_name='productReivew', null=True)
     slug = models.SlugField(max_length=200, unique=True, null=True)
     title = models.CharField(max_length=50)
     content = models.TextField(blank=True)
-    user_email = models.EmailField()
     online = models.BooleanField(default=False)
     rating = models.IntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(5)], default=5)
@@ -216,8 +171,9 @@ class ProductReview(models.Model):
 class ProductTag(models.Model):
     slug = models.SlugField(max_length=200, unique=True, null=True)
     product = models.ManyToManyField('Product.ProductInfo', blank=True)
+    category = models.CharField(max_length=100, null=True)
     name = models.CharField(max_length=100)
-    description = models.TextField()
+    description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

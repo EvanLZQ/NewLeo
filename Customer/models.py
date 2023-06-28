@@ -4,9 +4,9 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 class CustomerSavedAddress(models.Model):
-    CustomerID = models.ForeignKey(
+    customer = models.ForeignKey(
         'Customer.CustomerInfo', on_delete=models.CASCADE)
-    AddressID = models.ForeignKey(
+    address = models.ForeignKey(
         'General.Address', on_delete=models.CASCADE)
 
     class Meta:
@@ -14,6 +14,8 @@ class CustomerSavedAddress(models.Model):
 
 
 class CustomerInfo(models.Model):
+    customer_saved_addresses = models.ForeignKey(
+        'General.Address', on_delete=models.SET_NULL, null=True)
     email = models.EmailField(unique=True)
     password = models.CharField(max_length=30)
     first_name = models.CharField(max_length=100, blank=True)
@@ -29,8 +31,6 @@ class CustomerInfo(models.Model):
     level = models.IntegerField(default=0)
     wish_list = models.ManyToManyField(
         'Product.ProductInfo', through='ShoppingList')
-    # TODO address model
-    # address = models.ForeignKey()
     in_blacklist = models.BooleanField(default=False)
     # TODO payment model
     # payment_method = models.ManyToManyField()
@@ -51,8 +51,8 @@ class CustomerInfo(models.Model):
 
 
 class ShoppingList(models.Model):
-    CustomerID = models.ForeignKey('CustomerInfo', on_delete=models.CASCADE)
-    ProductID = models.ForeignKey(
+    customer = models.ForeignKey('CustomerInfo', on_delete=models.CASCADE)
+    product = models.ForeignKey(
         'Product.ProductInfo', on_delete=models.CASCADE)
     quantity = models.IntegerField(
         default=1, validators=[MinValueValidator(1), MaxValueValidator(99)])
@@ -66,8 +66,8 @@ class ShoppingList(models.Model):
 
 
 class CustomerSavedPrescription(models.Model):
-    CustomerID = models.ForeignKey('CustomerInfo', on_delete=models.CASCADE)
-    PrescriptionID = models.ForeignKey(
+    customer = models.ForeignKey('CustomerInfo', on_delete=models.CASCADE)
+    prescription = models.ForeignKey(
         'Prescription.PrescriptionInfo', on_delete=models.CASCADE)
 
     class Meta:
