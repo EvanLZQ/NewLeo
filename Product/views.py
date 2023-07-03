@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view
 
 from .models import *
-from .serializer import ProductSerializer, ProductInstanceSerializer, TargetInstanceSerializer
+from .serializer import ProductSerializer, TargetInstanceSerializer
 
 
 @api_view(['GET'])

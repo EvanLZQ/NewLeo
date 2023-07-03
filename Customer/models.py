@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.hashers import make_password
 from phonenumber_field.modelfields import PhoneNumberField
 from django.core.validators import MinValueValidator, MaxValueValidator
 
@@ -16,7 +17,7 @@ class CustomerSavedAddress(models.Model):
 class CustomerInfo(models.Model):
     customer_saved_addresses = models.ForeignKey(
         'General.Address', on_delete=models.SET_NULL, null=True)
-    email = models.EmailField(unique=True)
+    email = models.EmailField(unique=True, db_index=True)
     password = models.CharField(max_length=30)
     first_name = models.CharField(max_length=100, blank=True)
     last_name = models.CharField(max_length=100, blank=True)
@@ -43,6 +44,11 @@ class CustomerInfo(models.Model):
     @property
     def full_name(self):
         return f'{self.first_name} {self.last_name}'
+
+    def save(self, *args, **kwargs):
+        # Hash the password before saving
+        self.password = make_password(self.password)
+        super().save(*args, **kwargs)
 
     class Meta:
         db_table = 'CustomerInfo'

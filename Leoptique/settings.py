@@ -27,10 +27,9 @@ SECRET_KEY = "django-insecure-$_*6nq!fidq@n-id@vb5s5=oxj^l5d5onv=572#*mhaqqijl$e
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['0.0.0.0']
 
 X_FRAME_OPTIONS = 'SAMEORIGIN'
-
 
 # Application definition
 
@@ -52,6 +51,9 @@ INSTALLED_APPS = [
     "Prescription",
     "Accessory",
     "Supplier",
+    "phonenumber_field",
+    "rest_framework_simplejwt",
+    # 'rest_framework_simplejwt.token_blacklist',
 ]
 
 
@@ -95,13 +97,18 @@ WSGI_APPLICATION = "Leoptique.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": 'Leoptique',
-        "USER": 'postgres',
-        "PASSWORD": '000110gg',
-        "HOST": 'localhost',
-        "PORT": '5432',
+        'HOST': os.environ.get('DB_HOST'),
+        'NAME': os.environ.get('DB_NAME'),
+        'USER': os.environ.get('DB_USER'),
+        'PASSWORD': os.environ.get('DB_PASS')
     }
 }
+
+# "NAME": 'Leoptique',
+# "USER": 'postgres',
+# "PASSWORD": '000110gg',
+# "HOST": 'localhost',
+# "PORT": '5432',
 
 
 # Password validation
@@ -150,3 +157,23 @@ STATICFILES_DIR = [
 JAZZMIN_SETTINGS = JAZZMIN_SETTINGS
 
 CORS_ALLOW_ALL_ORIGINS = True
+
+# REST_FRAMEWORK = {
+#     'DEFAULT_PERMISSION_CLASSES': [
+#         'rest_framework.permissions.IsAuthenticated',
+#     ],
+#     'DEFAULT_RENDERER_CLASSES': [
+#         'rest_framework.renderers.JSONRenderer',
+#     ],
+#     'DEFAULT_PARSER_CLASSES': [
+#         'rest_framework.parsers.JSONParser',
+#     ],
+
+#     'DEFAULT_AUTHENTICATION_CLASSES': (
+
+#         'rest_framework.authentication.SessionAuthentication',
+#         'rest_framework.authentication.BasicAuthentication',
+#         'rest_framework_simplejwt.authentication.JWTAuthentication',
+#     ),
+
+# }

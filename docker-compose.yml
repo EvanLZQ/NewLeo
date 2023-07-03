@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  leoptique:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/leoptique_backend_api
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    environment:
+      - DB_HOST=db
+      - DB_NAME=leoptique
+      - DB_USER=leo_admin
+      - DB_PASS=000110gg
+    depends_on:
+      - db
+
+  db:
+    image: postgres:13-alpine
+    volumes:
+      - leo-db-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=leoptique
+      - POSTGRES_USER=leo_admin
+      - POSTGRES_PASSWORD=000110gg
+
+
+volumes:
+  leo-db-data:
