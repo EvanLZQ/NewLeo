@@ -22,5 +22,6 @@ admin.site.index_title = 'Home Page'
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("api/", include("Product.urls")),
+    path("api/products/", include("Product.urls")),
+    path("api/lens/", include("Lens.urls")),
 ]

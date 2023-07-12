@@ -33,6 +33,8 @@ X_FRAME_OPTIONS = 'SAMEORIGIN'
 
 # Application definition
 
+AUTH_USER_MODEL = 'Customer.CustomerInfo'
+
 INSTALLED_APPS = [
     "jazzmin",
     "django.contrib.admin",
@@ -52,7 +54,7 @@ INSTALLED_APPS = [
     "Accessory",
     "Supplier",
     "phonenumber_field",
-    "rest_framework_simplejwt",
+    # "rest_framework_simplejwt",
     # 'rest_framework_simplejwt.token_blacklist',
 ]
 
@@ -168,12 +170,10 @@ CORS_ALLOW_ALL_ORIGINS = True
 #     'DEFAULT_PARSER_CLASSES': [
 #         'rest_framework.parsers.JSONParser',
 #     ],
-
 #     'DEFAULT_AUTHENTICATION_CLASSES': (
 
 #         'rest_framework.authentication.SessionAuthentication',
 #         'rest_framework.authentication.BasicAuthentication',
 #         'rest_framework_simplejwt.authentication.JWTAuthentication',
 #     ),
-
 # }

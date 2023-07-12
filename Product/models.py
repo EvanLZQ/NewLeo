@@ -1,6 +1,6 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
-from django.contrib.auth.models import User
+from django.conf import settings
 from django.utils.safestring import mark_safe
 
 __all__ = ['ProductTag', 'ProductInstance', 'ProductPromotion',
@@ -145,7 +145,7 @@ class ProductInstance(models.Model):
 
 class ProductReview(models.Model):
     approved_by = models.ForeignKey(
-        User, blank=True, related_name='approvedby', on_delete=models.SET_NULL, null=True)
+        settings.AUTH_USER_MODEL, blank=True, related_name='approvedby', on_delete=models.SET_NULL, null=True)
     product = models.ForeignKey(
         'Product.ProductInfo', on_delete=models.CASCADE, related_name='productReview')
     customer = models.ForeignKey(

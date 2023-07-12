@@ -95,6 +95,62 @@ class OrderUpdates(models.Model):
         verbose_name_plural = 'Order Updates'
 
 
+class OrderPayment(models.Model):
+    PAYMENT_GATEWAYS = [
+        ('paypal', 'PayPal'),
+        ('ocean_payment', 'Ocean Payment'),
+        # ... other gateways
+    ]
+
+    PAYMENT_METHODS = [
+        ('credit_card', 'Credit Card'),
+        ('debit_card', 'Debit Card'),
+        # ... other methods
+    ]
+
+    TRANSACTION_STATUSES = [
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        # ... other statuses
+    ]
+
+    transaction_id = models.CharField(
+        max_length=50, unique=True, db_index=True, verbose_name="Transaction ID")
+    customer = models.ForeignKey(
+        'Customer.CustomerInfo', on_delete=models.SET_NULL, null=True,
+        verbose_name="Customer")
+    order = models.ForeignKey(
+        'Order.OrderInfo', on_delete=models.SET_NULL, null=True,
+        verbose_name="Order")
+    payment_gateway = models.CharField(
+        max_length=20, blank=True, choices=PAYMENT_GATEWAYS,
+        verbose_name="Payment Gateway")
+    payment_method = models.CharField(
+        max_length=20, blank=True, choices=PAYMENT_METHODS,
+        verbose_name="Payment Method")
+    transaction_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)],
+        verbose_name="Transaction Amount")
+    currency = models.CharField(
+        max_length=10, default='USD', verbose_name="Currency")
+    transaction_status = models.CharField(
+        max_length=20, default='processing', db_index=True, choices=TRANSACTION_STATUSES,
+        verbose_name="Transaction Status")
+    transaction_date = models.DateTimeField(
+        auto_now_add=True, db_index=True, verbose_name="Transaction Date")
+    payer_email = models.EmailField(blank=True, verbose_name="Payer Email")
+    gateway_transaction_id = models.CharField(
+        max_length=100, blank=True, verbose_name="Gateway Transaction ID")
+    payment_response = models.JSONField(
+        blank=True, null=True, default=dict, verbose_name="Payment Response")
+
+    class Meta:
+        db_table = "Payment"
+        verbose_name = "Payment"
+        verbose_name_plural = "Payments"
+
+
 # Transaction tables:
 
 class OrderHasAddress(models.Model):
@@ -121,16 +177,24 @@ class OrderLineItem(models.Model):
 
 class CompleteSet(models.Model):
     order = models.ForeignKey(
-        'Order.OrderInfo', on_delete=models.CASCADE)
+        'Order.OrderInfo', on_delete=models.SET_NULL, null=True)
     frame = models.ForeignKey(
         'Product.ProductInstance', on_delete=models.CASCADE)
-    usage = models.CharField(max_length=100)
-    index = models.CharField(max_length=100)
-    customization = models.CharField(max_length=100)
+    usage = models.ForeignKey(
+        'Lens.LensUsage', on_delete=models.SET_NULL, null=True)
+    color = models.ForeignKey(
+        'Lens.LensColor', on_delete=models.SET_NULL, null=True)
+    coating = models.ForeignKey(
+        'Lens.LensCoating', on_delete=models.SET_NULL, null=True)
+    index = models.ForeignKey(
+        'Lens.LensIndex', on_delete=models.SET_NULL, null=True)
+    density = models.ForeignKey(
+        'Lens.LensDensity', on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = 'CompleteSet'
         verbose_name = 'Complete Set'
         verbose_name_plural = 'Complete Sets'
 
