@@ -17,6 +17,7 @@ class LensUsageSerializer(serializers.ModelSerializer):
     class Meta:
         model = LensUsage
         fields = [
+            'id',
             'name',
             'description',
             'image_url',
@@ -41,6 +42,7 @@ class LensColorSerializer(serializers.ModelSerializer):
     class Meta:
         model = LensColor
         fields = [
+            'id',
             'name',
             'description',
             'image_url',
@@ -54,6 +56,7 @@ class LensDensitySerializer(serializers.ModelSerializer):
     class Meta:
         model = LensDensity
         fields = [
+            'id',
             'name',
             'description',
             'image_url',
@@ -72,6 +75,7 @@ class LensCoatingSerializer(serializers.ModelSerializer):
     class Meta:
         model = LensCoating
         fields = [
+            'id',
             'name',
             'description',
             'image_url',
@@ -84,6 +88,7 @@ class LensIndexSerializer(serializers.ModelSerializer):
     class Meta:
         model = LensIndex
         fields = [
+            'id',
             'name',
             'description',
             'image_url',

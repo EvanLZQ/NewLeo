@@ -2,6 +2,18 @@ from rest_framework import serializers
 from .models import *
 
 
+class ProductReviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductReview
+        fields = [
+            'slug',
+            'title',
+            'content',
+            'online',
+            'rating',
+        ]
+
+
 class ProductInstanceSerializer(serializers.ModelSerializer):
     carousel_img = serializers.SerializerMethodField()
     detail_img = serializers.SerializerMethodField()
@@ -39,6 +51,7 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     productInstance = serializers.SerializerMethodField()
+    productReview = ProductReviewSerializer(many=True)
 
     def get_productInstance(self, obj):
         instances = obj.productInstance.filter(online=True)
@@ -76,18 +89,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'pd_upper_range',
             'pd_lower_range',
             'productInstance',
-        ]
-
-
-class ProductReviewSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ProductReview
-        fields = [
-            'slug',
-            'title',
-            'content',
-            'online',
-            'rating',
+            'productReview',
         ]
 
 

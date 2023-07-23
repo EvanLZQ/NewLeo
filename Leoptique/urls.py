@@ -15,6 +15,40 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+# from rest_framework.authtoken.views import obtain_auth_token
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+
+
+# class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+#     username_field = 'email'
+
+
+class CookieTokenObtainPairView(TokenObtainPairView):
+    # serializer_class = CustomTokenObtainPairSerializer
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        if response.status_code == 200:
+            # TODO: add secure = true when deploy
+            response.set_cookie(
+                'refresh_token', response.data['refresh'], httponly=True, samesite='None')
+            response.set_cookie(
+                'access_token', response.data['access'], httponly=True, samesite='None')
+            response.data = {}
+        return super().finalize_response(request, response, *args, **kwargs)
+
+
+class CookieTokenRefreshView(TokenRefreshView):
+    def finalize_response(self, request, response, *args, **kwargs):
+        if response.status_code == 200:
+            # TODO: add secure = true when deploy
+            response.set_cookie(
+                'refresh_token', response.data['refresh'], httponly=True, samesite='None')
+            response.set_cookie(
+                'access_token', response.data['access'], httponly=True, samesite='None')
+            response.data = {}
+        return super().finalize_response(request, response, *args, **kwargs)
+
 
 admin.site.site_header = 'Leoptique Admin Site'
 admin.site.site_title = 'Leoptique Admin'
@@ -24,4 +58,10 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/products/", include("Product.urls")),
     path("api/lens/", include("Lens.urls")),
+    # path('api/token/', obtain_auth_token, name='obtain-token'),
+    path('api/token/', CookieTokenObtainPairView.as_view(),
+         name='token_obtain_pair'),
+    path('api/token/refresh/', CookieTokenRefreshView.as_view(), name='token_refresh'),
+    path('api/user/', include("Customer.urls")),
+    path('api/order/', include("Order.urls"))
 ]

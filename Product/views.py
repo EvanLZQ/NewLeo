@@ -21,3 +21,10 @@ def getProduct(request, sku):
     serializer = TargetInstanceSerializer(
         product, many=False, context={'sku': sku})
     return Response(serializer.data)
+
+
+@api_view(['GET'])
+def getModel(request, model):
+    product = ProductInfo.objects.get(model_number=model)
+    serialier = ProductSerializer(product, many=False)
+    return Response(serialier.data)

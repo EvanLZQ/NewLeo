@@ -6,7 +6,7 @@ class ProductInstanceAdmin(admin.ModelAdmin):
 
     @admin.display(description="Model Number")
     def get_model_number(self, obj):
-        return obj.productID.model_number
+        return obj.product.model_number
 
     list_display = ['get_model_number', 'sku', 'online']
     readonly_fields = ['color_image_preview',

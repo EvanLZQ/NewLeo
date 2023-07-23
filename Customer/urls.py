@@ -7,5 +7,5 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path("", views.cart, name="cart"),
+    path("summary", views.get_user, name="cart"),
 ]

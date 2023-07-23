@@ -6,7 +6,7 @@ from .models import CustomerInfo, ShoppingList
 
 
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ('email', 'full_name', 'phone')
+    list_display = ('username', 'full_name', 'phone')
 
 
 admin.site.register(CustomerInfo, CustomerAdmin)
