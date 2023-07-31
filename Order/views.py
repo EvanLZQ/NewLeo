@@ -24,3 +24,25 @@ def createCompleteSet(request):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+def getTargetCompleteSet(request, set_id):
+    set = CompleteSet.objects.get(id=set_id)
+    serializer = CompleteSetSerializer(set, many=False)
+    return Response(serializer.data)
+
+
+@api_view(['PATCH'])
+def updateCompleteSet(request, set_id):
+    try:
+        set = CompleteSet.objects.get(id=set_id)
+    except CompleteSet.DoesNotExist:
+        return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
+    serializer = CompleteSetSerializer(
+        instance=set, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

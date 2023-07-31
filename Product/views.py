@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view
 
 from .models import *
-from .serializer import ProductSerializer, TargetInstanceSerializer
+from .serializer import ProductInstanceSerializer, ProductSerializer, TargetInstanceSerializer
 
 
 @api_view(['GET'])
@@ -16,10 +16,12 @@ def getProducts(request):
 
 @api_view(['GET'])
 def getProduct(request, sku):
-    product_id = ProductInstance.objects.get(sku=sku).product.id
-    product = ProductInfo.objects.get(id=product_id)
-    serializer = TargetInstanceSerializer(
-        product, many=False, context={'sku': sku})
+    product_instance = ProductInstance.objects.get(sku=sku)
+    serializer = ProductInstanceSerializer(product_instance)
+    # product_id = ProductInstance.objects.get(sku=sku).product.id
+    # product = ProductInfo.objects.get(id=product_id)
+    # serializer = TargetInstanceSerializer(
+    #     product, many=False, context={'sku': sku})
     return Response(serializer.data)
 
 

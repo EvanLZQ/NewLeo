@@ -18,6 +18,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
     class Meta:
         model = CompleteSet
         fields = [
+            'id',
             'frame',
             'usage',
             'color',
@@ -59,3 +60,38 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             color=color_obj, usage=usage_obj, coating=coating_obj, frame=frame_obj, density=density_obj, index=index_obj)
 
         return completeset
+
+    def update(self, instance, validated_data):
+        # Handle the update for the main model fields
+        instance.sub_color = validated_data.get(
+            'sub_color', instance.sub_color)
+        instance.sub_total = validated_data.get(
+            'sub_total', instance.sub_total)
+
+        # Handle the update for the related fields
+        if 'usage' in validated_data:
+            usage_name = validated_data.pop('usage')['name']
+            instance.usage = LensUsage.objects.get(name=usage_name)
+
+        if 'color' in validated_data:
+            color_name = validated_data.pop('color')['name']
+            instance.color = LensColor.objects.get(name=color_name)
+
+        if 'index' in validated_data:
+            index_name = validated_data.pop('index')['name']
+            instance.index = LensIndex.objects.get(name=index_name)
+
+        if 'coating' in validated_data:
+            coating_name = validated_data.pop('coating')['name']
+            instance.coating = LensCoating.objects.get(name=coating_name)
+
+        if 'frame' in validated_data:
+            frame_sku = validated_data.pop('frame')['sku']
+            instance.frame = ProductInstance.objects.get(sku=frame_sku)
+
+        if 'density' in validated_data:
+            density_name = validated_data.pop('density')['name']
+            instance.density = LensDensity.objects.get(name=density_name)
+
+        instance.save()
+        return instance
