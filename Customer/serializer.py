@@ -35,35 +35,19 @@ class CustomerSavedAddresses(serializers.ModelSerializer):
 
 
 class CustomerSerializer(serializers.ModelSerializer):
-    # saved_addresses = CustomerSavedAddresses(many=True)
-    # saved_payment_method = CustomerSavedPaymentSerializer(many=True)
-
-    # def to_representation(self, obj):
-    #     representation = super().to_representation(obj)
-    #     if not obj.saved_payment_method.exists():
-    #         representation['saved_payment_method'] = []
-    #     if not obj.saved_addresses.exists():
-    #         representation['saved_addresses'] = []
-    #     return representation
-
     class Meta:
         model = CustomerInfo
-        fields = '__all__'
-
-        # [
-        #     'username',
-        #     'first_name',
-        #     'last_name',
-        #     'phone',
-        #     'gender',
-        #     'birth_date',
-        #     'icon_url',
-        #     'store_credit',
-        #     'level',
-        #     'created_at',
-        #     'saved_addresses',
-        #     'saved_payment_method',
-        # ]
+        fields = [
+            'username',
+            'first_name',
+            'last_name',
+            'phone',
+            'gender',
+            'birth_date',
+            'icon_url',
+            'store_credit',
+            'level',
+        ]
 
 
 class ShoppingListSerializer(serializers.ModelSerializer):
