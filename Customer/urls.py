@@ -14,4 +14,6 @@ urlpatterns = [
          views.update_shopping_list, name='update_shopping_list'),
     path("shoppinglist/new", views.create_shopping_list,
          name='create_shopping_list'),
+    path("login", views.login_view, name='user_login'),
+    path("logout", views.logout_view, name='user_logout'),
 ]

@@ -55,8 +55,8 @@ INSTALLED_APPS = [
     "Accessory",
     "Supplier",
     "phonenumber_field",
-    'rest_framework.authtoken',
-    "rest_framework_simplejwt",
+    # 'rest_framework.authtoken',
+    # "rest_framework_simplejwt",
     # 'rest_framework_simplejwt.token_blacklist',
 ]
 
@@ -165,7 +165,8 @@ CORS_ALLOW_ALL_ORIGINS = True
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         # 'rest_framework.authentication.TokenAuthentication',
-        'Leoptique.authentication.CookieJWTAuthentication',
+        # 'Leoptique.authentication.CookieJWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ],
 }
 

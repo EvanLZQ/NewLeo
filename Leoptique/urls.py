@@ -15,13 +15,6 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-# from rest_framework.authtoken.views import obtain_auth_token
-from .views import CookieTokenObtainPairView, CookieTokenRefreshView
-from .serializer import CookieTokenRefreshSerializer
-# from rest_framework_simplejwt.views import (
-#     TokenObtainPairView,
-#     TokenRefreshView,
-# )
 
 
 admin.site.site_header = 'Leoptique Admin Site'
@@ -32,11 +25,6 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/products/", include("Product.urls")),
     path("api/lens/", include("Lens.urls")),
-    # path('api/token/', obtain_auth_token, name='obtain-token'),
-    path('api/token/', CookieTokenObtainPairView.as_view(),
-         name='token_obtain_pair'),
-    path('api/token/refresh/', CookieTokenRefreshView.as_view(),
-         name='token_refresh'),
     path('api/user/', include("Customer.urls")),
     path('api/order/', include("Order.urls"))
 ]
