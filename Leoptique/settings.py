@@ -32,6 +32,8 @@ ALLOWED_HOSTS = ['0.0.0.0']
 
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 
+SITE_ID = 1
+
 # Application definition
 
 AUTH_USER_MODEL = 'Customer.CustomerInfo'
@@ -55,10 +57,24 @@ INSTALLED_APPS = [
     "Accessory",
     "Supplier",
     "phonenumber_field",
-    # 'rest_framework.authtoken',
-    # "rest_framework_simplejwt",
-    # 'rest_framework_simplejwt.token_blacklist',
+    "django.contrib.sites",
+    # "allauth",
+    # "allauth.account",
+    # "allauth.socialaccount",
+    # "allauth.socialaccount.providers.google",
 ]
+
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "SCOPE": [
+            "profile",
+            "email",
+        ],
+        "AUTH_PARAMS": {
+            "access_type": "online"
+        }
+    }
+}
 
 
 MIDDLEWARE = [
@@ -164,31 +180,11 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        # 'rest_framework.authentication.TokenAuthentication',
-        # 'Leoptique.authentication.CookieJWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
 }
 
-SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+AUTHENTICATION_BACKENDS = {
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
 }
-
-# REST_FRAMEWORK = {
-#     'DEFAULT_PERMISSION_CLASSES': [
-#         'rest_framework.permissions.IsAuthenticated',
-#     ],
-#     'DEFAULT_RENDERER_CLASSES': [
-#         'rest_framework.renderers.JSONRenderer',
-#     ],
-#     'DEFAULT_PARSER_CLASSES': [
-#         'rest_framework.parsers.JSONParser',
-#     ],
-#     'DEFAULT_AUTHENTICATION_CLASSES': (
-
-#         'rest_framework.authentication.SessionAuthentication',
-#         'rest_framework.authentication.BasicAuthentication',
-#         'rest_framework_simplejwt.authentication.JWTAuthentication',
-#     ),
-# }

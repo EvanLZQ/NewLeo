@@ -5,7 +5,7 @@ from django.db.models import Q
 
 
 from .models import *
-from .serializer import ProductInstanceSerializer, ProductSerializer, TargetInstanceSerializer
+from .serializer import ProductInstanceSerializer, ProductSerializer, SKUtoModelSerializer
 
 
 @api_view(['GET'])
@@ -30,8 +30,17 @@ def getProduct(request, sku):
 @api_view(['GET'])
 def getModel(request, model):
     product = ProductInfo.objects.get(model_number=model)
-    serialier = ProductSerializer(product, many=False)
-    return Response(serialier.data)
+    serializer = ProductSerializer(product, many=False)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+def getModelUsingSku(request, sku):
+    product_id = ProductInstance.objects.get(sku=sku).product_id
+    print(product_id)
+    product = ProductInfo.objects.get(id=product_id)
+    serializer = SKUtoModelSerializer(product, many=False)
+    return Response(serializer.data)
 
 
 @api_view(['GET'])

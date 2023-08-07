@@ -136,3 +136,18 @@ class TargetInstanceSerializer(serializers.ModelSerializer):
             'productInstance',
             'productReview',
         ]
+
+
+class SKUtoModelSerializer(serializers.ModelSerializer):
+    def to_representation(self, obj):
+        rep = super().to_representation(obj)
+        rep.pop('created_at', None)
+        rep.pop('updated_at', None)
+        return rep
+
+    class Meta:
+        model = ProductInfo
+        fields = [
+            'model_number',
+            'name',
+        ]
