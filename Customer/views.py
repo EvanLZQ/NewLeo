@@ -8,6 +8,16 @@ from .serializer import CustomerSerializer, ShoppingListSerializer
 from .models import ShoppingList
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
+from Leoptique.authentication import AccessTokenAuthentication
+from google.oauth2 import id_token
+from django.utils import timezone
+import datetime
+from .models import CustomerInfo
+from oauth2_provider.models import AccessToken, Application, RefreshToken
+from rest_framework.permissions import AllowAny
+from google.auth.transport import requests
+import uuid
+from django.http import HttpResponse
 
 # Create your views here.
 
@@ -15,7 +25,7 @@ User = get_user_model()
 
 
 @api_view(['GET'])
-@authentication_classes([SessionAuthentication])
+@authentication_classes([SessionAuthentication, AccessTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_user(request):
     user = request.user
@@ -77,3 +87,54 @@ def login_view(request):
 def logout_view(request):
     logout(request)
     return Response({"message": "Logged out successfully!"})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def google_login(request):
+    credential = request.data.get('credential')
+    client_id = request.data.get('clientId')
+
+    # Verify the token
+    try:
+        id_info = id_token.verify_oauth2_token(
+            credential, requests.Request(), client_id)
+        if id_info['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+            raise ValueError('Wrong issuer.')
+    except ValueError:
+        return Response({'error': 'Invalid token'}, status=400)
+
+    # Get or create user
+    email = id_info['email']
+    print(id_info)
+    user, _ = CustomerInfo.objects.get_or_create(username=email)
+
+    application = Application.objects.get(
+        client_id="l5cAOrriN5gIvTiLjOENupQsp6ppISdp1iYyU8iu")
+
+    generated_token = str(uuid.uuid4())
+    # Generate access token
+    token = AccessToken.objects.create(
+        user=user,
+        token=generated_token,
+        application=application,
+        expires=timezone.now() + datetime.timedelta(days=1)
+    )
+
+    refresh_token = RefreshToken.objects.create(
+        user=user,
+        token=str(uuid.uuid4()),
+        access_token=token,
+        application=application
+    )
+
+    # return Response({'token': token.token, 'refresh_token': refresh_token.token})
+    response = HttpResponse(status=200)
+
+    # Set the tokens as cookies
+    response.set_cookie('access_token', token.token,
+                        max_age=3600 * 24)  # 1 day
+    response.set_cookie('refresh_token', refresh_token.token,
+                        max_age=3600 * 24 * 30)  # 30 days
+
+    return response

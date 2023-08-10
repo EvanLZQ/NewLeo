@@ -16,4 +16,5 @@ urlpatterns = [
          name='create_shopping_list'),
     path("login", views.login_view, name='user_login'),
     path("logout", views.logout_view, name='user_logout'),
+    path("googlelogin", views.google_login, name='google_login'),
 ]

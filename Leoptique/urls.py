@@ -14,7 +14,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 
 
 admin.site.site_header = 'Leoptique Admin Site'
@@ -26,5 +26,6 @@ urlpatterns = [
     path("api/products/", include("Product.urls")),
     path("api/lens/", include("Lens.urls")),
     path('api/user/', include("Customer.urls")),
-    path('api/order/', include("Order.urls"))
+    path('api/order/', include("Order.urls")),
+    re_path(r'^auth/', include('drf_social_oauth2.urls', namespace='drf'))
 ]
