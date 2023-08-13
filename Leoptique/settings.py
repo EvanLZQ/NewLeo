@@ -14,6 +14,8 @@ from pathlib import Path
 import os
 from .jazzmin import JAZZMIN_SETTINGS
 from datetime import timedelta
+from corsheaders.defaults import default_headers
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -28,9 +30,35 @@ SECRET_KEY = "django-insecure-$_*6nq!fidq@n-id@vb5s5=oxj^l5d5onv=572#*mhaqqijl$e
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['0.0.0.0']
+ALLOWED_HOSTS = ["0.0.0.0", "localhost"]
 
 X_FRAME_OPTIONS = 'SAMEORIGIN'
+
+# CORS_ALLOW_HEADERS = list(default_headers) + [
+#     'X-Amz-Date',
+#     'Access-Control-Request-Headers',
+#     'Access-Control-Allow-Headers',
+#     'Access-Control-Allow-Origin',
+#     'XMLHttpRequest',
+# ]
+
+# CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
+# CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5174",
+]
+
+SESSION_COOKIE_DOMAIN = 'http://localhost:5174'
+CSRF_COOKIE_DOMAIN = 'http://localhost:5174'
+CSRF_COOKIE_SAMESITE = None
+SESSION_COOKIE_SAMESITE = None
+
+# CSRF_USE_SESSIONS = False
+# CSRF_COOKIE_HTTPONLY = True
+# SESSION_COOKIE_HTTPONLY = True
+# SECURE_BROWSER_XSS_FILTER = True
+# SECURE_CONTENT_TYPE_NOSNIFF = True
 
 SITE_ID = 1
 
@@ -61,10 +89,6 @@ INSTALLED_APPS = [
     'oauth2_provider',
     'social_django',
     'drf_social_oauth2',
-    # "allauth",
-    # "allauth.account",
-    # "allauth.socialaccount",
-    # "allauth.socialaccount.providers.google",
 ]
 
 SOCIALACCOUNT_PROVIDERS = {
@@ -125,8 +149,6 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-                'social_django.context_processors.backends',
-                'social_django.context_processors.login_redirect',
             ],
         },
     },
@@ -147,12 +169,6 @@ DATABASES = {
         'PASSWORD': os.environ.get('DB_PASS')
     }
 }
-
-# "NAME": 'Leoptique',
-# "USER": 'postgres',
-# "PASSWORD": '000110gg',
-# "HOST": 'localhost',
-# "PORT": '5432',
 
 
 # Password validation
@@ -200,7 +216,6 @@ STATICFILES_DIR = [
 
 JAZZMIN_SETTINGS = JAZZMIN_SETTINGS
 
-CORS_ALLOW_ALL_ORIGINS = True
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -221,11 +236,11 @@ AUTHENTICATION_BACKENDS = {
 }
 
 # Google configuration
-SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = "611685996594-dic51ulfnvcsc1mbac4rsjgvis87dva9.apps.googleusercontent.com"
-SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = "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"
+# SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = "611685996594-dic51ulfnvcsc1mbac4rsjgvis87dva9.apps.googleusercontent.com"
+# SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = "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"
 
-# Define SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE to get extra permissions from Google.
-SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE = [
-    'https://www.googleapis.com/auth/userinfo.email',
-    'https://www.googleapis.com/auth/userinfo.profile',
-]
+# # Define SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE to get extra permissions from Google.
+# SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE = [
+#     'https://www.googleapis.com/auth/userinfo.email',
+#     'https://www.googleapis.com/auth/userinfo.profile',
+# ]

@@ -18,19 +18,29 @@ from rest_framework.permissions import AllowAny
 from google.auth.transport import requests
 import uuid
 from django.http import HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.backends import ModelBackend
 
 # Create your views here.
 
 User = get_user_model()
 
 
+@csrf_exempt
 @api_view(['GET'])
-@authentication_classes([SessionAuthentication, AccessTokenAuthentication])
+@authentication_classes([SessionAuthentication])
 @permission_classes([IsAuthenticated])
 def get_user(request):
     user = request.user
     serializer = CustomerSerializer(user)
     return Response(serializer.data)
+
+
+@api_view(['GET'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def is_authenticated(request):
+    return Response(status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -105,36 +115,68 @@ def google_login(request):
         return Response({'error': 'Invalid token'}, status=400)
 
     # Get or create user
-    email = id_info['email']
-    print(id_info)
-    user, _ = CustomerInfo.objects.get_or_create(username=email)
+    # Extract the relevant fields from id_info
+    family_name = id_info.get('family_name', '')
+    given_name = id_info.get('given_name', '')
+    email = id_info.get('email', '')
+    picture = id_info.get('picture', '')
 
-    application = Application.objects.get(
-        client_id="l5cAOrriN5gIvTiLjOENupQsp6ppISdp1iYyU8iu")
-
-    generated_token = str(uuid.uuid4())
-    # Generate access token
-    token = AccessToken.objects.create(
-        user=user,
-        token=generated_token,
-        application=application,
-        expires=timezone.now() + datetime.timedelta(days=1)
+    # Get or create user
+    user, created = CustomerInfo.objects.get_or_create(
+        username=email,
+        defaults={
+            'first_name': given_name,
+            'last_name': family_name,
+            'icon_url': picture
+        }
     )
 
-    refresh_token = RefreshToken.objects.create(
-        user=user,
-        token=str(uuid.uuid4()),
-        access_token=token,
-        application=application
-    )
+    # If the user already exists, update their details
+    if not created:
+        user.first_name = given_name
+        user.last_name = family_name
+        user.icon_url = picture
+        user.save()
+
+    # application = Application.objects.get(
+    #     client_id="l5cAOrriN5gIvTiLjOENupQsp6ppISdp1iYyU8iu")
+
+    # generated_token = str(uuid.uuid4())
+    # # Generate access token
+    # token = AccessToken.objects.create(
+    #     user=user,
+    #     token=generated_token,
+    #     application=application,
+    #     expires=timezone.now() + datetime.timedelta(days=1)
+    # )
+
+    # refresh_token = RefreshToken.objects.create(
+    #     user=user,
+    #     token=str(uuid.uuid4()),
+    #     access_token=token,
+    #     application=application
+    # )
+
+    user.backend = 'django.contrib.auth.backends.ModelBackend'
+
+    login(request, user)
+
+    user_brief = {
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "email": email,
+        "phone": user.phone,
+        "gender": user.gender,
+        "icon_url": user.icon_url,
+    }
 
     # return Response({'token': token.token, 'refresh_token': refresh_token.token})
-    response = HttpResponse(status=200)
+    # response = Response(user_brief, status=200)
 
     # Set the tokens as cookies
-    response.set_cookie('access_token', token.token,
-                        max_age=3600 * 24)  # 1 day
-    response.set_cookie('refresh_token', refresh_token.token,
-                        max_age=3600 * 24 * 30)  # 30 days
+    # response.set_cookie('access_token', token.token,
+    #                     max_age=3600 * 24, samesite='Lax', domain='localhost')  # 1 day
+    # response.set_cookie('refresh_token', refresh_token.token,
+    #                     max_age=3600 * 24 * 30, samesite='Lax', domain='localhost')  # 30 days
 
-    return response
+    return Response(user_brief, status=200)
