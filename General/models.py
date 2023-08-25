@@ -1,6 +1,6 @@
 from django.db import models
 from phonenumber_field.modelfields import PhoneNumberField
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 # Create your models here.
 
@@ -21,3 +21,54 @@ class Address(models.Model):
         db_table = 'Address'
         verbose_name = 'Address'
         verbose_name_plural = 'Addresses'
+
+
+class Coupon(models.Model):
+    DISCOUNT_TYPE = [
+        ("Percentage", "Percentage"), ("Amount", "Amount")
+    ]
+    code = models.CharField(max_length=50, unique=True)
+    description = models.TextField(max_length=1000, null=True, blank=True)
+    img_url = models.URLField(max_length=200, blank=True, null=True)
+    expire_date = models.DateField(null=True, blank=True)
+    online = models.BooleanField(default=False)
+    # applied product list
+    applied_product = models.ManyToManyField(
+        "Product.ProductInstance", related_name='coupons')
+    # valid customer list
+    valid_customer = models.ManyToManyField(
+        "Customer.CustomerInfo", related_name='coupons')
+    # discount type for frame
+    frame_discount_type = models.CharField(
+        max_length=50, choices=DISCOUNT_TYPE, default="Percentage")
+    # discount amount for frame
+    frame_discount_amount = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0)
+    # discount type for lens
+    lens_discount_type = models.CharField(
+        max_length=50, choices=DISCOUNT_TYPE, default="Percentage")
+    # discount amount for lens
+    lens_discount_amount = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0)
+    # discount type for shipping
+    shipping_discount_type = models.CharField(
+        max_length=50, choices=DISCOUNT_TYPE, default="Percentage")
+    # discount amount for shipping
+    shipping_discount_amount = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0)
+    # discount type for order
+    order_discount_type = models.CharField(
+        max_length=50, choices=DISCOUNT_TYPE, default="Percentage")
+    # discount amount for order
+    order_discount_amount = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.code
+
+    class Meta:
+        db_table = 'Coupon'
+        verbose_name = 'Coupon'
+        verbose_name_plural = 'Coupons'

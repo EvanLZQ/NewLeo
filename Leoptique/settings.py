@@ -43,16 +43,18 @@ X_FRAME_OPTIONS = 'SAMEORIGIN'
 # ]
 
 # CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
-# CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5174",
-]
+CORS_ALLOW_ALL_ORIGINS = True
+# CORS_ALLOW_CREDENTIALS = True
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:5174",
+#     "http://0.0.0.0:8000",
+# ]
 
-SESSION_COOKIE_DOMAIN = 'http://localhost:5174'
-CSRF_COOKIE_DOMAIN = 'http://localhost:5174'
-CSRF_COOKIE_SAMESITE = None
-SESSION_COOKIE_SAMESITE = None
+# CSRF_COOKIE_HTTPONLY = True
+# SESSION_COOKIE_DOMAIN = 'http://localhost:5174'
+# CSRF_COOKIE_DOMAIN = 'http://localhost:5174'
+# CSRF_COOKIE_SAMESITE = None
+# SESSION_COOKIE_SAMESITE = None
 
 # CSRF_USE_SESSIONS = False
 # CSRF_COOKIE_HTTPONLY = True
@@ -140,6 +142,7 @@ TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [
+            # os.path.join(BASE_DIR, 'templates')
             BASE_DIR
         ],
         "APP_DIRS": True,
@@ -234,6 +237,7 @@ AUTHENTICATION_BACKENDS = {
     # Google
     'social_core.backends.google.GoogleOAuth2',
 }
+
 
 # Google configuration
 # SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = "611685996594-dic51ulfnvcsc1mbac4rsjgvis87dva9.apps.googleusercontent.com"
