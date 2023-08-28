@@ -38,9 +38,14 @@ class OrderInfo(models.Model):
     sub_total = models.DecimalField(max_digits=6, decimal_places=2)
     total_amount = models.DecimalField(max_digits=6, decimal_places=2)
     comment = models.TextField()
+    address = models.ForeignKey(
+        'General.Address', null=True, on_delete=models.SET_NULL)
     issue_order = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.order_number
 
     class Meta:
         db_table = 'OrderInfo'

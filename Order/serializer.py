@@ -4,6 +4,7 @@ from Lens.serializer import *
 from Product.serializer import ProductInstanceSerializer
 from Lens.models import *
 from Product.models import ProductInstance
+from General.serializer import AddressSerializer
 
 
 class CompleteSetSerializer(serializers.ModelSerializer):
@@ -95,3 +96,36 @@ class CompleteSetSerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    complete_set = CompleteSetSerializer(source="completeset_set", many=True)
+    address = AddressSerializer()
+
+    class Meta:
+        model = OrderInfo
+        fields = [
+            "id",
+            "email",
+            "order_number",
+            "order_status",
+            "refound_status",
+            "refound_amount",
+            "payment_status",
+            "payment_type",
+            "store_credit_used",
+            "store_credit_gained",
+            "shipping_company",
+            "tracking_number",
+            "shipping_cost",
+            "discount",
+            "accessory_total",
+            "sub_total",
+            "total_amount",
+            "comment",
+            "created_at",
+            "updated_at",
+            "product",
+            "complete_set",
+            "address"
+        ]
