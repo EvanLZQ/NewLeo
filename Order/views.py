@@ -4,7 +4,7 @@ from rest_framework.decorators import api_view
 from rest_framework import status
 
 from .models import *
-from .serializer import CompleteSetSerializer
+from .serializer import CompleteSetSerializer, OrderSerializer
 
 
 # Create your views here.
@@ -46,3 +46,17 @@ def updateCompleteSet(request, set_id):
         return Response(serializer.data, status=status.HTTP_200_OK)
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+def getAllOrders(request):
+    orders = OrderInfo.objects.all()
+    serializer = OrderSerializer(orders, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+def getTargetOrder(request, id):
+    order = OrderInfo.objects.get(id=id)
+    serializer = OrderSerializer(order)
+    return Response(serializer.data)
