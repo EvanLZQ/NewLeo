@@ -51,7 +51,8 @@ class CustomerSerializer(serializers.ModelSerializer):
 
 
 class ShoppingListSerializer(serializers.ModelSerializer):
-    product = serializers.SerializerMethodField(read_only=True)
+    # product = serializers.SerializerMethodField(read_only=True, required=True)
+    product = CompleteSetSerializer(many=True, required=False)
     product_ids = serializers.PrimaryKeyRelatedField(
         queryset=CompleteSet.objects.all(), many=True, write_only=True, source='product', required=False)
     product_data = CompleteSetSerializer(
@@ -61,9 +62,9 @@ class ShoppingListSerializer(serializers.ModelSerializer):
         model = ShoppingList
         fields = '__all__'
 
-    def get_product(self, obj):
-        # Serialize the CompleteSet objects with all their details
-        return CompleteSetSerializer(obj.product.all(), many=True).data
+    # def get_product(self, obj):
+    #     # Serialize the CompleteSet objects with all their details
+    #     return CompleteSetSerializer(obj.product.all(), many=True).data
 
     def create(self, validated_data):
         products_data = validated_data.pop('product_data', [])
@@ -83,22 +84,44 @@ class ShoppingListSerializer(serializers.ModelSerializer):
         return shopping_list
 
     def update(self, instance, validated_data):
-        products_data = validated_data.pop('product_data', None)
-        product_ids = validated_data.pop('product_ids', None)
+        # products_data = validated_data.pop('product_data', None)
+        # product_ids = validated_data.pop('product_ids', None)
+        products_data = validated_data.pop('product', None)
+        print(products_data)
+        # p = self.context['request'].data['product']
 
         # Update other fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
-        # If product_ids are provided, update the related products
-        if product_ids:
-            instance.product.set(product_ids)
-
-        # If full CompleteSet details are provided, create new products and add them.
+        # If full CompleteSet details are provided, update or create products.
         if products_data:
+            existing_product_ids = [p.id for p in instance.product.all()]
+            print(existing_product_ids)
             for product_data in products_data:
-                product = CompleteSetSerializer().create(product_data)
-                instance.product.add(product)
+                # print(product_data)
+                product_id = int(product_data.get('id', 0))
+                if product_id and product_id in existing_product_ids:
+                    # Update existing product
+                    product_instance = CompleteSet.objects.get(id=product_id)
+                    CompleteSetSerializer().update(product_instance, product_data)
+                else:
+                    # Create new product
+                    print(product_id)
+                    product = CompleteSet.objects.get(id=product_id)
+                    instance.product.add(product)
+
+        # # If product_ids are provided, update the related products
+        # if product_ids:
+        #     print("product_id")
+        #     instance.product.set(product_ids)
+
+        # # If full CompleteSet details are provided, create new products and add them.
+        # if products_data:
+        #     print("product_data")
+        #     for product_data in products_data:
+        #         product = CompleteSetSerializer().create(product_data)
+        #         instance.product.add(product)
 
         instance.save()
         return instance

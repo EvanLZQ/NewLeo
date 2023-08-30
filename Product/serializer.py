@@ -34,6 +34,15 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
         rep.pop('product', None)
         return rep
 
+    def create(self, validated_data):
+        try:
+            # Try to get an existing instance
+            instance = ProductInstance.objects.get(sku=validated_data['sku'])
+            return instance
+        except ProductInstance.DoesNotExist:
+            # If it doesn't exist, create a new one
+            return super().create(validated_data)
+
     class Meta:
         model = ProductInstance
         fields = ['slug',

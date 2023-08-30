@@ -66,6 +66,7 @@ def update_shopping_list(request, list_id):
     except ShoppingList.DoesNotExist:
         return Response({'error': 'ShoppingList not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    # print(request.data)
     # Deserialize and validate the request data
     # `partial=True` allows for partial updates
     serializer = ShoppingListSerializer(
@@ -73,11 +74,11 @@ def update_shopping_list(request, list_id):
 
     if serializer.is_valid():
         # Save the updated ShoppingList object
-        print("Here")
+        # print("Here")
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
     else:
-        print("Here")
+        # print("Here")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
