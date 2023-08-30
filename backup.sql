@@ -1845,8 +1845,12 @@ COPY public."Address" (id, full_name, phone, address, city, province_state, coun
 COPY public."CompleteSet" (id, created_at, updated_at, frame_id, order_id, coating_id, color_id, density_id, index_id, usage_id, sub_color, sub_total) FROM stdin;
 1	2023-07-20 21:47:37.30648+00	2023-07-20 21:47:37.306493+00	5	\N	3	1	3	1	2	\N	0.00
 2	2023-07-23 23:23:20.471586+00	2023-07-23 23:23:20.471618+00	6	\N	3	1	2	1	2	\N	0.00
-3	2023-07-23 23:44:35.612052+00	2023-07-28 00:35:13.637599+00	2	\N	3	4	3	3	4	None	71.95
-4	2023-07-23 23:44:35.640688+00	2023-08-25 02:13:08.762462+00	10	3	2	4	3	3	2	\N	68.95
+6	2023-08-29 20:01:12.749473+00	2023-08-29 20:01:12.74961+00	7	\N	4	1	3	1	5	\N	0.00
+20	2023-08-29 22:29:47.950001+00	2023-08-29 22:29:47.950024+00	4	\N	6	5	3	4	4	\N	0.00
+3	2023-07-23 23:44:35.612052+00	2023-08-30 23:03:32.073704+00	2	\N	3	4	3	3	2	None	69.95
+4	2023-07-23 23:44:35.640688+00	2023-08-30 23:03:32.090437+00	10	3	2	4	3	3	2	None	68.95
+22	2023-08-30 00:51:42.792485+00	2023-08-30 23:03:32.09433+00	4	\N	6	5	3	4	4	None	107.95
+29	2023-08-30 18:16:23.851551+00	2023-08-30 23:03:32.098289+00	5	\N	4	3	3	1	2	None	31.95
 \.
 
 
@@ -2144,6 +2148,8 @@ COPY public."ShoppingList_product" (id, shoppinglist_id, completeset_id) FROM st
 2	1	2
 3	2	3
 4	2	4
+15	2	22
+22	2	29
 \.
 
 
@@ -2468,6 +2474,20 @@ COPY public.django_admin_log (id, action_time, object_id, object_repr, action_fl
 38	2023-08-25 02:13:08.772968+00	4	CompleteSet object (4)	2	[{"changed": {"fields": ["Order"]}}]	16	3
 39	2023-08-27 02:32:17.090086+00	1	Address object (1)	1	[{"added": {}}]	25	3
 40	2023-08-27 02:34:15.799045+00	3	OrderInfo object (3)	2	[{"changed": {"fields": ["Address"]}}]	17	3
+41	2023-08-29 20:00:54.114014+00	5	CompleteSet object (5)	3		16	3
+42	2023-08-29 22:08:28.515313+00	18	CompleteSet object (18)	3		16	3
+43	2023-08-29 22:08:28.534131+00	17	CompleteSet object (17)	3		16	3
+44	2023-08-29 22:08:28.535656+00	16	CompleteSet object (16)	3		16	3
+45	2023-08-29 22:08:28.536896+00	15	CompleteSet object (15)	3		16	3
+46	2023-08-29 22:08:28.538123+00	14	CompleteSet object (14)	3		16	3
+47	2023-08-29 22:08:28.539216+00	13	CompleteSet object (13)	3		16	3
+48	2023-08-29 22:08:28.540942+00	12	CompleteSet object (12)	3		16	3
+49	2023-08-29 22:08:28.541811+00	11	CompleteSet object (11)	3		16	3
+50	2023-08-29 22:08:28.542569+00	10	CompleteSet object (10)	3		16	3
+51	2023-08-29 22:08:57.864248+00	9	CompleteSet object (9)	3		16	3
+52	2023-08-29 22:08:57.88488+00	8	CompleteSet object (8)	3		16	3
+53	2023-08-29 22:08:57.886522+00	7	CompleteSet object (7)	3		16	3
+54	2023-08-30 00:51:24.340489+00	21	CompleteSet object (21)	3		16	3
 \.
 
 
@@ -2991,7 +3011,7 @@ SELECT pg_catalog.setval('public."OrderUpdates_id_seq"', 1, false);
 -- Name: Order_completeset_id_seq; Type: SEQUENCE SET; Schema: public; Owner: leo_admin
 --
 
-SELECT pg_catalog.setval('public."Order_completeset_id_seq"', 4, true);
+SELECT pg_catalog.setval('public."Order_completeset_id_seq"', 29, true);
 
 
 --
@@ -3075,7 +3095,7 @@ SELECT pg_catalog.setval('public."ShoppingList_id_seq"', 2, true);
 -- Name: ShoppingList_product_id_seq; Type: SEQUENCE SET; Schema: public; Owner: leo_admin
 --
 
-SELECT pg_catalog.setval('public."ShoppingList_product_id_seq"', 4, true);
+SELECT pg_catalog.setval('public."ShoppingList_product_id_seq"', 22, true);
 
 
 --
@@ -3117,7 +3137,7 @@ SELECT pg_catalog.setval('public.customer_saved_address_id_seq', 1, false);
 -- Name: django_admin_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: leo_admin
 --
 
-SELECT pg_catalog.setval('public.django_admin_log_id_seq', 40, true);
+SELECT pg_catalog.setval('public.django_admin_log_id_seq', 54, true);
 
 
 --
