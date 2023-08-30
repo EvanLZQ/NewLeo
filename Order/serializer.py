@@ -8,11 +8,12 @@ from General.serializer import AddressSerializer
 
 
 class CompleteSetSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)
     color = serializers.CharField(source='color.name')
     usage = serializers.CharField(source='usage.name')
     coating = serializers.CharField(source='coating.name')
     index = serializers.CharField(source='index.name')
-    frame = serializers.CharField(source='frame.sku')
+    frame = serializers.SerializerMethodField()
     density = serializers.CharField(
         source='density.name', required=False, allow_null=True, default=None)
 
@@ -30,6 +31,9 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             'sub_total',
         ]
 
+    def get_frame(self, obj):
+        return obj.frame.sku
+
     def to_representation(self, obj):
         rep = super().to_representation(obj)
         instance = ProductInstance.objects.get(sku=obj.frame)
@@ -39,6 +43,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         return rep
 
     def create(self, data):
+        print(self.context['request'].data)
         usage_name = data.pop('usage')['name']
         usage_obj = LensUsage.objects.get(name=usage_name)
 
@@ -51,14 +56,14 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         coating_name = data.pop('coating')['name']
         coating_obj = LensCoating.objects.get(name=coating_name)
 
-        frame_sku = data.pop('frame')['sku']
-        frame_obj = ProductInstance.objects.get(sku=frame_sku)
+        frame_data = self.context['request'].data.get('frame')
+        frame_obj = ProductInstance.objects.get(sku=frame_data['sku'])
 
         density_name = data.pop('density')['name']
         density_obj = LensDensity.objects.get(name=density_name)
 
         completeset = CompleteSet.objects.create(
-            color=color_obj, usage=usage_obj, coating=coating_obj, frame=frame_obj, density=density_obj, index=index_obj)
+            color=color_obj, usage=usage_obj, coating=coating_obj, frame=frame_obj, density=density_obj, index=index_obj, sub_total=data.get('sub_total', 0))
 
         return completeset
 
@@ -87,8 +92,8 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             instance.coating = LensCoating.objects.get(name=coating_name)
 
         if 'frame' in validated_data:
-            frame_sku = validated_data.pop('frame')['sku']
-            instance.frame = ProductInstance.objects.get(sku=frame_sku)
+            frame_data = validated_data.get('frame')
+            instance.frame = ProductInstance.objects.get(sku=frame_data['sku'])
 
         if 'density' in validated_data:
             density_name = validated_data.pop('density')['name']

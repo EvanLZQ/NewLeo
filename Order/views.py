@@ -16,10 +16,18 @@ def getCompleteSet(request):
     return Response(serializer.data)
 
 
+@api_view(['DELETE'])
+def deleteCompleteSet(request, set_id):
+    set = CompleteSet.objects.get(id=set_id)
+    set.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 @api_view(['POST'])
 def createCompleteSet(request):
     if request.method == 'POST':
-        serializer = CompleteSetSerializer(data=request.data)
+        serializer = CompleteSetSerializer(
+            data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)

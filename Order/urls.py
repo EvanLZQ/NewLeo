@@ -6,6 +6,8 @@ urlpatterns = [
     path('<int:id>', views.getTargetOrder, name='get_target_order'),
     path('completeset', views.getCompleteSet, name='completesets'),
     path('createcompleteset', views.createCompleteSet, name='create_completeset'),
+    path('deletecompleteset/<int:set_id>',
+         views.deleteCompleteSet, name='delete_completeset'),
     path('completeset/<int:set_id>',
          views.getTargetCompleteSet, name='get_target_set'),
     path('updatecompleteset/<int:set_id>',
