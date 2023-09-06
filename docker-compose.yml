@@ -40,3 +40,4 @@ services:
 
 volumes:
   elw-db-data:
+  static_volume:
