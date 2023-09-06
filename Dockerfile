@@ -3,10 +3,10 @@ LABEL maintainer="ZongqiLyu"
 
 ENV PYTHONUNBUFFERED 1
 
-WORKDIR /leoptique_backend_api
+WORKDIR /eyeloveware_backend_api
 
 COPY ./requirements.txt /tmp/requirements.txt
-COPY . /leoptique_backend_api
+COPY . /eyeloveware_backend_api
 
 EXPOSE 8000
 
@@ -21,9 +21,9 @@ RUN python -m venv /py && \
     /py/bin/pip install -r /tmp/requirements.txt && \
     rm -rf /tmp && \
     apk del .tmp-build-deps && \
-    adduser --disabled-password --no-create-home leo-user
+    adduser --disabled-password --no-create-home elw-user
 
 ENV PATH="/py/bin:$PATH"
 
-USER leo-user
+USER elw-user
 
