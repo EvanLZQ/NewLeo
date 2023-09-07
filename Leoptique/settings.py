@@ -17,10 +17,12 @@ from datetime import timedelta
 from corsheaders.defaults import default_headers
 from dotenv import load_dotenv
 
-load_dotenv()
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+env_path = os.path.join(BASE_DIR, '.env')
+
+load_dotenv(dotenv_path=env_path)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
@@ -150,7 +152,8 @@ DATABASES = {
         'HOST': os.environ.get('DB_HOST'),
         'NAME': os.environ.get('DB_NAME'),
         'USER': os.environ.get('DB_USER'),
-        'PASSWORD': os.environ.get('DB_PASS')
+        'PASSWORD': os.environ.get('DB_PASS'),
+        'PORT': '5432',
     }
 }
 
