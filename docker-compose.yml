@@ -34,6 +34,7 @@ services:
       - "443:443"
     volumes:
       - /etc/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - /etc/nginx/sites-enabled:/etc/nginx/sites-enabled
       - static_volume:/eyeloveware_backend_api/staticfiles
     depends_on:
       - eyeloveware
