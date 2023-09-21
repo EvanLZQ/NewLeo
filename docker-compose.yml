@@ -9,7 +9,7 @@ services:
       - .:/eyeloveware_backend_api
     command: >
       sh -c "python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
+             gunicorn Leoptique.wsgi:application --config gunicorn.conf.py"
     environment:
       - DB_HOST=${DB_HOST}
       - DB_NAME=${DB_NAME}
