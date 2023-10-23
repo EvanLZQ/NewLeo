@@ -12,3 +12,4 @@ google-auth
 google-auth-oauthlib
 python-dotenv
 gunicorn
+django-quill-editor

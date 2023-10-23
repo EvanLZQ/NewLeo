@@ -10,7 +10,6 @@ class BlogBriefSerializer(serializers.ModelSerializer):
             'title',
             'brief',
             'sub_title',
-            'home_page_img',
         ]
 
 
