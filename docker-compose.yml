@@ -8,6 +8,7 @@ services:
     volumes:
       - .:/eyeloveware_backend_api
       - static_volume:/eyeloveware_backend_api/staticfiles
+      - media_volume:/eyeloveware_backend_api/media
     command: >
       sh -c "python manage.py migrate &&
              gunicorn Leoptique.wsgi:application --config gunicorn.conf.py"
@@ -37,9 +38,11 @@ services:
       - /etc/nginx/nginx.conf:/etc/nginx/nginx.conf
       - /etc/nginx/sites-enabled/elw_website_config.conf:/etc/nginx/sites-enabled/elw_website_config.conf
       - static_volume:/eyeloveware_backend_api/staticfiles
+      - media_volume:/eyeloveware_backend_api/media
     depends_on:
       - eyeloveware
 
 volumes:
   elw-db-data:
   static_volume:
+  media_volume:
