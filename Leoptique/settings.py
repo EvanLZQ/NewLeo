@@ -98,6 +98,8 @@ INSTALLED_APPS = [
     "Prescription",
     "Accessory",
     "Supplier",
+    "Blog",
+    "django_quill",
     "phonenumber_field",
     "django.contrib.sites",
     'oauth2_provider',
@@ -205,9 +207,9 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-STATICFILES_DIR = [
-    BASE_DIR / "static"
-]
+#STATICFILES_DIR = [
+#    BASE_DIR / "static"
+#]
 
 JAZZMIN_SETTINGS = JAZZMIN_SETTINGS
 
