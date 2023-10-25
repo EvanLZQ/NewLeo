@@ -13,3 +13,4 @@ google-auth-oauthlib
 python-dotenv
 gunicorn
 django-quill-editor
+Pillow
