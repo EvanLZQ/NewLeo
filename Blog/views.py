@@ -20,6 +20,20 @@ def getAllBlogs(request):
 
 
 @api_view(["GET"])
+def getTargetBlogBrief(request, blog_id):
+    blog = BlogInfo.objects.get(id=blog_id)
+    serializer = BlogBriefSerializer(blog)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+def getFirstBlogBrief(request):
+    blog = BlogInfo.objects.first()
+    serializer = BlogBriefSerializer(blog)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
 def getBlogDetails(request, blog_id):
     blog = BlogInfo.objects.get(id=blog_id)
     serializer = BlogSerializer(blog)
