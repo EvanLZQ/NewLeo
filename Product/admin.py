@@ -32,7 +32,7 @@ class ProductImageInline(admin.StackedInline):
     readonly_fields = ['image_preview']
 
     def image_preview(self, obj):
-        return mark_safe(f'<img src="http://admin.eyelovewear.com/media/{obj.image_url}.webp" style="max-width: 300px; margin: 5px;">')
+        return mark_safe(f'<img src="http://admin.eyelovewear.com/media/{obj.image_url}" style="max-width: 300px; margin: 5px;">')
     image_preview.short_description = 'To see the image, click Save and Continue Editing.'
 
     model = ProductImage

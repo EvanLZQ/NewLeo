@@ -19,7 +19,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
     def get_image(self, obj):
         if obj.image:
-            return f'http://admin.eyelovewear.com{obj.image.url}.webp'
+            return f'http://admin.eyelovewear.com{obj.image.url}'
         return None
 
     class Meta:
