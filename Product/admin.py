@@ -8,7 +8,6 @@ class ProductImageInline(admin.StackedInline):
 
 
 class ProductInstanceInline(admin.StackedInline):
-    inlines = [ProductImageInline, ]
     model = ProductInstance
     extra = 1
     readonly_fields = ['color_image_preview']
@@ -35,6 +34,7 @@ class ProductInstanceInline(admin.StackedInline):
 
 
 class ProductInstanceAdmin(admin.ModelAdmin):
+    inlines = [ProductImageInline, ]
 
     @admin.display(description="Model Number")
     def get_model_number(self, obj):
