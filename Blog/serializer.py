@@ -3,6 +3,13 @@ from .models import BlogInfo
 
 
 class BlogBriefSerializer(serializers.ModelSerializer):
+    home_page_img = serializers.SerializerMethodField()
+
+    def get_home_page_img(self, obj):
+        if obj.home_page_img:
+            return f'http://admin.eyelovewear.com{obj.home_page_img.url}'
+        return None
+
     class Meta:
         model = BlogInfo
         fields = [
