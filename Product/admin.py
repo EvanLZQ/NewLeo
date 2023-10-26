@@ -1,6 +1,31 @@
+from django import forms
 from django.contrib import admin
 from .models import *
 from django.utils.safestring import mark_safe
+
+
+class ProductInfoForm(forms.ModelForm):
+    tags = forms.ModelMultipleChoiceField(
+        queryset=ProductTag.objects.all(),
+        required=False,
+        widget=admin.widgets.FilteredSelectMultiple('tags', False)
+    )
+
+    class Meta:
+        model = ProductInfo
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance:
+            self.fields['tags'].initial = self.instance.producttag_set.all()
+
+    def save(self, *args, **kwargs):
+        instance = super().save(*args, **kwargs)
+        if instance.pk:
+            instance.producttag_set.set(self.cleaned_data['tags'])
+            self.save_m2m()
+        return instance
 
 
 class ProductImageInline(admin.StackedInline):
@@ -46,6 +71,7 @@ class ProductInstanceAdmin(admin.ModelAdmin):
 
 class ProductInfoAdmin(admin.ModelAdmin):
     inlines = [ProductInstanceInline,]
+    form = ProductInfoForm
 
 # class ImageInline(admin.TabularInline):
 #     model = ProductImage
