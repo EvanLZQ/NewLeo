@@ -15,11 +15,6 @@ class BlogInfo(models.Model):
     def __str__(self):
         return self.title
 
-    def save(self, *args, **kwargs):
-        if self.home_page_img:
-            self.home_page_img = f'http://admin.eyelovewear.com{self.home_page_img.url}'
-        super().save(*args, **kwargs)
-
     class Meta:
         db_table = 'BlogInfo'
         verbose_name = 'Blog'

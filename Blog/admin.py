@@ -10,8 +10,3 @@ class BlogInfoAdmin(admin.ModelAdmin):
 
 
 admin.site.register(BlogInfo, BlogInfoAdmin)
-
-
-# @admin.register(BlogInfo)
-# class BlogInfoAdmin(admin.ModelAdmin):
-#     pass
