@@ -41,8 +41,7 @@ class ProductInstanceAdmin(admin.ModelAdmin):
         return obj.product.model_number
 
     list_display = ['get_model_number', 'sku', 'online']
-    readonly_fields = ['color_image_preview',
-                       'carousel_image_preview', 'detail_image_preview']
+    readonly_fields = ['color_image_preview']
 
 
 class ProductInfoAdmin(admin.ModelAdmin):
