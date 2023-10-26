@@ -10,7 +10,7 @@ class BlogInfoAdmin(admin.ModelAdmin):
     readonly_fields = ('home_page_img_preview',)
 
     def home_page_img_preview(self, obj):
-        return mark_safe(f'<img src="{obj.home_page_img}" style="max-width: 300px; margin: 5px;">')
+        return mark_safe(f'<img src="http://admin.eyelovewear.com/{obj.home_page_img}" style="max-width: 300px; margin: 5px;">')
     home_page_img_preview.short_description = 'Home Page Image Preview'
 
 
