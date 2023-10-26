@@ -11,7 +11,7 @@ class ProductInstanceInline(admin.StackedInline):
     inlines = [ProductImageInline, ]
     model = ProductInstance
     extra = 1
-    readonly_fields = ('color_image_preview')
+    readonly_fields = ['color_image_preview']
 
     # def carousel_image_preview(self, obj):
     #     images = obj.carousel_img.split(',') if obj.carousel_img else []
