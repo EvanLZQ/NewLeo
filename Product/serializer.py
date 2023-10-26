@@ -34,12 +34,12 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
     def get_carousel_img(self, obj):
         images = ProductImage.objects.filter(
             productInstance=obj, image_type='carousel')
-        return ProductImageSerializer(images, many=True).data
+        return ProductImageSerializer(images, many=True).data.image
 
     def get_detail_img(self, obj):
         images = ProductImage.objects.filter(
             productInstance=obj, image_type='detail')
-        return ProductImageSerializer(images, many=True).data
+        return ProductImageSerializer(images, many=True).data.image
 
     def to_representation(self, obj):
         rep = super().to_representation(obj)
