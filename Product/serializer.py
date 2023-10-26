@@ -14,6 +14,19 @@ class ProductReviewSerializer(serializers.ModelSerializer):
         ]
 
 
+class ProductImageImageOnlySerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
+
+    def get_image(self, obj):
+        if obj.image:
+            return f'http://admin.eyelovewear.com{obj.image.url}'
+        return None
+
+    class Meta:
+        model = ProductImage
+        fields = ['image']
+
+
 class ProductImageSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
 
@@ -34,12 +47,12 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
     def get_carousel_img(self, obj):
         images = ProductImage.objects.filter(
             productInstance=obj, image_type='carousel')
-        return ProductImageSerializer(images, many=True).data.image
+        return ProductImageImageOnlySerializer(images, many=True).data
 
     def get_detail_img(self, obj):
         images = ProductImage.objects.filter(
             productInstance=obj, image_type='detail')
-        return ProductImageSerializer(images, many=True).data.image
+        return ProductImageImageOnlySerializer(images, many=True).data
 
     def to_representation(self, obj):
         rep = super().to_representation(obj)
