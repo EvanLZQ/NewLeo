@@ -3,27 +3,31 @@ from .models import *
 from django.utils.safestring import mark_safe
 
 
+class ProductImageInline(admin.StackedInline):
+    model = ProductImage
+
+
 class ProductInstanceInline(admin.StackedInline):
+    inlines = [ProductImageInline, ]
     model = ProductInstance
     extra = 1
-    readonly_fields = ('carousel_image_preview',
-                       'detail_image_preview', 'color_image_preview')
+    readonly_fields = ('color_image_preview')
 
-    def carousel_image_preview(self, obj):
-        images = obj.carousel_img.split(',') if obj.carousel_img else []
-        html = ""
-        for image in images:
-            html += f'<img src="{image}" style="max-width: 300px; margin: 5px;">'
-        return mark_safe(html)
-    carousel_image_preview.short_description = 'Carousel Images Preview'
+    # def carousel_image_preview(self, obj):
+    #     images = obj.carousel_img.split(',') if obj.carousel_img else []
+    #     html = ""
+    #     for image in images:
+    #         html += f'<img src="{image}" style="max-width: 300px; margin: 5px;">'
+    #     return mark_safe(html)
+    # carousel_image_preview.short_description = 'Carousel Images Preview'
 
-    def detail_image_preview(self, obj):
-        images = obj.detail_img.split(',') if obj.detail_img else []
-        html = ""
-        for image in images:
-            html += f'<img src="{image}" style="max-width: 300px; margin: 5px;">'
-        return mark_safe(html)
-    detail_image_preview.short_description = 'Detail Images Preview'
+    # def detail_image_preview(self, obj):
+    #     images = obj.detail_img.split(',') if obj.detail_img else []
+    #     html = ""
+    #     for image in images:
+    #         html += f'<img src="{image}" style="max-width: 300px; margin: 5px;">'
+    #     return mark_safe(html)
+    # detail_image_preview.short_description = 'Detail Images Preview'
 
     def color_image_preview(self, obj):
         return mark_safe(f'<img src="{obj.color_img_url}" style="max-width: 300px; margin: 5px; border-style: solid;">')

@@ -4,7 +4,7 @@ from django.conf import settings
 from django.utils.safestring import mark_safe
 
 __all__ = ['ProductTag', 'ProductInstance', 'ProductPromotion',
-           'ProductInfo', 'ProductReview']
+           'ProductInfo', 'ProductReview', 'ProductImage']
 
 
 class ProductInfo(models.Model):
@@ -107,8 +107,8 @@ class ProductInstance(models.Model):
         max_digits=5, decimal_places=2, default=0)
     price = models.DecimalField(
         max_digits=5, decimal_places=2, blank=True, null=True)
-    carousel_img = models.CharField(max_length=1000)
-    detail_img = models.CharField(max_length=1000)
+    # carousel_img = models.CharField(max_length=1000)
+    # detail_img = models.CharField(max_length=1000)
     color_img_url = models.URLField()
     color_base_name = models.CharField(max_length=20, choices=COLOR_CHOICES)
     color_display_name = models.CharField(max_length=100)
@@ -117,19 +117,19 @@ class ProductInstance(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def carousel_image_preview(self):
-        images = self.carousel_img.split(',') if self.carousel_img else []
-        html = ""
-        for image in images:
-            html += f'<img src="{image}" style="max-width: 300px; margin: 5px;">'
-        return mark_safe(html)
+    # def carousel_image_preview(self):
+    #     images = self.carousel_img.split(',') if self.carousel_img else []
+    #     html = ""
+    #     for image in images:
+    #         html += f'<img src="{image}" style="max-width: 300px; margin: 5px;">'
+    #     return mark_safe(html)
 
-    def detail_image_preview(self):
-        images = self.detail_img.split(',') if self.detail_img else []
-        html = ""
-        for image in images:
-            html += f'<img src="{image}" style="max-width: 300px; margin: 5px;">'
-        return mark_safe(html)
+    # def detail_image_preview(self):
+    #     images = self.detail_img.split(',') if self.detail_img else []
+    #     html = ""
+    #     for image in images:
+    #         html += f'<img src="{image}" style="max-width: 300px; margin: 5px;">'
+    #     return mark_safe(html)
 
     def color_image_preview(self):
         return mark_safe(f'<img src="{self.color_img_url}" style="max-width: 300px; margin: 5px; border-style: solid;">')
@@ -141,6 +141,22 @@ class ProductInstance(models.Model):
         db_table = 'ProductInstance'
         verbose_name = 'Product Instance'
         verbose_name_plural = 'Product Instances'
+
+
+class ProductImage(models.Model):
+    productInstance = models.ForeignKey(
+        'Product.ProductInstance', on_delete=models.CASCADE, related_name='productImage')
+    image = models.ImageField(upload_to='product_images/')
+    alt = models.CharField(max_length=100)
+    image_type = models.CharField(max_length=20, choices=[(
+        'carousel', 'Carousel'), ('detail', 'Detail')], default='carousel')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ProductImage'
+        verbose_name = 'Product Image'
+        verbose_name_plural = 'Product Images'
 
 
 class ProductReview(models.Model):

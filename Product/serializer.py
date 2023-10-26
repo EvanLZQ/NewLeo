@@ -14,17 +14,25 @@ class ProductReviewSerializer(serializers.ModelSerializer):
         ]
 
 
+class ProductImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductImage
+        fields = ['image', 'alt', 'image_type']
+
+
 class ProductInstanceSerializer(serializers.ModelSerializer):
     carousel_img = serializers.SerializerMethodField()
     detail_img = serializers.SerializerMethodField()
 
     def get_carousel_img(self, obj):
-        img_url = obj.carousel_img.split(',') if obj.carousel_img else []
-        return img_url
+        images = ProductImage.objects.filter(
+            productInstance=obj, image_type='carousel')
+        return ProductImageSerializer(images, many=True).data
 
     def get_detail_img(self, obj):
-        img_url = obj.detail_img.split(',') if obj.detail_img else []
-        return img_url
+        images = ProductImage.objects.filter(
+            productInstance=obj, image_type='detail')
+        return ProductImageSerializer(images, many=True).data
 
     def to_representation(self, obj):
         rep = super().to_representation(obj)
