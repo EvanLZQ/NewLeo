@@ -5,7 +5,7 @@ from django.utils.safestring import mark_safe
 
 
 class ProductTagInline(admin.TabularInline):
-    model = ProductTag.productinfo.through
+    model = ProductTag.product.through
 
 # class ProductInfoForm(forms.ModelForm):
 #     tags = forms.ModelMultipleChoiceField(
