@@ -47,6 +47,8 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
     def get_carousel_img(self, obj):
         images = ProductImage.objects.filter(
             productInstance=obj, image_type='carousel')
+        print(images)
+        print(ProductImageImageOnlySerializer(images, many=True).data)
         return ProductImageImageOnlySerializer(images, many=True).data
 
     def get_detail_img(self, obj):
