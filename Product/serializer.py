@@ -15,6 +15,13 @@ class ProductReviewSerializer(serializers.ModelSerializer):
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
+
+    def get_image(self, obj):
+        if obj.image:
+            return f'http://admin.eyelovewear.com{obj.image.url}.webp'
+        return None
+
     class Meta:
         model = ProductImage
         fields = ['image', 'alt', 'image_type']
