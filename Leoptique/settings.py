@@ -235,7 +235,7 @@ TINYMCE_DEFAULT_CONFIG = {
     'width': 'auto',
     "height": "600px",
     'image_caption': True,
-    "images_upload_url": "/tinymce/upload_image",
+    "images_upload_url": "tinymce/upload_image",
     "images_upload_handler": "tinymce_image_upload_handler"
 }
 
