@@ -1,11 +1,11 @@
 from django.db import models
-from django_quill.fields import QuillField
+from tinymce.models import HTMLField
 
 
 class BlogInfo(models.Model):
     title = models.CharField(max_length=100)
     slug = models.SlugField(max_length=200, unique=True, null=True, blank=True)
-    content = QuillField()
+    content = HTMLField()
     sub_title = models.CharField(max_length=200, blank=True, null=True)
     brief = models.TextField(blank=True, null=True)
     home_page_img = models.ImageField(
