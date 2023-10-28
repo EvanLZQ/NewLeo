@@ -15,8 +15,6 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include, re_path
-from django.views.decorators.csrf import csrf_exempt
-from tinymce.views import handle_upload
 from . import views
 
 
@@ -26,13 +24,11 @@ admin.site.index_title = 'Home Page'
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("admin/tinymce_upload/", views.upload_image, name="tinymce_upload"),
+    path("tinymce/upload_image", views.upload_image, name="tinymce_upload"),
     path("api/products/", include("Product.urls")),
     path("api/lens/", include("Lens.urls")),
     path('api/user/', include("Customer.urls")),
     path('api/order/', include("Order.urls")),
     path('api/blog/', include("Blog.urls")),
     re_path(r'^auth/', include('drf_social_oauth2.urls', namespace='drf')),
-    re_path(r'^tinymce/upload/$', csrf_exempt(handle_upload),
-            name='tinymce_upload'),
 ]
