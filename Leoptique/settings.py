@@ -235,8 +235,21 @@ TINYMCE_DEFAULT_CONFIG = {
     'width': 'auto',
     "height": "600px",
     'image_caption': True,
-    "images_upload_url": "upload_image",
+    "images_upload_url": "/tinymce/upload_image",
+    "images_upload_handler": "tinymce_image_upload_handler"
 }
+
+TINYMCE_EXTRA_MEDIA = {
+    'css': {
+        'all': [
+        ],
+    },
+    'js': [
+        "https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js",
+        "admin/js/tinymce-upload.js",
+    ],
+}
+
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
