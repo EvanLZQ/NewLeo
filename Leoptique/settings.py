@@ -99,7 +99,7 @@ INSTALLED_APPS = [
     "Accessory",
     "Supplier",
     "Blog",
-    "django_quill",
+    "tinymce",
     "phonenumber_field",
     "django.contrib.sites",
     'oauth2_provider',
