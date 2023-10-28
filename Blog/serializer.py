@@ -33,12 +33,13 @@ class BlogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BlogInfo
-        fields = [
-            'id',
-            'title',
-            'slug',
-            'brief',
-            'sub_title',
-            'html',
-            'plain',
-        ]
+        fields = '__all__'
+        # fields = [
+        #     'id',
+        #     'title',
+        #     'slug',
+        #     'brief',
+        #     'sub_title',
+        #     'html',
+        #     'plain',
+        # ]
