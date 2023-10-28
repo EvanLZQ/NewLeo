@@ -22,14 +22,14 @@ class BlogBriefSerializer(serializers.ModelSerializer):
 
 
 class BlogSerializer(serializers.ModelSerializer):
-    html = serializers.SerializerMethodField()
-    plain = serializers.SerializerMethodField()
+    # html = serializers.SerializerMethodField()
+    # plain = serializers.SerializerMethodField()
 
-    def get_html(self, instance):
-        return str(instance.content.html)
+    # def get_html(self, instance):
+    #     return str(instance.content.html)
 
-    def get_plain(self, instance):
-        return str(instance.content.plain)
+    # def get_plain(self, instance):
+    #     return str(instance.content.plain)
 
     class Meta:
         model = BlogInfo
