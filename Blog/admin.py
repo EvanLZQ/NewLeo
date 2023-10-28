@@ -7,6 +7,7 @@ from django.utils.safestring import mark_safe
 class BlogInfoAdmin(admin.ModelAdmin):
     list_display = ('title', 'created_at')
     ordering = ('-created_at',)
+    change_form_template = "admin/Blog/change_form.html"
 
 
 admin.site.register(BlogInfo, BlogInfoAdmin)
