@@ -109,7 +109,8 @@ class ProductInstance(models.Model):
         max_digits=5, decimal_places=2, blank=True, null=True)
     # carousel_img = models.CharField(max_length=1000)
     # detail_img = models.CharField(max_length=1000)
-    color_img_url = models.URLField()
+    color_img = models.ForeignKey(
+        'Product.ProductColorImg', on_delete=models.SET_NULL, null=True)
     color_base_name = models.CharField(max_length=20, choices=COLOR_CHOICES)
     color_display_name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
@@ -200,3 +201,18 @@ class ProductTag(models.Model):
         db_table = 'ProductTag'
         verbose_name = 'Product Tag'
         verbose_name_plural = 'Product Tags'
+
+
+class ProductColorImg(models.Model):
+    title = models.CharField(max_length=100)
+    color_img = models.ImageField(upload_to='product_color_images/')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.title}'
+
+    class Meta:
+        db_table = 'ProductColorImg'
+        verbose_name = 'Product Color Image'
+        verbose_name_plural = 'Product Color Images'

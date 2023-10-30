@@ -43,6 +43,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
 class ProductInstanceSerializer(serializers.ModelSerializer):
     carousel_img = serializers.SerializerMethodField()
     detail_img = serializers.SerializerMethodField()
+    color_img_url = serializers.SerializerMethodField()
 
     def get_carousel_img(self, obj):
         images = ProductImage.objects.filter(
@@ -55,6 +56,9 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
             productInstance=obj, image_type='detail')
         serialized_data = ProductImageSerializer(images, many=True).data
         return [item['image'] for item in serialized_data]
+
+    def get_color_img_url(self, obj):
+        return f'http://admin.eyelovewear.com{obj.color_img_url.url}'
 
     def to_representation(self, obj):
         rep = super().to_representation(obj)
