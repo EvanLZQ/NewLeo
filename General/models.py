@@ -75,7 +75,7 @@ class Coupon(models.Model):
 
 
 class ImageUpload(models.Model):
-    title: models.CharField(max_length=150)
+    title = models.CharField(max_length=150)
     image = models.ImageField(upload_to='uploaded_images/')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
