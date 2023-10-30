@@ -12,7 +12,7 @@ class UploadImageAdmin(admin.ModelAdmin):
 
     def image_url(self, obj):
         if obj.image:
-            return f'http://admin.eyelovewear.com/media/{obj.image.url}'
+            return f'http://admin.eyelovewear.com{obj.image.url}'
         return None
 
 
