@@ -8,7 +8,7 @@ from .models import Address, Coupon, ImageUpload
 # class CouponAdmin(admin.ModelAdmin):
 #     change_form_template = 'admin/custom_coupon_form.html'
 class UploadImageAdmin(admin.ModelAdmin):
-    list_display = ('name', 'image_url', 'created_at')
+    list_display = ('title', 'image_url', 'created_at')
 
     def image_url(self, obj):
         if obj.image:
