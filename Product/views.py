@@ -2,7 +2,7 @@ from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from django.db.models import Q
-
+from django.core.paginator import Paginator
 
 from .models import *
 from .serializer import ProductInstanceSerializer, ProductSerializer, SKUtoModelSerializer
@@ -11,8 +11,20 @@ from .serializer import ProductInstanceSerializer, ProductSerializer, SKUtoModel
 @api_view(['GET'])
 def getProducts(request):
     products = ProductInfo.objects.filter(
-        productInstance__isnull=False).distinct()
+        Q(productInstance__isnull=False) & Q(productInstance__online=True)).distinct()
     serializer = ProductSerializer(products, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+def getPageProducts(request):
+    products = ProductInfo.objects.filter(
+        Q(productInstance__isnull=False) & Q(productInstance__online=True)).distinct()
+    number_of_page = request.GET.get('number', 6)
+    paginator = Paginator(products, number_of_page)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    serializer = ProductSerializer(page_obj, many=True)
     return Response(serializer.data)
 
 
@@ -20,10 +32,6 @@ def getProducts(request):
 def getProduct(request, sku):
     product_instance = ProductInstance.objects.get(sku=sku)
     serializer = ProductInstanceSerializer(product_instance)
-    # product_id = ProductInstance.objects.get(sku=sku).product.id
-    # product = ProductInfo.objects.get(id=product_id)
-    # serializer = TargetInstanceSerializer(
-    #     product, many=False, context={'sku': sku})
     return Response(serializer.data)
 
 
