@@ -23,7 +23,7 @@ admin.site.site_title = 'Leoptique Admin'
 admin.site.index_title = 'Home Page'
 
 urlpatterns = [
-    path("", admin.site.urls),
+    path("/", admin.site.urls),
     # path("admin/Blog/bloginfo/add/tinymce/upload_image",
     #      views.upload_image, name="tinymce_upload"),
     path("api/products/", include("Product.urls")),

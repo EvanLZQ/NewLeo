@@ -49,7 +49,7 @@ class ProductInstanceInline(admin.StackedInline):
 
     def color_image_preview(self, obj):
         print(obj.color_img_url)
-        return mark_safe(f'<img src="http://admin.eyeloveware.com{obj.color_img_url}" style="max-width: 300px; margin: 5px; border-style: solid;">')
+        return mark_safe(f'<img src="http://admin.eyeloveware.com{obj.color_img.color_img.url}" style="max-width: 300px; margin: 5px; border-style: solid;">')
 
     color_image_preview.short_description = 'Color Image Preview'
 
