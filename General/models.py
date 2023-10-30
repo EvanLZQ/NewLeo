@@ -72,3 +72,15 @@ class Coupon(models.Model):
         db_table = 'Coupon'
         verbose_name = 'Coupon'
         verbose_name_plural = 'Coupons'
+
+
+class ImageUpload(models.Model):
+    name: models.CharField(max_length=150)
+    image = models.ImageField(upload_to='uploaded_images/')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ImageUpload'
+        verbose_name = 'Image Upload'
+        verbose_name_plural = 'Image Uploads'
