@@ -58,7 +58,8 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
         return [item['image'] for item in serialized_data]
 
     def get_color_img_url(self, obj):
-        return f'http://admin.eyelovewear.com{obj.color_img.color_img.url}'
+        img_url = obj.color_img || ''
+        return f'http://admin.eyelovewear.com{img_url}'
 
     def to_representation(self, obj):
         rep = super().to_representation(obj)
