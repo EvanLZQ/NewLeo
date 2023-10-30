@@ -7,4 +7,5 @@ urlpatterns = [
     path('<str:model>/', views.getModel, name='model_details'),
     path('filter', views.filterProduct, name='filter_products'),
     path('skumodel/<str:sku>/', views.getModelUsingSku, name='model_by_sku'),
+    path('paged_product', views.getPageProducts, name='page_products'),
 ]
