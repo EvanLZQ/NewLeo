@@ -4,7 +4,7 @@ from django.conf import settings
 from django.utils.safestring import mark_safe
 
 __all__ = ['ProductTag', 'ProductInstance', 'ProductPromotion',
-           'ProductInfo', 'ProductReview', 'ProductImage']
+           'ProductInfo', 'ProductReview', 'ProductImage', 'ProductColorImg']
 
 
 class ProductInfo(models.Model):
