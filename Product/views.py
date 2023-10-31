@@ -22,7 +22,7 @@ def getPageProducts(request):
         Q(productInstance__isnull=False) & Q(productInstance__online=True)).distinct()
     number_of_page = request.GET.get('number', 6)
     paginator = Paginator(products, number_of_page)
-    page_number = request.GET.get('page')
+    page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
     serializer = ProductSerializer(page_obj, many=True)
     return Response(serializer.data)
@@ -92,4 +92,11 @@ def filterProduct(request):
         products = products.filter(combined_q_objects).distinct()
 
     serializer = ProductSerializer(products, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+def getProductPromotions(request):
+    promotions = ProductPromotion.objects.filter(is_active=True)
+    serializer = ProductPromotionSerializer(promotions, many=True)
     return Response(serializer.data)
