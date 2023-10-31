@@ -195,3 +195,19 @@ class SKUtoModelSerializer(serializers.ModelSerializer):
             'model_number',
             'name',
         ]
+
+
+class ProductPromotionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductPromotion
+        fields = [
+            'name',
+            'code',
+            'promo_type',
+            'promo_value',
+            'description',
+            'slug',
+            'is_featured',
+            'is_active',
+            'promo_img',
+        ]
