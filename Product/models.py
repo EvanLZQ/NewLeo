@@ -107,8 +107,6 @@ class ProductInstance(models.Model):
         max_digits=5, decimal_places=2, default=0)
     price = models.DecimalField(
         max_digits=5, decimal_places=2, blank=True, null=True)
-    # carousel_img = models.CharField(max_length=1000)
-    # detail_img = models.CharField(max_length=1000)
     color_img = models.ForeignKey(
         'Product.ProductColorImg', on_delete=models.SET_NULL, null=True)
     color_base_name = models.CharField(max_length=20, choices=COLOR_CHOICES)
@@ -117,20 +115,6 @@ class ProductInstance(models.Model):
     online = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
-    # def carousel_image_preview(self):
-    #     images = self.carousel_img.split(',') if self.carousel_img else []
-    #     html = ""
-    #     for image in images:
-    #         html += f'<img src="{image}" style="max-width: 300px; margin: 5px;">'
-    #     return mark_safe(html)
-
-    # def detail_image_preview(self):
-    #     images = self.detail_img.split(',') if self.detail_img else []
-    #     html = ""
-    #     for image in images:
-    #         html += f'<img src="{image}" style="max-width: 300px; margin: 5px;">'
-    #     return mark_safe(html)
 
     def color_image_preview(self):
         return mark_safe(f'<img src="{self.color_img_url}" style="max-width: 300px; margin: 5px; border-style: solid;">')
