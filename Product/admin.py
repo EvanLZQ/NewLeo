@@ -33,25 +33,25 @@ class ProductTagInline(admin.TabularInline):
 
 
 class ProductImageInline(admin.StackedInline):
+    model = ProductImage
+    extra = 1
     readonly_fields = ['image_preview']
 
     def image_preview(self, obj):
         return mark_safe(f'<img src="http://admin.eyelovewear.com/media/{obj.image}" style="max-width: 300px; margin: 5px;">')
     image_preview.short_description = 'To see the image, click Save and Continue Editing.'
 
-    model = ProductImage
-
 
 class ProductInstanceInline(admin.StackedInline):
     model = ProductInstance
     extra = 1
-    readonly_fields = ['color_image_preview']
+    # readonly_fields = ['color_image_preview']
 
-    def color_image_preview(self, obj):
-        print(obj.color_img_url)
-        return mark_safe(f'<img src="http://admin.eyeloveware.com{obj.color_img.color_img.url}" style="max-width: 300px; margin: 5px; border-style: solid;">')
+    # def color_image_preview(self, obj):
+    #     print(obj.color_img_url)
+    #     return mark_safe(f'<img src="http://admin.eyeloveware.com{obj.color_img.color_img.url}" style="max-width: 300px; margin: 5px; border-style: solid;">')
 
-    color_image_preview.short_description = 'Color Image Preview'
+    # color_image_preview.short_description = 'Color Image Preview'
 
 
 class ProductInstanceAdmin(admin.ModelAdmin):
@@ -62,7 +62,7 @@ class ProductInstanceAdmin(admin.ModelAdmin):
         return obj.product.model_number
 
     list_display = ['get_model_number', 'sku', 'online']
-    readonly_fields = ['color_image_preview']
+    # readonly_fields = ['color_image_preview']
 
 
 class ProductInfoAdmin(admin.ModelAdmin):
@@ -81,6 +81,15 @@ class ProductInfoAdmin(admin.ModelAdmin):
     #     super().save_model(request, obj, form, change)
     #     if not change:
     #         form.save_m2m()
+
+
+class ProductColorImgAdmin(admin.ModelAdmin):
+    readonly_fields = ['color_image_preview']
+
+    def color_image_preview(self, obj):
+        return mark_safe(f'<img src="http://admin.eyelovewear.com{obj.color_img.url}" style="max-width: 300px; margin: 5px; border-style: solid;">')
+
+    color_image_preview.short_description = 'Color Image Preview'
 
 
 admin.site.register(ProductInfo, ProductInfoAdmin)
