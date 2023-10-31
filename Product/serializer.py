@@ -58,7 +58,11 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
         return [item['image'] for item in serialized_data]
 
     def get_color_img_url(self, obj):
-        img_url = obj.color_img
+        # Get the color_img url from foreign key color_img in ProductInstance
+
+        # img_url = obj.color_img.url
+
+        img_url = obj.color_img.url if obj.color_img else None
         return f'http://admin.eyelovewear.com{img_url}'
 
     def to_representation(self, obj):
