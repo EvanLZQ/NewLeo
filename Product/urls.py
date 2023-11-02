@@ -8,5 +8,5 @@ urlpatterns = [
     path('filter', views.filterProduct, name='filter_products'),
     path('skumodel/<str:sku>/', views.getModelUsingSku, name='model_by_sku'),
     path('paged_product', views.getPageProducts, name='page_products'),
-    path('promotion', views.getPromotion, name='product_promotion'),
+    path('promotion', views.getProductPromotions, name='product_promotion'),
 ]
