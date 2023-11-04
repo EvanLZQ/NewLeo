@@ -19,10 +19,13 @@ def getProducts(request):
 @api_view(['GET'])
 def getPageProducts(request):
     exclude = request.GET.get('exclude', None)
+    tag = request.GET.get('tag', None)
     products = ProductInfo.objects.filter(
         Q(productInstance__isnull=False) & Q(productInstance__online=True)).distinct()
     if exclude:
         products = products.exclude(model_number=exclude)
+    if tag:
+        products = products.filter(producttag__name=tag)
     number_of_page = request.GET.get('number', 6)
     paginator = Paginator(products, number_of_page)
     page_number = request.GET.get('page', 1)
