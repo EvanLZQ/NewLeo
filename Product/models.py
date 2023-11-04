@@ -150,7 +150,7 @@ class ProductReview(models.Model):
     product = models.ForeignKey(
         'Product.ProductInfo', on_delete=models.CASCADE, related_name='productReview')
     customer = models.ForeignKey(
-        'Customer.CustomerInfo', on_delete=models.SET_NULL, related_name='productReivew', null=True)
+        'Customer.CustomerInfo', on_delete=models.SET_NULL, related_name='productReview', null=True)
     slug = models.SlugField(max_length=200, unique=True, null=True)
     title = models.CharField(max_length=50)
     content = models.TextField(blank=True)
@@ -171,7 +171,8 @@ class ProductReview(models.Model):
 
 class ProductTag(models.Model):
     slug = models.SlugField(max_length=200, unique=True, null=True)
-    product = models.ManyToManyField('Product.ProductInfo', blank=True)
+    product = models.ManyToManyField(
+        'Product.ProductInfo', blank=True, related_name='productTag')
     category = models.CharField(max_length=100, null=True)
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
