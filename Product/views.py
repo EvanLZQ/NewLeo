@@ -25,7 +25,7 @@ def getPageProducts(request):
     if exclude:
         products = products.exclude(model_number=exclude)
     if tag:
-        products = products.filter(producttag__name=tag)
+        products = products.filter(productTag__name=tag)
     number_of_page = request.GET.get('number', 6)
     paginator = Paginator(products, number_of_page)
     page_number = request.GET.get('page', 1)
