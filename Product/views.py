@@ -28,8 +28,9 @@ def getPageProducts(request):
         products = products.filter(productTag__name=tag)
     number_of_page = request.GET.get('number', 6)
     paginator = Paginator(products, number_of_page)
-    page_number = request.GET.get('page', 1)
-    if int(page_number) > paginator.num_pages or page_number < 1:
+    page_number = int(request.GET.get('page', 1))
+    if page_number > paginator.num_pages or page_number < 1:
+        print(page_number, paginator.num_pages)
         return Response([])
     page_obj = paginator.get_page(page_number)
     serializer = ProductSerializer(page_obj, many=True)
