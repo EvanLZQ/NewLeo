@@ -29,6 +29,8 @@ def getPageProducts(request):
     number_of_page = request.GET.get('number', 6)
     paginator = Paginator(products, number_of_page)
     page_number = request.GET.get('page', 1)
+    if int(page_number) > paginator.num_pages or page_number < 1:
+        return Response([])
     page_obj = paginator.get_page(page_number)
     serializer = ProductSerializer(page_obj, many=True)
     return Response(serializer.data)
