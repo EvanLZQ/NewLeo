@@ -29,6 +29,16 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 
+  # Change here
+  usersite:
+    build:
+      context: ../../frontend/
+      dockerfile: Dockerfile
+    ports:
+      - "5174:80"
+    volumes:
+      - elw-usersite-volume:/usr/share/nginx/html
+
   nginx:
     image: nginx:latest
     ports:
@@ -37,12 +47,15 @@ services:
     volumes:
       - /etc/nginx/nginx.conf:/etc/nginx/nginx.conf
       - /etc/nginx/sites-enabled/elw_website_config.conf:/etc/nginx/sites-enabled/elw_website_config.conf
+      - elw-usersite-volume:/usr/share/nginx/html # Change here
       - static_volume:/eyeloveware_backend_api/staticfiles
       - media_volume:/eyeloveware_backend_api/media
     depends_on:
       - eyeloveware
+      - usersite # Change here
 
 volumes:
+  elw-usersite-volume: # Change here
   elw-db-data:
   static_volume:
   media_volume:
