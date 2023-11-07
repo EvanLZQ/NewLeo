@@ -17,7 +17,7 @@ class ProductInfo(models.Model):
     price = models.DecimalField(max_digits=5, decimal_places=2)
     description = models.TextField(null=True)
     letter_size = models.CharField(max_length=10, choices=[(
-        'XS', 'xs'), ('S', 's'), ('M', 'm'), ('L', 'l'), ('XL', 'xl')])
+        'XS', 'XS'), ('S', 'S'), ('M', 'M'), ('L', 'L'), ('XL', 'XL')])
     string_size = models.CharField(max_length=10)
     frame_weight = models.IntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(999)])
@@ -30,11 +30,11 @@ class ProductInfo(models.Model):
     upper_wearable_width = models.IntegerField()
     lower_wearable_width = models.IntegerField()
     gender = models.CharField(max_length=20,
-                              choices=[('MALE', 'Male'), ('FEMALE', 'Female'), ('UNISEX', 'Unisex')], default='UNISEX')
+                              choices=[('Male', 'Male'), ('Female', 'Female'), ('Unisex', 'Unisex')], default='Unisex')
     nose_pad = models.CharField(max_length=20,
-                                choices=[('STANDARD', 'Standard'), ('ASIANFIT', 'Asian Fit'), ('ADJUSTABLE', 'Adjustable')])
+                                choices=[('Standard', 'Standard'), ('Asian Fit', 'Asian Fit'), ('Adjustable', 'Adjustable')])
     frame_style = models.CharField(max_length=20,
-                                   choices=[('FULLRIM', 'Full-Rim'), ('SEMIRIMLESS', 'Semi-Rimless'), ('RIMLESS', 'Rimless')])
+                                   choices=[('Full-Rim', 'Full-Rim'), ('Semi-Rimless', 'Semi-Rimless'), ('Rimless', 'Rimless')])
     pd_upper_range = models.IntegerField(default=80)
     pd_lower_range = models.IntegerField(default=30)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -55,7 +55,7 @@ class ProductPromotion(models.Model):
     name = models.CharField(max_length=100)
     code = models.CharField(max_length=20)
     promo_type = models.CharField(max_length=50, choices=[(
-        '1+1', '1+1'), ('priceoff', 'Price-Off'), ('percentoff', 'Percentage-Off')], default='priceoff')
+        '1+1', '1+1'), ('Price-Off', 'Price-Off'), ('Percentage-Off', 'Percentage-Off')], default='Price-Off')
     promo_value = models.IntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(100)], default=0)
     description = models.TextField(blank=True)
