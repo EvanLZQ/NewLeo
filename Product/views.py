@@ -66,7 +66,6 @@ def filterProduct(request):
 
     filter_object = request.query_params.get('filter', None)
     if filter_object:
-        # Assuming filter_object is a string representation of a dictionary
         import json
         filter_dict = json.loads(filter_object)
 
@@ -87,6 +86,12 @@ def filterProduct(request):
         size_q_objects = Q()
         for size in sizes:
             size_q_objects |= Q(letter_size=size)
+
+        # Build the Q object for Rim
+        rims = filter_dict.get('Rim', [])
+        rim_q_objects = Q()
+        for rim in rims:
+            rim_q_objects |= Q(frame_style=rim)
 
         # Build the Q object for tags
         # tags = filter_dict.get('tags', [])
