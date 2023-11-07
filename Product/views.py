@@ -100,7 +100,7 @@ def filterProduct(request):
         #     tag_q_objects |= Q(producttag__slug=tag)
 
         # Combine search results
-        combined_q_objects = color_q_objects & gender_q_objects & size_q_objects
+        combined_q_objects = color_q_objects & gender_q_objects & size_q_objects & rim_q_objects
         # Filter search results
         products = products.filter(combined_q_objects).distinct()
 
