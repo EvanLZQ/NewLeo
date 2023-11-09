@@ -58,7 +58,7 @@ services:
 
   certbot:
     image: certbot/certbot
-    command: certonly --webroot --webroot-path=/var/www/certbot --email evanabyss@gmail.com --agree-tos --no-eff-email -d admin.eyelovewear.com
+    command: certonly --webroot --webroot-path=/var/www/certbot --email evanabyss@gmail.com --agree-tos --no-eff-email -d www.eyelovewear.com
     volumes:
       - ./nginx/certbot/conf:/etc/letsencrypt
       - ./nginx/certbot/www:/var/www/certbot
