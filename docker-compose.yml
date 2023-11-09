@@ -44,8 +44,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ./nginx/sites-enabled/:/etc/nginx/sites-enabled
+      - /etc/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - /etc/nginx/sites-enabled/elw_website_config.conf:/etc/nginx/sites-enabled/elw_website_config.conf
       - ./nginx/certbot/conf:/etc/letsencrypt
       - ./nginx/certbot/www:/var/www/certbot
       - elw-usersite-volume:/usr/share/nginx/html
