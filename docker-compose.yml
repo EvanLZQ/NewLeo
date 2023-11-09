@@ -29,7 +29,6 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 
-  # Change here
   usersite:
     build:
       context: ../../frontend/
@@ -40,22 +39,33 @@ services:
       - elw-usersite-volume:/usr/share/nginx/html
 
   nginx:
-    image: nginx:latest
+    image: nginx:alpine
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - /etc/nginx/nginx.conf:/etc/nginx/nginx.conf
-      - /etc/nginx/sites-enabled/elw_website_config.conf:/etc/nginx/sites-enabled/elw_website_config.conf
-      - elw-usersite-volume:/usr/share/nginx/html # Change here
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/sites-enabled/:/etc/nginx/sites-enabled
+      - ./nginx/certbot/conf:/etc/letsencrypt
+      - ./nginx/certbot/www:/var/www/certbot
+      - elw-usersite-volume:/usr/share/nginx/html
       - static_volume:/eyeloveware_backend_api/staticfiles
       - media_volume:/eyeloveware_backend_api/media
     depends_on:
       - eyeloveware
-      - usersite # Change here
+      - usersite
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./nginx/certbot/conf:/etc/letsencrypt
+      - ./nginx/certbot/www:/var/www/certbot
+    entrypoint: '/bin/sh -c ''trap exit TERM; while :; do certbot renew --webroot --webroot-path=/var/www/certbot -n --quiet --post-hook "nginx -s reload"; sleep 12h & wait ${!}; done;'''
+    depends_on:
+      - nginx
 
 volumes:
-  elw-usersite-volume: # Change here
+  elw-usersite-volume:
   elw-db-data:
   static_volume:
   media_volume:
