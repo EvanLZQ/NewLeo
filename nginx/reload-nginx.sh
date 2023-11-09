@@ -1,2 +1,2 @@
 #!/bin/sh
-docker-compose exec nginx nginx -s reload
+docker-compose exec -u root nginx nginx -s reload
