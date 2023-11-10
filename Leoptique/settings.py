@@ -37,7 +37,8 @@ ALLOWED_HOSTS = ['*',]
 
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 
-CSRF_TRUSTED_ORIGINS = ['http://*.eyelovewear.com:8081']
+CSRF_TRUSTED_ORIGINS = [
+    'http://*.eyelovewear.com', 'https://*.eyelovewear.com']
 
 USE_X_FORWARDED_HOST = True
 # SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
