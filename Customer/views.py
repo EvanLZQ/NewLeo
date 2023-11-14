@@ -139,24 +139,24 @@ def google_login(request):
         user.icon_url = picture
         user.save()
 
-    # application = Application.objects.get(
-    #     client_id="l5cAOrriN5gIvTiLjOENupQsp6ppISdp1iYyU8iu")
+    application = Application.objects.get(
+        client_id="l5cAOrriN5gIvTiLjOENupQsp6ppISdp1iYyU8iu")
 
-    # generated_token = str(uuid.uuid4())
-    # # Generate access token
-    # token = AccessToken.objects.create(
-    #     user=user,
-    #     token=generated_token,
-    #     application=application,
-    #     expires=timezone.now() + datetime.timedelta(days=1)
-    # )
+    generated_token = str(uuid.uuid4())
+    # Generate access token
+    token = AccessToken.objects.create(
+        user=user,
+        token=generated_token,
+        application=application,
+        expires=timezone.now() + datetime.timedelta(days=1)
+    )
 
-    # refresh_token = RefreshToken.objects.create(
-    #     user=user,
-    #     token=str(uuid.uuid4()),
-    #     access_token=token,
-    #     application=application
-    # )
+    refresh_token = RefreshToken.objects.create(
+        user=user,
+        token=str(uuid.uuid4()),
+        access_token=token,
+        application=application
+    )
 
     user.backend = 'django.contrib.auth.backends.ModelBackend'
 
@@ -172,12 +172,13 @@ def google_login(request):
     }
 
     # return Response({'token': token.token, 'refresh_token': refresh_token.token})
-    # response = Response(user_brief, status=200)
+    response = Response(user_brief, status=200)
 
     # Set the tokens as cookies
-    # response.set_cookie('access_token', token.token,
-    #                     max_age=3600 * 24, samesite='Lax', domain='localhost')  # 1 day
-    # response.set_cookie('refresh_token', refresh_token.token,
-    #                     max_age=3600 * 24 * 30, samesite='Lax', domain='localhost')  # 30 days
+    response.set_cookie('access_token', token.token,
+                        max_age=3600 * 24, samesite='Lax', domain='.eyelovewear.com', httponly=True, secure=True)  # 1 day
+    response.set_cookie('refresh_token', refresh_token.token,
+                        max_age=3600 * 24 * 30, samesite='Lax', domain='.eyelovewear.com', httponly=True, secure=True)  # 30 days
 
-    return Response(user_brief, status=200)
+    # return Response(user_brief, status=200)
+    return response
