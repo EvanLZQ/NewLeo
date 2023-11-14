@@ -31,9 +31,10 @@ load_dotenv(dotenv_path=env_path)
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = ['*',]
+ALLOWED_HOSTS = ['localhost', '127.0.0.1',
+                 'admin.eyelovewear.com', 'www.eyelovewear.com']
 
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 
@@ -47,21 +48,12 @@ CSRF_COOKIE_DOMAIN = ".eyelovewear.com"
 
 SESSION_COOKIE_DOMAIN = ".eyelovewear.com"
 
-# CORS_ALLOW_HEADERS = list(default_headers) + [
-#     'X-Amz-Date',
-#     'Access-Control-Request-Headers',
-#     'Access-Control-Allow-Headers',
-#     'Access-Control-Allow-Origin',
-#     'XMLHttpRequest',
-# ]
-
-# CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
-CORS_ALLOW_ALL_ORIGINS = True
-# CORS_ALLOW_CREDENTIALS = True
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:5174",
-#     "http://0.0.0.0:8000",
-# ]
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    'https://localhost:5173',
+    'http://*.eyelovewear.com',
+    'https://*.eyelovewear.com',
+]
 
 # CSRF_COOKIE_HTTPONLY = True
 # SESSION_COOKIE_DOMAIN = 'http://localhost:5174'
