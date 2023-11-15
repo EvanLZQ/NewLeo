@@ -33,7 +33,8 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1',
+                 'admin.eyelovewear.com', 'www.eyelovewear.com']
 
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 
@@ -48,12 +49,13 @@ CSRF_COOKIE_DOMAIN = ".eyelovewear.com"
 SESSION_COOKIE_DOMAIN = ".eyelovewear.com"
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    'https://localhost:5173',
-    'http://*.eyelovewear.com',
-    'https://*.eyelovewear.com',
-    'https://www.eyelovewear.com',
-]
+CORS_ALLOW_ALL_ORIGINS = True
+# CORS_ALLOWED_ORIGINS = [
+#     'https://localhost:5173',
+#     'http://*.eyelovewear.com',
+#     'https://*.eyelovewear.com',
+#     'https://www.eyelovewear.com',
+# ]
 
 # CSRF_COOKIE_HTTPONLY = True
 # SESSION_COOKIE_DOMAIN = 'http://localhost:5174'
