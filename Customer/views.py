@@ -26,7 +26,6 @@ from django.contrib.auth.backends import ModelBackend
 User = get_user_model()
 
 
-@csrf_exempt
 @api_view(['GET'])
 @authentication_classes([SessionAuthentication])
 @permission_classes([IsAuthenticated])
