@@ -44,9 +44,9 @@ CSRF_TRUSTED_ORIGINS = [
 USE_X_FORWARDED_HOST = True
 # SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-CSRF_COOKIE_DOMAIN = ".eyelovewear.com"
+CSRF_COOKIE_DOMAIN = "admin.eyelovewear.com"
 
-SESSION_COOKIE_DOMAIN = ".eyelovewear.com"
+SESSION_COOKIE_DOMAIN = "admin.eyelovewear.com"
 
 CORS_ALLOW_CREDENTIALS = True
 # CORS_ALLOW_ALL_ORIGINS = True
