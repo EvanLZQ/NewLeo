@@ -176,9 +176,9 @@ def google_login(request):
 
     # Set the tokens as cookies
     response.set_cookie('access_token', token.token,
-                        max_age=3600 * 24, samesite='Lax', domain='.eyelovewear.com', path='/', httponly=True, secure=True)  # 1 day
+                        max_age=3600 * 24, samesite=None, domain='.eyelovewear.com', path='/', httponly=True, secure=True)  # 1 day
     response.set_cookie('refresh_token', refresh_token.token,
-                        max_age=3600 * 24 * 30, samesite='Lax', domain='.eyelovewear.com', path='/', httponly=True, secure=True)  # 30 days
+                        max_age=3600 * 24 * 30, samesite=None, domain='.eyelovewear.com', path='/', httponly=True, secure=True)  # 30 days
 
     # return Response(user_brief, status=200)
     return response
