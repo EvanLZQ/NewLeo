@@ -49,13 +49,13 @@ CSRF_COOKIE_DOMAIN = ".eyelovewear.com"
 SESSION_COOKIE_DOMAIN = ".eyelovewear.com"
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = True
-# CORS_ALLOWED_ORIGINS = [
-#     'https://localhost:5173',
-#     'http://*.eyelovewear.com',
-#     'https://*.eyelovewear.com',
-#     'https://www.eyelovewear.com',
-# ]
+# CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    'https://localhost:5173',
+    'http://*.eyelovewear.com',
+    'https://*.eyelovewear.com',
+    'https://www.eyelovewear.com',
+]
 
 # CSRF_COOKIE_HTTPONLY = True
 # SESSION_COOKIE_DOMAIN = 'http://localhost:5174'
