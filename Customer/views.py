@@ -94,6 +94,7 @@ def login_view(request):
         return Response({"error": "Invalid credentials"}, status=400)
 
 
+@permission_classes([AllowAny])
 @api_view(['POST'])
 def logout_view(request):
     logout(request)
