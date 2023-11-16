@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from django.db.models import Q
 from django.core.paginator import Paginator
+import logging
 
 from .models import *
 from .serializer import *
@@ -128,5 +129,6 @@ def getAllColorNames(request):
         return Response(serializer.data)
     except Exception as e:
         # Log the error and return a meaningful error response
-        print(f"Error: {str(e)}")  # Or use logging instead of print
+        # Or use logging instead of print
+        logging.error(f"Unexpected error: {e}")
         return Response({'error': 'Internal server error'}, status=500)
