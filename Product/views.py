@@ -117,9 +117,16 @@ def getProductPromotions(request):
 
 @api_view(['GET'])
 def getAllColorNames(request):
-    distinct_colors = ProductInstance.objects.values_list(
-        'color_display_name', flat=True).distinct()
-    serializer = ColorDisplayNameSerializer(
-        data=[{'color_display_name': color} for color in distinct_colors], many=True)
-    serializer.is_valid(raise_exception=True)
-    return Response(serializer.data)
+    try:
+        distinct_colors = ProductInstance.objects.values_list(
+            'color_display_name', flat=True).distinct()
+        # Formatting the data correctly for the serializer
+        formatted_data = [{'color_display_name': color}
+                          for color in distinct_colors]
+        serializer = ColorDisplayNameSerializer(data=formatted_data, many=True)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data)
+    except Exception as e:
+        # Log the error and return a meaningful error response
+        print(f"Error: {str(e)}")  # Or use logging instead of print
+        return Response({'error': 'Internal server error'}, status=500)
