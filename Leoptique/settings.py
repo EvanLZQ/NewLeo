@@ -38,15 +38,15 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1',
 
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 
-CSRF_TRUSTED_ORIGINS = [
-    'http://*.eyelovewear.com', 'https://*.eyelovewear.com', 'https://www.eyelovewear.com', 'https://admin.eyelovewear.com', 'https://localhost:5173']
+CSRF_TRUSTED_ORIGINS = ['.eyelovewear.com',
+                        'http://*.eyelovewear.com', 'https://*.eyelovewear.com', 'https://www.eyelovewear.com', 'https://admin.eyelovewear.com', 'https://localhost:5173']
 
 USE_X_FORWARDED_HOST = True
 # SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-CSRF_COOKIE_DOMAIN = "admin.eyelovewear.com"
+CSRF_COOKIE_DOMAIN = ".eyelovewear.com"
 
-SESSION_COOKIE_DOMAIN = "admin.eyelovewear.com"
+SESSION_COOKIE_DOMAIN = ".eyelovewear.com"
 
 CORS_ALLOW_CREDENTIALS = True
 # CORS_ALLOW_ALL_ORIGINS = True
