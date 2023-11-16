@@ -3,7 +3,7 @@ from .models import *
 
 __all__ = ['ProductSerializer', 'ProductInstanceSerializer',
            'ProductImageSerializer', 'ProductReviewSerializer', 'ProductPromotionSerializer',
-           'ColorDisplayNameSerializer', 'TargetInstanceSerializer', 'SKUtoModelSerializer']
+           'TargetInstanceSerializer', 'SKUtoModelSerializer']
 
 
 class ProductReviewSerializer(serializers.ModelSerializer):
@@ -215,7 +215,3 @@ class ProductPromotionSerializer(serializers.ModelSerializer):
             'is_active',
             'promo_img',
         ]
-
-
-class ColorDisplayNameSerializer(serializers.Serializer):
-    color_display_name = serializers.CharField()
