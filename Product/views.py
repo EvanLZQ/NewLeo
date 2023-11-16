@@ -117,8 +117,9 @@ def getProductPromotions(request):
 
 @api_view(['GET'])
 def getAllColorNames(request):
-    colors = ProductInstance.objects.values_list(
-        'color_base_name', flat=True).distinct()
-    serializer = ColorDisplayNameSerializer(colors, many=True)
+    distinct_colors = ProductInstance.objects.values_list(
+        'color_display_name', flat=True).distinct()
+    serializer = ColorDisplayNameSerializer(
+        data=[{'color_display_name': color} for color in distinct_colors], many=True)
     serializer.is_valid(raise_exception=True)
     return Response(serializer.data)
