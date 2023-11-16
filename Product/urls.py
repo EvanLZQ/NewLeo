@@ -10,4 +10,6 @@ urlpatterns = [
     path('paged_product', views.getPageProducts, name='page_products'),
     path('promotion', views.getProductPromotions, name='product_promotion'),
     path('getColorList', views.getAllColorNames, name='get_color_list'),
+    path('getShapeList', views.getAllShapes, name='get_shape_list'),
+    path('getMaterialList', views.getAllMaterials, name='get_material_list'),
 ]
