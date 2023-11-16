@@ -93,7 +93,7 @@ def login_view(request):
         return Response({"error": "Invalid credentials"}, status=400)
 
 
-@permission_classes([AllowAny])
+@csrf_exempt
 @api_view(['POST'])
 def logout_view(request):
     logout(request)
