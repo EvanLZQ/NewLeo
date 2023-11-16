@@ -121,12 +121,7 @@ def getAllColorNames(request):
     try:
         distinct_colors = ProductInstance.objects.values_list(
             'color_display_name', flat=True).distinct()
-        # Formatting the data correctly for the serializer
-        formatted_data = [{'color_display_name': color}
-                          for color in distinct_colors]
-        serializer = ColorDisplayNameSerializer(data=formatted_data, many=True)
-        serializer.is_valid(raise_exception=True)
-        return Response(serializer.data)
+        return Response(list(distinct_colors))
     except Exception as e:
         # Log the error and return a meaningful error response
         # Or use logging instead of print
