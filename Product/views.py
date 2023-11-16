@@ -127,3 +127,17 @@ def getAllColorNames(request):
         # Or use logging instead of print
         logging.error(f"Unexpected error: {e}")
         return Response({'error': 'Internal server error'}, status=500)
+
+
+@api_view(['GET'])
+def getAllMaterials(request):
+    distinct_materials = ProductTag.objects.filter(category='Material').values_list(
+        'name', flat=True).distinct()
+    return Response(list(distinct_materials))
+
+
+@api_view(['GET'])
+def getAllShapes(request):
+    distinct_shapes = ProductTag.objects.filter(category='Shape').values_list(
+        'name', flat=True).distinct()
+    return Response(list(distinct_shapes))
