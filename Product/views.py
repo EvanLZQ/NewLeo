@@ -5,7 +5,7 @@ from django.db.models import Q
 from django.core.paginator import Paginator
 
 from .models import *
-from .serializer import ProductInstanceSerializer, ProductSerializer, SKUtoModelSerializer
+from .serializer import *
 
 
 @api_view(['GET'])
@@ -73,7 +73,7 @@ def filterProduct(request):
         colors = filter_dict.get('Color', [])
         color_q_objects = Q()
         for color in colors:
-            color_q_objects |= Q(productInstance__color_base_name=color)
+            color_q_objects |= Q(productInstance__color_display_name=color)
 
         # Build the Q object for gender
         genders = filter_dict.get('Gender', [])
@@ -112,4 +112,13 @@ def filterProduct(request):
 def getProductPromotions(request):
     promotions = ProductPromotion.objects.filter(is_active=True)
     serializer = ProductPromotionSerializer(promotions, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+def getAllColorNames(request):
+    colors = ProductInstance.objects.values_list(
+        'color_base_name', flat=True).distinct()
+    serializer = ColorDisplayNameSerializer(colors, many=True)
+    serializer.is_valid(raise_exception=True)
     return Response(serializer.data)

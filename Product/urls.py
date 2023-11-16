@@ -9,4 +9,5 @@ urlpatterns = [
     path('skumodel/<str:sku>/', views.getModelUsingSku, name='model_by_sku'),
     path('paged_product', views.getPageProducts, name='page_products'),
     path('promotion', views.getProductPromotions, name='product_promotion'),
+    path('getColorList', views.getAllColorNames, name='get_color_list'),
 ]

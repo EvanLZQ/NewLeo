@@ -1,6 +1,10 @@
 from rest_framework import serializers
 from .models import *
 
+__all__ = ['ProductSerializer', 'ProductInstanceSerializer',
+           'ProductImageSerializer', 'ProductReviewSerializer', 'ProductPromotionSerializer',
+           'ColorDisplayNameSerializer', 'TargetInstanceSerializer']
+
 
 class ProductReviewSerializer(serializers.ModelSerializer):
     class Meta:
@@ -211,3 +215,7 @@ class ProductPromotionSerializer(serializers.ModelSerializer):
             'is_active',
             'promo_img',
         ]
+
+
+class ColorDisplayNameSerializer(serializers.Serializer):
+    color_display_name = serializers.CharField()
