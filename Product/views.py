@@ -95,13 +95,15 @@ def filterProduct(request):
             rim_q_objects |= Q(frame_style=rim)
 
         # Build the Q object for tags
-        # tags = filter_dict.get('tags', [])
-        # tag_q_objects = Q()
-        # for tag in tags:
-        #     tag_q_objects |= Q(producttag__slug=tag)
+        shape = filter_dict.get('Shape', [])
+        material = filter_dict.get('Material', [])
+        tags = shape + material
+        tag_q_objects = Q()
+        for tag in tags:
+            tag_q_objects |= Q(producttag__name=tag)
 
         # Combine search results
-        combined_q_objects = color_q_objects & gender_q_objects & size_q_objects & rim_q_objects
+        combined_q_objects = color_q_objects & gender_q_objects & size_q_objects & rim_q_objects & tag_q_objects
         # Filter search results
         products = products.filter(combined_q_objects).distinct()
 
