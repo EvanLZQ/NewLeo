@@ -3,7 +3,7 @@ from .models import *
 
 __all__ = ['ProductSerializer', 'ProductInstanceSerializer',
            'ProductImageSerializer', 'ProductReviewSerializer', 'ProductPromotionSerializer',
-           'ColorDisplayNameSerializer', 'TargetInstanceSerializer']
+           'ColorDisplayNameSerializer', 'TargetInstanceSerializer', 'SKUtoModelSerializer']
 
 
 class ProductReviewSerializer(serializers.ModelSerializer):
