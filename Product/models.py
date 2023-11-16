@@ -170,10 +170,23 @@ class ProductReview(models.Model):
 
 
 class ProductTag(models.Model):
+    CATEGORY_CHOICES = [
+        ('Material', 'Material'),
+        ('Shape', 'Shape'),
+        ('Undefined', 'Undefined'),
+        ('Top Selection for All', 'Top Selection for All'),
+        ('Top Selection for Men', 'Top Selection for Men'),
+        ('Top Selection for Women', 'Top Selection for Women'),
+        ('Top Selection for Fashionista', 'Top Selection for Fashionista'),
+        ('Promotion', 'Promotion'),
+        ('Other', 'Other')
+    ]
+
     slug = models.SlugField(max_length=200, unique=True, null=True)
     product = models.ManyToManyField(
         'Product.ProductInfo', blank=True, related_name='productTag')
-    category = models.CharField(max_length=100, null=True)
+    category = models.CharField(
+        max_length=50, choices=CATEGORY_CHOICES, default='Undefined')
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
