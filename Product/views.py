@@ -100,7 +100,7 @@ def filterProduct(request):
         tags = shape + material
         tag_q_objects = Q()
         for tag in tags:
-            tag_q_objects |= Q(producttag__name=tag)
+            tag_q_objects |= Q(productTag__name=tag)
 
         # Combine search results
         combined_q_objects = color_q_objects & gender_q_objects & size_q_objects & rim_q_objects & tag_q_objects
