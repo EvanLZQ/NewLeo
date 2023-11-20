@@ -15,6 +15,7 @@ class BlogBriefSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'title',
+            'slug',
             'brief',
             'sub_title',
             'home_page_img',
