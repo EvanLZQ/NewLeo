@@ -12,4 +12,5 @@ urlpatterns = [
     path('getColorList', views.getAllColorNames, name='get_color_list'),
     path('getShapeList', views.getAllShapes, name='get_shape_list'),
     path('getMaterialList', views.getAllMaterials, name='get_material_list'),
+    path('getSearchProduct', views.getSearchProducts, name='get_search_products'),
 ]

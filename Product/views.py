@@ -143,3 +143,17 @@ def getAllShapes(request):
     distinct_shapes = ProductTag.objects.filter(category='Shape').values_list(
         'name', flat=True).distinct()
     return Response(list(distinct_shapes))
+
+
+@api_view(['GET'])
+def getSearchProducts(request):
+    search_term = request.GET.get('search', None)
+    if search_term:
+        products = ProductInfo.objects.filter(
+            Q(productInstance__isnull=False) & Q(productInstance__online=True)).distinct()
+        products = products.filter(
+            Q(model_number__icontains=search_term) | Q(name__icontains=search_term))[:6]
+        serializer = ProductSerializer(products, many=True)
+        return Response(serializer.data)
+    else:
+        return Response([])
