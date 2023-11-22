@@ -7,7 +7,7 @@ class BlogBriefSerializer(serializers.ModelSerializer):
 
     def get_home_page_img(self, obj):
         if obj.home_page_img:
-            return f'http://admin.eyelovewear.com{obj.home_page_img.url}'
+            return f'https://admin.eyelovewear.com{obj.home_page_img.url}'
         return None
 
     class Meta:
