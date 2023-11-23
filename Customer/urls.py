@@ -8,6 +8,7 @@ from . import views
 
 urlpatterns = [
     path("summary", views.get_user, name="user_summary"),
+    path('createUser', views.createCustomer, name='create_user'),
     path('profile_brief', views.getCustomerProfile, name='user_profile_brief'),
     path('profile_update', views.updateCustomerProfile,
          name='user_profile_update'),

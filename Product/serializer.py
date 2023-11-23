@@ -23,7 +23,7 @@ class ProductImageImageOnlySerializer(serializers.ModelSerializer):
 
     def get_image(self, obj):
         if obj.image:
-            return f'http://admin.eyelovewear.com{obj.image.url}'
+            return f'https://admin.eyelovewear.com{obj.image.url}'
         return None
 
     class Meta:
@@ -36,7 +36,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
     def get_image(self, obj):
         if obj.image:
-            return f'http://admin.eyelovewear.com{obj.image.url}'
+            return f'https://admin.eyelovewear.com{obj.image.url}'
         return None
 
     class Meta:
@@ -63,7 +63,7 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
 
     def get_color_img_url(self, obj):
         img_url = obj.color_img.color_img.url if obj.color_img else ''
-        return f'http://admin.eyelovewear.com{img_url}'
+        return f'https://admin.eyelovewear.com{img_url}'
 
     def to_representation(self, obj):
         rep = super().to_representation(obj)
