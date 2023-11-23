@@ -189,7 +189,7 @@ def getCustomerProfile(request):
 
 
 @api_view(['PATCH'])
-@authentication_classes([AccessTokenAuthentication])
+@authentication_classes([SessionAuthentication])
 @permission_classes([IsAuthenticated])
 def updateCustomerProfile(request):
     user = request.user
