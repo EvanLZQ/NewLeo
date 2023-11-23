@@ -43,7 +43,8 @@ class CustomerInfo(AbstractUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     gender = models.CharField(max_length=15, choices=[
                               ("MALE", "Male"), ("FEMALE", "Female"), ("OTHER", "Other")], blank=True)
-    birth_date = models.DateField(blank=True, null=True)
+    # DD/MM
+    birth_date = models.CharField(max_length=6, blank=True, null=True)
     icon_url = models.CharField(max_length=100, blank=True, null=True)
     store_credit = models.IntegerField(default=0)
     level = models.IntegerField(default=0)

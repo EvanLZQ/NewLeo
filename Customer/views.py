@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import IsAuthenticated
-from .serializer import CustomerSerializer, ShoppingListSerializer
+from .serializer import *
 from .models import ShoppingList
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
@@ -17,9 +17,8 @@ from oauth2_provider.models import AccessToken, Application, RefreshToken
 from rest_framework.permissions import AllowAny
 from google.auth.transport import requests
 import uuid
-from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth.backends import ModelBackend
+# from django.contrib.auth.backends import ModelBackend
 
 # Create your views here.
 
@@ -170,8 +169,6 @@ def google_login(request):
         "gender": user.gender,
         "icon_url": user.icon_url,
     }
-
-    # return Response({'token': token.token, 'refresh_token': refresh_token.token})
     response = Response(user_brief, status=200)
 
     # Set the tokens as cookies
@@ -179,6 +176,26 @@ def google_login(request):
                         max_age=3600 * 24, samesite=None, domain='.eyelovewear.com', path='/', httponly=True, secure=True)  # 1 day
     response.set_cookie('refresh_token', refresh_token.token,
                         max_age=3600 * 24 * 30, samesite=None, domain='.eyelovewear.com', path='/', httponly=True, secure=True)  # 30 days
-
-    # return Response(user_brief, status=200)
     return response
+
+
+@api_view(['GET'])
+@authentication_classes([AccessTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def getCustomerProfile(request):
+    user = request.user
+    serializer = CustomerProfileSerializer(user)
+    return Response(serializer.data)
+
+
+@api_view(['PATCH'])
+@authentication_classes([AccessTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def updateCustomerProfile(request):
+    user = request.user
+    serializer = CustomerProfileSerializer(
+        user, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=400)
