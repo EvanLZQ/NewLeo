@@ -38,7 +38,7 @@ class ProductImageInline(admin.StackedInline):
     readonly_fields = ['image_preview']
 
     def image_preview(self, obj):
-        return mark_safe(f'<img src="http://admin.eyelovewear.com/media/{obj.image}" style="max-width: 300px; margin: 5px;">')
+        return mark_safe(f'<img src="https://admin.eyelovewear.com/media/{obj.image}" style="max-width: 300px; margin: 5px;">')
     image_preview.short_description = 'To see the image, click Save and Continue Editing.'
 
 
@@ -87,7 +87,7 @@ class ProductColorImgAdmin(admin.ModelAdmin):
     readonly_fields = ['color_image_preview']
 
     def color_image_preview(self, obj):
-        return mark_safe(f'<img src="http://admin.eyelovewear.com{obj.color_img.url}" style="max-width: 300px; margin: 5px; border-style: solid;">')
+        return mark_safe(f'<img src="https://admin.eyelovewear.com{obj.color_img.url}" style="max-width: 300px; margin: 5px; border-style: solid;">')
 
     color_image_preview.short_description = 'Color Image Preview'
 
