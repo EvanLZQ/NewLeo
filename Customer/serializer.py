@@ -7,7 +7,7 @@ from Product.serializer import *
 from Order.serializer import CompleteSetSerializer
 
 __all__ = ['CustomerProfileSerializer', 'CustomerSerializer', 'CustomerSavedPaymentSerializer',
-           'CustomerSavedAddresses', 'ShoppingListSerializer']
+           'CustomerSavedAddresses', 'ShoppingListSerializer', 'CustomerCreateSerializer']
 
 
 class CustomerSavedPaymentSerializer(serializers.ModelSerializer):
@@ -50,6 +50,15 @@ class CustomerSerializer(serializers.ModelSerializer):
             'icon_url',
             'store_credit',
             'level',
+        ]
+
+
+class CustomerCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomerInfo
+        fields = [
+            'username',
+            'password',
         ]
 
 

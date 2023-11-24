@@ -204,8 +204,8 @@ def updateCustomerProfile(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def createCustomer(request):
-    serializer = CustomerSerializer(data=request.data)
+    serializer = CustomerCreateSerializer(data=request.data)
     if serializer.is_valid():
         serializer.save()
-        return Response(serializer.data)
+        return Response("User created successfully", status=201)
     return Response(serializer.errors, status=400)
