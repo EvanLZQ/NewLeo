@@ -61,6 +61,12 @@ class CustomerCreateSerializer(serializers.ModelSerializer):
             'password',
         ]
 
+    def create(self, validated_data):
+        user = CustomerInfo(**validated_data)
+        user.password = make_password(validated_data['password'])
+        user.save()
+        return user
+
 
 class CustomerProfileSerializer(serializers.ModelSerializer):
     class Meta:
