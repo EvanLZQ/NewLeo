@@ -1,9 +1,4 @@
 from django.urls import path
-# from rest_framework_simplejwt.views import (
-#     TokenObtainPairView,
-#     TokenRefreshView,
-# )
-
 from . import views
 
 urlpatterns = [
@@ -21,5 +16,6 @@ urlpatterns = [
     path("login", views.login_view, name='user_login'),
     path("logout", views.logout_view, name='user_logout'),
     path("googlelogin", views.google_login, name='google_login'),
-    path('check_credential', views.is_authenticated, name='check_credential')
+    path('check_credential', views.is_authenticated, name='check_credential'),
+    path("get_customer_order", views.getCustomerOrders, name="get_customer_order"),
 ]
