@@ -18,6 +18,8 @@ from rest_framework.permissions import AllowAny
 from google.auth.transport import requests
 import uuid
 from django.views.decorators.csrf import csrf_exempt
+from Order.serializer import OrderSerializer
+from Order.models import OrderInfo
 # from django.contrib.auth.backends import ModelBackend
 
 # Create your views here.
@@ -209,3 +211,13 @@ def createCustomer(request):
         serializer.save()
         return Response("User created successfully", status=201)
     return Response(serializer.errors, status=400)
+
+
+@api_view(['GET'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def getCustomerOrders(request):
+    user = request.user
+    orders = OrderInfo.objects.filter(customer=user)
+    serializer = OrderSerializer(orders, many=True)
+    return Response(serializer.data)
