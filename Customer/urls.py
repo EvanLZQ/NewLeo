@@ -18,4 +18,6 @@ urlpatterns = [
     path("googlelogin", views.google_login, name='google_login'),
     path('check_credential', views.is_authenticated, name='check_credential'),
     path("get_customer_order", views.getCustomerOrders, name="get_customer_order"),
+    path("get_store_credit_history", views.getCustomerStoreCreditActivity,
+         name="get_store_credit_history"),
 ]

@@ -46,7 +46,7 @@ class CustomerInfo(AbstractUser, PermissionsMixin):
     # DD/MM
     birth_date = models.CharField(max_length=6, blank=True, null=True)
     icon_url = models.CharField(max_length=100, blank=True, null=True)
-    store_credit = models.IntegerField(default=0)
+    # store_credit = models.IntegerField(default=0)
     level = models.IntegerField(default=0)
     # wish_list = models.ManyToManyField(
     #     'Product.ProductInfo', through='ShoppingList')
@@ -127,3 +127,17 @@ class CustomerSavedPayment(models.Model):
         db_table = "CustomerSavedPayment"
         verbose_name = "Saved Payment Method"
         verbose_name_plural = "Saved Payment Methods"
+
+
+class StoreCreditActivity(models.Model):
+    customer = models.ForeignKey(
+        'Customer.CustomerInfo', null=True, on_delete=models.CASCADE, related_name='store_credit_activity')
+    total_amount = models.IntegerField(default=0)
+    change_amount = models.IntegerField(default=0)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "StoreCreditActivity"
+        verbose_name = "Store Credit Activity"
+        verbose_name_plural = "Store Credit Activities"
