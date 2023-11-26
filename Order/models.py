@@ -11,7 +11,7 @@ class OrderInfo(models.Model):
         'Product.ProductInstance', through='Order.OrderLineItem', blank=True)
     email = models.EmailField()
     customer = models.ForeignKey('Customer.CustomerInfo', null=True,
-                                 on_delete=models.SET_NULL, blank=True, related_name='customer')
+                                 on_delete=models.SET_NULL, blank=True, related_name='order')
     order_number = models.CharField(max_length=20)
     order_status = models.CharField(max_length=50,
                                     choices=[('NULL', 'Null'), ('PROCESSING', 'Processing'), ('SHIPPED', 'Shipped'),

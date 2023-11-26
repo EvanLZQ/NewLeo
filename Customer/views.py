@@ -12,7 +12,7 @@ from Leoptique.authentication import AccessTokenAuthentication
 from google.oauth2 import id_token
 from django.utils import timezone
 import datetime
-from .models import CustomerInfo
+from .models import CustomerInfo, StoreCreditActivity
 from oauth2_provider.models import AccessToken, Application, RefreshToken
 from rest_framework.permissions import AllowAny
 from google.auth.transport import requests
@@ -220,4 +220,14 @@ def getCustomerOrders(request):
     user = request.user
     orders = OrderInfo.objects.filter(customer=user)
     serializer = OrderSerializer(orders, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def getCustomerStoreCreditActivity(request):
+    user = request.user
+    activities = StoreCreditActivity.objects.filter(customer=user)
+    serializer = StoreCreditActivitySerializer(activities, many=True)
     return Response(serializer.data)
