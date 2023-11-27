@@ -27,7 +27,7 @@ class PrescriptionInfo(models.Model):
 
 class PrescriptionPrism(models.Model):
     prescription = models.ForeignKey(
-        'Prescription.PrescriptionInfo', on_delete=models.CASCADE)
+        'Prescription.PrescriptionInfo', on_delete=models.CASCADE, related_name='prism')
     horizontal_value_l = models.DecimalField(max_digits=5, decimal_places=2)
     horizontal_direction_l = models.DecimalField(
         max_digits=5, decimal_places=2)
