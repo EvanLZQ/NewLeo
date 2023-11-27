@@ -178,6 +178,8 @@ class ProductTag(models.Model):
         ('Top Selection for Men', 'Top Selection for Men'),
         ('Top Selection for Women', 'Top Selection for Women'),
         ('Top Selection for Fashionista', 'Top Selection for Fashionista'),
+        ('Life Style', 'Life Style'),
+        ('Collection', 'Collection'),
         ('Promotion', 'Promotion'),
         ('Other', 'Other')
     ]
