@@ -8,30 +8,6 @@ class ProductTagInline(admin.TabularInline):
     model = ProductTag.product.through
 
 
-# class ProductInfoForm(forms.ModelForm):
-#     tags = forms.ModelMultipleChoiceField(
-#         queryset=ProductTag.objects.all(),
-#         required=False,
-#         widget=admin.widgets.FilteredSelectMultiple('tags', False)
-#     )
-
-#     class Meta:
-#         model = ProductInfo
-#         fields = '__all__'
-
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         if self.instance:
-#             self.fields['tags'].initial = self.instance.producttag_set.all()
-
-#     def save(self, *args, **kwargs):
-#         instance = super().save(*args, **kwargs)
-#         self.save_m2m()
-#         if instance.pk:
-#             instance.producttag_set.set(self.cleaned_data['tags'])
-#         return instance
-
-
 class ProductImageInline(admin.StackedInline):
     model = ProductImage
     extra = 1
@@ -45,13 +21,6 @@ class ProductImageInline(admin.StackedInline):
 class ProductInstanceInline(admin.StackedInline):
     model = ProductInstance
     extra = 1
-    # readonly_fields = ['color_image_preview']
-
-    # def color_image_preview(self, obj):
-    #     print(obj.color_img_url)
-    #     return mark_safe(f'<img src="http://admin.eyeloveware.com{obj.color_img.color_img.url}" style="max-width: 300px; margin: 5px; border-style: solid;">')
-
-    # color_image_preview.short_description = 'Color Image Preview'
 
 
 class ProductInstanceAdmin(admin.ModelAdmin):
@@ -75,12 +44,6 @@ class ProductInfoAdmin(admin.ModelAdmin):
                 inline_instance.verbose_name = "Product Tag"
                 inline_instance.verbose_name_plural = "Product Tags"
         return inline_instances
-    # form = ProductInfoForm
-
-    # def save_model(self, request, obj, form, change):
-    #     super().save_model(request, obj, form, change)
-    #     if not change:
-    #         form.save_m2m()
 
 
 class ProductColorImgAdmin(admin.ModelAdmin):

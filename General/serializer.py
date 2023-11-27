@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Address, ImageUpload
+from .models import Address, ImageUpload, Coupon
 
 
 class AddressSerializer(serializers.ModelSerializer):
@@ -12,3 +12,26 @@ class ImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ImageUpload
         fields = '__all__'
+
+
+class CouponSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Coupon
+        fields = [
+            'id',
+            'code',
+            'description',
+            'img_url',
+            'expire_date',
+            'online',
+            'applied_product',
+            'valid_customer',
+            'frame_discount_type',
+            'frame_discount_amount',
+            'lens_discount_type',
+            'lens_discount_amount',
+            'shipping_discount_type',
+            'shipping_discount_amount',
+            'order_discount_type',
+            'order_discount_amount'
+        ]
