@@ -4,6 +4,9 @@ from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import IsAuthenticated
+
+from Prescription.models import PrescriptionInfo
+from Prescription.serializer import PrescriptionSerializer
 from .serializer import *
 from .models import ShoppingList
 from rest_framework import status
@@ -230,4 +233,14 @@ def getCustomerStoreCreditActivity(request):
     user = request.user
     activities = StoreCreditActivity.objects.filter(customer=user)
     serializer = StoreCreditActivitySerializer(activities, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def getCustomerPrescription(request):
+    user = request.user
+    prescription = PrescriptionInfo.objects.filter(customer=user)
+    serializer = PrescriptionSerializer(prescription, many=True)
     return Response(serializer.data)
