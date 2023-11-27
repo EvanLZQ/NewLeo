@@ -48,7 +48,6 @@ class CustomerSerializer(serializers.ModelSerializer):
             'gender',
             'birth_date',
             'icon_url',
-            'store_credit',
             'level',
         ]
 
