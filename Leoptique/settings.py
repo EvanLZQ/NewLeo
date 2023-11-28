@@ -42,32 +42,19 @@ CSRF_TRUSTED_ORIGINS = [
     'http://*.eyelovewear.com', 'https://*.eyelovewear.com', 'https://www.eyelovewear.com', 'https://admin.eyelovewear.com', 'https://localhost:5173']
 
 USE_X_FORWARDED_HOST = True
-# SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 CSRF_COOKIE_DOMAIN = ".eyelovewear.com"
 
 SESSION_COOKIE_DOMAIN = ".eyelovewear.com"
 
 CORS_ALLOW_CREDENTIALS = True
-# CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     'https://localhost:5173',
     'http://*.eyelovewear.com',
     'https://*.eyelovewear.com',
     'https://www.eyelovewear.com',
 ]
-
-# CSRF_COOKIE_HTTPONLY = True
-# SESSION_COOKIE_DOMAIN = 'http://localhost:5174'
-# CSRF_COOKIE_DOMAIN = 'http://localhost:5174'
-# CSRF_COOKIE_SAMESITE = None
-# SESSION_COOKIE_SAMESITE = None
-
-# CSRF_USE_SESSIONS = False
-# CSRF_COOKIE_HTTPONLY = True
-# SESSION_COOKIE_HTTPONLY = True
-# SECURE_BROWSER_XSS_FILTER = True
-# SECURE_CONTENT_TYPE_NOSNIFF = True
 
 SITE_ID = 1
 
