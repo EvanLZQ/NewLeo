@@ -4,6 +4,8 @@ __all__ = ['PrescriptionInfo', 'PrescriptionPrism']
 
 
 class PrescriptionInfo(models.Model):
+    customer = models.ForeignKey('Customer.CustomerInfo', on_delete=models.CASCADE,
+                                 related_name='prescription', null=True, blank=True)
     pd_l = models.DecimalField(max_digits=5, decimal_places=2)
     pd_r = models.DecimalField(max_digits=5, decimal_places=2)
     sphere_l = models.DecimalField(max_digits=5, decimal_places=2, blank=True)

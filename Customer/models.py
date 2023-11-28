@@ -32,8 +32,6 @@ class CustomUserManager(BaseUserManager):
 
 
 class CustomerInfo(AbstractUser, PermissionsMixin):
-    saved_prescription = models.ForeignKey(
-        "Prescription.PrescriptionInfo", on_delete=models.SET_NULL, null=True, blank=True)
     username = models.EmailField(unique=True, db_index=True)
     first_name = models.CharField(max_length=100, blank=True)
     last_name = models.CharField(max_length=100, blank=True)
