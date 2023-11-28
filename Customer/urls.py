@@ -21,4 +21,5 @@ urlpatterns = [
     path("get_store_credit_history", views.getCustomerStoreCreditActivity,
          name="get_store_credit_history"),
     path("get_prescription", views.getCustomerPrescription, name="get_prescription"),
+    path("upload_avatar", views.uploadCustomerAvatar, name="upload_avatar"),
 ]
