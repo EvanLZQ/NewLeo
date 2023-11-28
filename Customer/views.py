@@ -268,3 +268,32 @@ def uploadCustomerAvatar(request):
         image_url = request.build_absolute_uri(image_upload.image.url)
         return Response({'image_url': image_url}, status=201)
     return Response(serializer.errors, status=400)
+
+
+@api_view(['POST'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def addCustomerPrescription(request):
+    user = request.user
+    serializer = PrescriptionSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save(customer=user)
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(['PATCH'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def updateCustomerPrescription(request, prescription_id):
+    try:
+        prescription = PrescriptionInfo.objects.get(id=prescription_id)
+    except PrescriptionInfo.DoesNotExist:
+        return Response({'error': 'Prescription not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = PrescriptionSerializer(
+        instance=prescription, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=200)
+    return Response(serializer.errors, status=400)
