@@ -2,10 +2,11 @@ from django.shortcuts import render
 from django.contrib.auth import authenticate, login, logout
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
-from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated
-from General.models import Coupon
-from General.serializer import CouponSerializer
+from General.models import Coupon, ImageUpload
+from General.serializer import CouponSerializer, ImageSerializer
+from rest_framework.parsers import MultiPartParser
 
 from Prescription.models import PrescriptionInfo
 from Prescription.serializer import PrescriptionSerializer
@@ -256,3 +257,14 @@ def getCustomerCoupon(request):
     coupon = Coupon.objects.filter(online=True, valid_customer=user)
     serializer = CouponSerializer(coupon, many=True)
     return Response(serializer.data)
+
+
+@api_view(['POST'])
+@parser_classes([MultiPartParser])
+def uploadCustomerAvatar(request):
+    serializer = ImageSerializer(data=request.data)
+    if serializer.is_valid():
+        image_upload = serializer.save()
+        image_url = request.build_absolute_uri(image_upload.image.url)
+        return Response({'image_url': image_url}, status=201)
+    return Response(serializer.errors, status=400)
