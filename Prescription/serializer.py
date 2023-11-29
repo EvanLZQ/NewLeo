@@ -29,6 +29,7 @@ class PrescriptionSerializer(serializers.ModelSerializer):
         model = PrescriptionInfo
         fields = [
             'id',
+            'nickname',
             'prism',
             'pd_l',
             'pd_r',
