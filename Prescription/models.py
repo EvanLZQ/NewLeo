@@ -6,19 +6,25 @@ __all__ = ['PrescriptionInfo', 'PrescriptionPrism']
 class PrescriptionInfo(models.Model):
     customer = models.ForeignKey('Customer.CustomerInfo', on_delete=models.CASCADE,
                                  related_name='prescription', null=True, blank=True)
-    pd_l = models.DecimalField(max_digits=5, decimal_places=2)
-    pd_r = models.DecimalField(max_digits=5, decimal_places=2)
-    sphere_l = models.DecimalField(max_digits=5, decimal_places=2, blank=True)
-    sphere_r = models.DecimalField(max_digits=5, decimal_places=2, blank=True)
+    nickname = models.CharField(max_length=50, blank=True, null=True)
+    pd_l = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    pd_r = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    sphere_l = models.DecimalField(
+        max_digits=5, decimal_places=2, blank=True, default=0)
+    sphere_r = models.DecimalField(
+        max_digits=5, decimal_places=2, blank=True, default=0)
     cylinder_l = models.DecimalField(
-        max_digits=5, decimal_places=2, blank=True)
+        max_digits=5, decimal_places=2, blank=True, default=0)
     cylinder_r = models.DecimalField(
-        max_digits=5, decimal_places=2, blank=True)
-    axis_l = models.IntegerField(blank=True)
-    axis_r = models.IntegerField(blank=True)
-    base_l = models.DecimalField(max_digits=5, decimal_places=2, blank=True)
-    base_r = models.DecimalField(max_digits=5, decimal_places=2, blank=True)
-    nv_add = models.DecimalField(max_digits=5, decimal_places=2, blank=True)
+        max_digits=5, decimal_places=2, blank=True, default=0)
+    axis_l = models.IntegerField(blank=True, default=0)
+    axis_r = models.IntegerField(blank=True, default=0)
+    base_l = models.DecimalField(
+        max_digits=5, decimal_places=2, blank=True, default=0)
+    base_r = models.DecimalField(
+        max_digits=5, decimal_places=2, blank=True, default=0)
+    nv_add = models.DecimalField(
+        max_digits=5, decimal_places=2, blank=True,    default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
