@@ -41,7 +41,8 @@ class PrescriptionSerializer(serializers.ModelSerializer):
             'axis_r',
             'base_l',
             'base_r',
-            'nv_add',
+            'add_l',
+            'add_r',
             'created_at',
             'updated_at',
         ]
