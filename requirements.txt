@@ -4,7 +4,6 @@ djangorestframework==3.14.0
 djangorestframework-simplejwt==5.2.2
 django-jazzmin
 django-cors-headers
-django-phonenumber-field[phonenumbers]
 django-allauth
 django-oauth-toolkit==2.3.0
 drf_social_oauth2==2.1.3
