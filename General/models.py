@@ -1,5 +1,4 @@
 from django.db import models, transaction
-from phonenumber_field.modelfields import PhoneNumberField
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 # Create your models here.
@@ -9,7 +8,7 @@ class Address(models.Model):
     customer = models.ForeignKey(
         'Customer.CustomerInfo', on_delete=models.CASCADE, related_name='addresses', null=True, blank=True)
     full_name = models.CharField(max_length=50)
-    phone = PhoneNumberField()
+    phone = models.CharField(max_length=20)
     address = models.CharField(max_length=200)
     city = models.CharField(max_length=50)
     province_state = models.CharField(max_length=50)
