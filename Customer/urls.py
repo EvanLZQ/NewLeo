@@ -25,4 +25,11 @@ urlpatterns = [
          name="update_prescription"),
     path("add_prescription", views.addCustomerPrescription, name="add_prescription"),
     path("upload_avatar", views.uploadCustomerAvatar, name="upload_avatar"),
+    # Everything below is for customer address
+    path("get_addresses", views.getCustomerAddress, name="get_addresses"),
+    path("add_address", views.addCustomerAddress, name="add_address"),
+    path("update_address/<int:address_id>",
+         views.updateCustomerAddress, name="update_address"),
+    path("delete_address/<int:address_id>",
+         views.deleteCustomerAddress, name="delete_address"),
 ]

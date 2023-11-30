@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from phonenumber_field.modelfields import PhoneNumberField
 from django.core.validators import MinValueValidator, MaxValueValidator
 
@@ -6,6 +6,8 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 class Address(models.Model):
+    customer = models.ForeignKey(
+        'Customer.CustomerInfo', on_delete=models.CASCADE, related_name='addresses', null=True, blank=True)
     full_name = models.CharField(max_length=50)
     phone = PhoneNumberField()
     address = models.CharField(max_length=200)
@@ -13,9 +15,24 @@ class Address(models.Model):
     province_state = models.CharField(max_length=50)
     country = models.CharField(max_length=50)
     post_code = models.CharField(max_length=10)
-    instruction = models.TextField(blank=True)
+    instruction = models.TextField(blank=True, null=True)
+    default_address = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        with transaction.atomic():
+            # Check if this is the only address for the customer
+            if Address.objects.filter(customer=self.customer).count() == 0:
+                # This is the only address, so set it as default
+                self.default_address = True
+            elif self.default_address:
+                # If this is not the only address but is being set as default,
+                # unset the default for other addresses
+                Address.objects.filter(customer=self.customer, default_address=True).exclude(
+                    id=self.id).update(default_address=False)
+
+        super(Address, self).save(*args, **kwargs)
 
     class Meta:
         db_table = 'Address'

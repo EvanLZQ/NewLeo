@@ -4,8 +4,8 @@ from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated
-from General.models import Coupon, ImageUpload
-from General.serializer import CouponSerializer, ImageSerializer
+from General.models import Coupon, Address
+from General.serializer import CouponSerializer, ImageSerializer, AddressSerializer
 from rest_framework.parsers import MultiPartParser
 
 from Prescription.models import PrescriptionInfo
@@ -297,3 +297,55 @@ def updateCustomerPrescription(request, prescription_id):
         serializer.save()
         return Response(serializer.data, status=200)
     return Response(serializer.errors, status=400)
+
+
+@api_view(['GET'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def getCustomerAddress(request):
+    user = request.user
+    address = Address.objects.filter(customer=user)
+    serializer = AddressSerializer(address, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['POST'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def addCustomerAddress(request):
+    user = request.user
+    serializer = AddressSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save(customer=user)
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(['PATCH'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def updateCustomerAddress(request, address_id):
+    try:
+        address = Address.objects.get(id=address_id)
+    except Address.DoesNotExist:
+        return Response({'error': 'Address not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = AddressSerializer(
+        instance=address, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=200)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(['DELETE'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def deleteCustomerAddress(request, address_id):
+    try:
+        address = Address.objects.get(id=address_id)
+    except Address.DoesNotExist:
+        return Response({'error': 'Address not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    address.delete()
+    return Response(status=204)
