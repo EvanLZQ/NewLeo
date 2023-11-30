@@ -82,7 +82,6 @@ INSTALLED_APPS = [
     "Supplier",
     "Blog",
     "tinymce",
-    "phonenumber_field",
     "django.contrib.sites",
     'oauth2_provider',
     'social_django',
