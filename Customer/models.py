@@ -35,7 +35,7 @@ class CustomerInfo(AbstractUser, PermissionsMixin):
     username = models.EmailField(unique=True, db_index=True)
     first_name = models.CharField(max_length=100, blank=True)
     last_name = models.CharField(max_length=100, blank=True)
-    phone = PhoneNumberField(blank=True)
+    phone = models.CharField(max_length=15, blank=True, null=True)
     ip_address = models.CharField(max_length=100, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
