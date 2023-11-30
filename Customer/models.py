@@ -86,7 +86,7 @@ class CustomerSavedAddress(models.Model):
     customer = models.ForeignKey(
         'Customer.CustomerInfo', null=True, on_delete=models.CASCADE, related_name='saved_address')
     full_name = models.CharField(max_length=50)
-    phone = PhoneNumberField()
+    phone = models.CharField(max_length=15)
     address = models.CharField(max_length=200)
     city = models.CharField(max_length=50)
     province_state = models.CharField(max_length=50)
