@@ -100,3 +100,16 @@ class ImageUpload(models.Model):
         db_table = 'ImageUpload'
         verbose_name = 'Image Upload'
         verbose_name_plural = 'Image Uploads'
+
+
+class CurrencyConversion(models.Model):
+    currency = models.CharField(max_length=50)
+    symbol = models.CharField(max_length=50)
+    rate = models.DecimalField(max_digits=10, decimal_places=5)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'CurrencyConversion'
+        verbose_name = 'Currency Conversion'
+        verbose_name_plural = 'Currency Conversions'

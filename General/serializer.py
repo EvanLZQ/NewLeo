@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Address, ImageUpload, Coupon
+from .models import Address, ImageUpload, Coupon, CurrencyConversion
 
 
 class AddressSerializer(serializers.ModelSerializer):
@@ -34,4 +34,15 @@ class CouponSerializer(serializers.ModelSerializer):
             'shipping_discount_amount',
             'order_discount_type',
             'order_discount_amount'
+        ]
+
+
+class CurrencySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CurrencyConversion
+        fields = [
+            'id',
+            'symbol',
+            'currency',
+            'rate',
         ]
