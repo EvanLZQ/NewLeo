@@ -31,5 +31,6 @@ urlpatterns = [
     path('api/user/', include("Customer.urls")),
     path('api/order/', include("Order.urls")),
     path('api/blog/', include("Blog.urls")),
+    path('api/general/', include("General.urls")),
     re_path(r'^auth/', include('drf_social_oauth2.urls', namespace='drf')),
 ]

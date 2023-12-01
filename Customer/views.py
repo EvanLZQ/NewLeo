@@ -65,6 +65,22 @@ def create_shopping_list(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@api_view(['POST'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def assign_shopping_list(request, list_id):
+    try:
+        shopping_list = ShoppingList.objects.get(id=list_id)
+    except ShoppingList.DoesNotExist:
+        return Response({'error': 'ShoppingList not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    user = request.user
+    shopping_list.customer = user
+    shopping_list.save()
+    serializer = ShoppingListSerializer(shopping_list)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 @api_view(['PATCH'])
 def update_shopping_list(request, list_id):
     try:
@@ -86,6 +102,17 @@ def update_shopping_list(request, list_id):
     else:
         # print("Here")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['DELETE'])
+def delete_shopping_list(request, list_id):
+    try:
+        shopping_list = ShoppingList.objects.get(id=list_id)
+    except ShoppingList.DoesNotExist:
+        return Response({'error': 'ShoppingList not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    shopping_list.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(['POST'])
