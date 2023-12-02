@@ -18,7 +18,7 @@ from Leoptique.authentication import AccessTokenAuthentication
 from google.oauth2 import id_token
 from django.utils import timezone
 import datetime
-from .models import CustomerInfo, StoreCreditActivity
+from .models import CustomerInfo, StoreCreditActivity, WishList
 from oauth2_provider.models import AccessToken, Application, RefreshToken
 from rest_framework.permissions import AllowAny
 from google.auth.transport import requests
@@ -376,3 +376,75 @@ def deleteCustomerAddress(request, address_id):
 
     address.delete()
     return Response(status=204)
+
+
+@api_view(['GET'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def getUserWishList(request):
+    user = request.user
+    wish_list = WishList.objects.get(customer=user, type="Wish List")
+    serializer = ShoppingListSerializer(wish_list)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+def getTargetWishList(request, list_id):
+    try:
+        wish_list = WishList.objects.get(id=list_id)
+    except WishList.DoesNotExist:
+        return Response({'error': 'WishList not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = WishListSerializer(wish_list)
+    return Response(serializer.data)
+
+
+@api_view(['POST'])
+def addWishList(request):
+    serializer = WishListSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(['PATCH'])
+def updateWishList(request, list_id):
+    try:
+        wish_list = WishList.objects.get(id=list_id)
+    except WishList.DoesNotExist:
+        return Response({'error': 'WishList not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = WishListSerializer(
+        instance=wish_list, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=200)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(['DELETE'])
+def deleteWishList(request, list_id):
+    try:
+        wish_list = WishList.objects.get(id=list_id)
+    except WishList.DoesNotExist:
+        return Response({'error': 'WishList not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    wish_list.delete()
+    return Response(status=204)
+
+
+@api_view(['POST'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def assignWishList(request, list_id):
+    try:
+        wish_list = WishList.objects.get(id=list_id)
+    except WishList.DoesNotExist:
+        return Response({'error': 'WishList not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    user = request.user
+    wish_list.customer = user
+    wish_list.save()
+    serializer = WishListSerializer(wish_list)
+    return Response(serializer.data, status=status.HTTP_200_OK)
