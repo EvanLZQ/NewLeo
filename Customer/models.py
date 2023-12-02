@@ -70,7 +70,7 @@ class CustomerInfo(AbstractUser, PermissionsMixin):
 
 class ShoppingList(models.Model):
     customer = models.ForeignKey(
-        'Customer.CustomerInfo', null=True, on_delete=models.SET_NULL)
+        'Customer.CustomerInfo', null=True, on_delete=models.SET_NULL, related_name='shopping_list')
     product = models.ManyToManyField('Order.CompleteSet')
     list_type = models.CharField(max_length=30,
                                  choices=[('SHOPPINGCART', 'Shopping Cart'), ('WISHLIST', 'Wish List')])
@@ -79,6 +79,17 @@ class ShoppingList(models.Model):
         db_table = 'ShoppingList'
         verbose_name = 'Shopping List'
         verbose_name_plural = 'Shopping Lists'
+
+
+class WishList(models.Model):
+    customer = models.ForeignKey(
+        'Customer.CustomerInfo', null=True, on_delete=models.SET_NULL, related_name='wish_list')
+    product = models.ManyToManyField('Product.ProductInfo')
+
+    class Meta:
+        db_table = 'WishList'
+        verbose_name = 'Wish List'
+        verbose_name_plural = 'Wish Lists'
 
 
 class CustomerSavedAddress(models.Model):

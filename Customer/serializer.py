@@ -7,7 +7,8 @@ from Product.serializer import *
 from Order.serializer import CompleteSetSerializer
 
 __all__ = ['CustomerProfileSerializer', 'CustomerSerializer', 'CustomerSavedPaymentSerializer',
-           'CustomerSavedAddresses', 'ShoppingListSerializer', 'CustomerCreateSerializer', 'StoreCreditActivitySerializer']
+           'CustomerSavedAddresses', 'ShoppingListSerializer', 'CustomerCreateSerializer', 'StoreCreditActivitySerializer',
+           'WishListSerializer']
 
 
 class CustomerSavedPaymentSerializer(serializers.ModelSerializer):
@@ -165,4 +166,15 @@ class StoreCreditActivitySerializer(serializers.ModelSerializer):
             'change_amount',
             'description',
             'created_at',
+        ]
+
+
+class WishListSerializer(serializers.ModelSerializer):
+    product = ProductSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = WishList
+        fields = [
+            'id',
+            'product',
         ]
