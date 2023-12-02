@@ -83,7 +83,7 @@ class ShoppingList(models.Model):
 
 class WishList(models.Model):
     customer = models.ForeignKey(
-        'Customer.CustomerInfo', null=True, on_delete=models.SET_NULL, related_name='wish_list')
+        'Customer.CustomerInfo', null=True, blank=True, on_delete=models.SET_NULL, related_name='wish_list')
     product = models.ManyToManyField('Product.ProductInfo')
 
     class Meta:
