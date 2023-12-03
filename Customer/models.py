@@ -45,8 +45,8 @@ class CustomerInfo(AbstractUser, PermissionsMixin):
     icon_url = models.CharField(max_length=100, blank=True, null=True)
     # store_credit = models.IntegerField(default=0)
     level = models.IntegerField(default=0)
-    # wish_list = models.ManyToManyField(
-    #     'Product.ProductInfo', through='ShoppingList')
+    wish_list = models.ForeignKey('Customer.WishList', null=True,
+                                  on_delete=models.SET_NULL, blank=True, related_name='customer')
     in_blacklist = models.BooleanField(default=False)
     objects = CustomUserManager()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -61,6 +61,12 @@ class CustomerInfo(AbstractUser, PermissionsMixin):
     @property
     def full_name(self):
         return f'{self.first_name} {self.last_name}'
+
+    def save(self, *args, **kwargs):
+        if not self.pk:
+            wish_list = WishList.objects.create()
+            self.wish_list = wish_list
+        super().save(*args, **kwargs)
 
     class Meta:
         db_table = 'CustomerInfo'
@@ -82,9 +88,9 @@ class ShoppingList(models.Model):
 
 
 class WishList(models.Model):
-    customer = models.ForeignKey(
-        'Customer.CustomerInfo', null=True, blank=True, on_delete=models.SET_NULL, related_name='wish_list')
-    product = models.ManyToManyField('Product.ProductInfo')
+    product = models.ManyToManyField('Product.ProductInfo', blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'WishList'

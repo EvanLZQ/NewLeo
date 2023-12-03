@@ -382,10 +382,19 @@ def deleteCustomerAddress(request, address_id):
 @authentication_classes([SessionAuthentication])
 @permission_classes([IsAuthenticated])
 def getUserWishList(request):
-    user = request.user
-    wish_list = WishList.objects.get(customer=user)
-    serializer = ShoppingListSerializer(wish_list)
-    return Response(serializer.data)
+    try:
+        wish_list = request.user.wish_list
+        if wish_list is None:
+            return Response({'error': 'WishList not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = WishListSerializer(wish_list)
+        return Response(serializer.data)
+
+    except WishList.DoesNotExist:
+        return Response({'error': 'WishList not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        # Catch other potential exceptions
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['GET'])
