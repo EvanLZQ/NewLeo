@@ -188,9 +188,10 @@ class WishListSerializer(serializers.ModelSerializer):
         instance.product.clear()
         for product_data in products_data:
             print(product_data)
-            product_id = product_data.get('id')
-            print("The Product ID is: ", product_id)
-            product_instance = ProductInfo.objects.get(id=product_id)
+            product_model = product_data.get('model_number')
+            print("The Product ID is: ", product_model)
+            product_instance = ProductInfo.objects.get(
+                model_number=product_model)
             print("The Product Instance is: ", product_instance)
             instance.product.add(product_instance)
 
