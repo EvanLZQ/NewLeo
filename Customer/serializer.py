@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from Order.models import CompleteSet
+from Product.models import ProductInfo
 from .models import *
 from General.serializer import AddressSerializer
 from Product.serializer import *
@@ -170,7 +171,7 @@ class StoreCreditActivitySerializer(serializers.ModelSerializer):
 
 
 class WishListSerializer(serializers.ModelSerializer):
-    product = ProductSerializer(many=True, read_only=True)
+    product = ProductSerializer(many=True)
 
     class Meta:
         model = WishList
@@ -180,3 +181,19 @@ class WishListSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
+
+    def update(self, instance, validated_data):
+        # Handle the product field separately
+        products_data = validated_data.pop('product', [])
+        instance.product.clear()
+        for product_data in products_data:
+            product_id = product_data.get('id')
+            product_instance = ProductInfo.objects.get(id=product_id)
+            instance.product.add(product_instance)
+
+        # Update other fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        return instance
