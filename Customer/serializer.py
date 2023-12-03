@@ -187,12 +187,9 @@ class WishListSerializer(serializers.ModelSerializer):
         products_data = validated_data.pop('product', [])
         instance.product.clear()
         for product_data in products_data:
-            print(product_data)
             product_model = product_data.get('model_number')
-            print("The Product ID is: ", product_model)
             product_instance = ProductInfo.objects.get(
                 model_number=product_model)
-            print("The Product Instance is: ", product_instance)
             instance.product.add(product_instance)
 
         # Update other fields
