@@ -383,7 +383,7 @@ def deleteCustomerAddress(request, address_id):
 @permission_classes([IsAuthenticated])
 def getUserWishList(request):
     user = request.user
-    wish_list = WishList.objects.get(customer=user, type="Wish List")
+    wish_list = WishList.objects.get(customer=user)
     serializer = ShoppingListSerializer(wish_list)
     return Response(serializer.data)
 
