@@ -83,7 +83,7 @@ class CustomerProfileSerializer(serializers.ModelSerializer):
 
 
 class ShoppingCartSerializer(serializers.ModelSerializer):
-    eyeglasses_set = CompleteSetSerializer(many=True)
+    eyeglasses_set = CompleteSetSerializer(many=True, required=False)
 
     class Meta:
         model = ShoppingCart
@@ -123,7 +123,7 @@ class StoreCreditActivitySerializer(serializers.ModelSerializer):
 
 
 class WishListSerializer(serializers.ModelSerializer):
-    product = ProductSerializer(many=True)
+    product = ProductSerializer(many=True, required=False)
 
     class Meta:
         model = WishList
