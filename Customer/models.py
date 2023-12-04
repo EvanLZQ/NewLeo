@@ -47,6 +47,8 @@ class CustomerInfo(AbstractUser, PermissionsMixin):
     level = models.IntegerField(default=0)
     wish_list = models.ForeignKey('Customer.WishList', null=True,
                                   on_delete=models.SET_NULL, blank=True, related_name='customer')
+    shopping_cart = models.ForeignKey('Customer.ShoppingCart', null=True,
+                                      on_delete=models.SET_NULL, blank=True, related_name='customer')
     in_blacklist = models.BooleanField(default=False)
     objects = CustomUserManager()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -74,17 +76,15 @@ class CustomerInfo(AbstractUser, PermissionsMixin):
         verbose_name_plural = 'Customers'
 
 
-class ShoppingList(models.Model):
-    customer = models.ForeignKey(
-        'Customer.CustomerInfo', null=True, on_delete=models.SET_NULL, related_name='shopping_list')
-    product = models.ManyToManyField('Order.CompleteSet')
-    list_type = models.CharField(max_length=30,
-                                 choices=[('SHOPPINGCART', 'Shopping Cart'), ('WISHLIST', 'Wish List')])
+class ShoppingCart(models.Model):
+    eyeglasses_set = models.ManyToManyField('Order.CompleteSet', blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = 'ShoppingList'
-        verbose_name = 'Shopping List'
-        verbose_name_plural = 'Shopping Lists'
+        db_table = 'ShoppingCart'
+        verbose_name = 'Shopping Cart'
+        verbose_name_plural = 'Shopping Carts'
 
 
 class WishList(models.Model):

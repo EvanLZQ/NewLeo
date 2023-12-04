@@ -11,14 +11,13 @@ from rest_framework.parsers import MultiPartParser
 from Prescription.models import PrescriptionInfo
 from Prescription.serializer import PrescriptionSerializer
 from .serializer import *
-from .models import ShoppingList
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
 from Leoptique.authentication import AccessTokenAuthentication
 from google.oauth2 import id_token
 from django.utils import timezone
 import datetime
-from .models import CustomerInfo, StoreCreditActivity, WishList
+from .models import CustomerInfo, ShoppingCart, StoreCreditActivity, WishList
 from oauth2_provider.models import AccessToken, Application, RefreshToken
 from rest_framework.permissions import AllowAny
 from google.auth.transport import requests
@@ -48,71 +47,50 @@ def get_user(request):
 def is_authenticated(request):
     return Response(status=status.HTTP_200_OK)
 
+# Below is shopping cart views
+
 
 @api_view(['GET'])
-def get_shopping_list(request, list_id):
-    shopping_list = ShoppingList.objects.get(id=list_id)
-    serializer = ShoppingListSerializer(shopping_list)
+def getShoppingCart(request, cart_id):
+    shopping_cart = ShoppingCart.objects.get(id=cart_id)
+    serializer = ShoppingCartSerializer(shopping_cart)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def getUserShoppingCart(request):
+    user = request.user
+    shopping_cart = user.shopping_cart
+    serializer = ShoppingCartSerializer(shopping_cart)
     return Response(serializer.data)
 
 
 @api_view(['POST'])
-def create_shopping_list(request):
-    serializer = ShoppingListSerializer(data=request.data)
+def createShoppingCart(request):
+    serializer = ShoppingCartSerializer(data=request.data)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(['POST'])
-@authentication_classes([SessionAuthentication])
-@permission_classes([IsAuthenticated])
-def assign_shopping_list(request, list_id):
-    try:
-        shopping_list = ShoppingList.objects.get(id=list_id)
-    except ShoppingList.DoesNotExist:
-        return Response({'error': 'ShoppingList not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    user = request.user
-    shopping_list.customer = user
-    shopping_list.save()
-    serializer = ShoppingListSerializer(shopping_list)
-    return Response(serializer.data, status=status.HTTP_200_OK)
-
-
 @api_view(['PATCH'])
-def update_shopping_list(request, list_id):
+def updateShoppingCart(request, cart_id):
     try:
-        shopping_list = ShoppingList.objects.get(id=list_id)
-    except ShoppingList.DoesNotExist:
-        return Response({'error': 'ShoppingList not found'}, status=status.HTTP_404_NOT_FOUND)
+        shopping_cart = ShoppingCart.objects.get(id=cart_id)
+    except ShoppingCart.DoesNotExist:
+        return Response({'error': 'Shopping cart not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    # print(request.data)
-    # Deserialize and validate the request data
-    # `partial=True` allows for partial updates
-    serializer = ShoppingListSerializer(
-        instance=shopping_list, data=request.data, partial=True)
+    serializer = ShoppingCartSerializer(
+        instance=shopping_cart, data=request.data, partial=True)
 
     if serializer.is_valid():
-        # Save the updated ShoppingList object
-        # print("Here")
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
     else:
-        # print("Here")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(['DELETE'])
-def delete_shopping_list(request, list_id):
-    try:
-        shopping_list = ShoppingList.objects.get(id=list_id)
-    except ShoppingList.DoesNotExist:
-        return Response({'error': 'ShoppingList not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    shopping_list.delete()
-    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(['POST'])
@@ -441,19 +419,3 @@ def deleteWishList(request, list_id):
 
     wish_list.delete()
     return Response(status=204)
-
-
-@api_view(['POST'])
-@authentication_classes([SessionAuthentication])
-@permission_classes([IsAuthenticated])
-def assignWishList(request, list_id):
-    try:
-        wish_list = WishList.objects.get(id=list_id)
-    except WishList.DoesNotExist:
-        return Response({'error': 'WishList not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    user = request.user
-    wish_list.customer = user
-    wish_list.save()
-    serializer = WishListSerializer(wish_list)
-    return Response(serializer.data, status=status.HTTP_200_OK)

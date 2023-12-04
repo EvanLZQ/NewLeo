@@ -8,7 +8,7 @@ from Product.serializer import *
 from Order.serializer import CompleteSetSerializer
 
 __all__ = ['CustomerProfileSerializer', 'CustomerSerializer', 'CustomerSavedPaymentSerializer',
-           'CustomerSavedAddresses', 'ShoppingListSerializer', 'CustomerCreateSerializer', 'StoreCreditActivitySerializer',
+           'CustomerSavedAddresses', 'ShoppingCartSerializer', 'CustomerCreateSerializer', 'StoreCreditActivitySerializer',
            'WishListSerializer']
 
 
@@ -82,80 +82,32 @@ class CustomerProfileSerializer(serializers.ModelSerializer):
         ]
 
 
-class ShoppingListSerializer(serializers.ModelSerializer):
-    # product = serializers.SerializerMethodField(read_only=True, required=True)
-    product = CompleteSetSerializer(many=True, required=False)
-    product_ids = serializers.PrimaryKeyRelatedField(
-        queryset=CompleteSet.objects.all(), many=True, write_only=True, source='product', required=False)
-    product_data = CompleteSetSerializer(
-        many=True, write_only=True, required=False)
+class ShoppingCartSerializer(serializers.ModelSerializer):
+    eyeglasses_set = CompleteSetSerializer(many=True)
 
     class Meta:
-        model = ShoppingList
-        fields = '__all__'
-
-    # def get_product(self, obj):
-    #     # Serialize the CompleteSet objects with all their details
-    #     return CompleteSetSerializer(obj.product.all(), many=True).data
-
-    def create(self, validated_data):
-        products_data = validated_data.pop('product_data', [])
-        product_ids = validated_data.pop('product_ids', [])
-
-        shopping_list = ShoppingList.objects.create(**validated_data)
-
-        # Link existing products by IDs
-        for product_id in product_ids:
-            shopping_list.product.add(product_id)
-
-        # Create new CompleteSet objects if full details are provided
-        for product_data in products_data:
-            product = CompleteSetSerializer().create(product_data)
-            shopping_list.product.add(product)
-
-        return shopping_list
+        model = ShoppingCart
+        fields = [
+            'id',
+            'eyeglasses_set',
+            'created_at',
+            'updated_at',
+        ]
 
     def update(self, instance, validated_data):
-        # products_data = validated_data.pop('product_data', None)
-        # product_ids = validated_data.pop('product_ids', None)
-        products_data = validated_data.pop('product', None)
-        print(products_data)
-        # p = self.context['request'].data['product']
+        set_data = validated_data.pop('eyeglasses_set', [])
+        instance.eyeglasses_set.clear()
+        for set in set_data:
+            set_id = set.get('id')
+            complete_set_instance = CompleteSet.objects.get(
+                id=set_id)
+            instance.eyeglasses_set.add(complete_set_instance)
 
         # Update other fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-
-        # If full CompleteSet details are provided, update or create products.
-        if products_data:
-            existing_product_ids = [p.id for p in instance.product.all()]
-            print(existing_product_ids)
-            for product_data in products_data:
-                # print(product_data)
-                product_id = int(product_data.get('id', 0))
-                if product_id and product_id in existing_product_ids:
-                    # Update existing product
-                    product_instance = CompleteSet.objects.get(id=product_id)
-                    CompleteSetSerializer().update(product_instance, product_data)
-                else:
-                    # Create new product
-                    print(product_id)
-                    product = CompleteSet.objects.get(id=product_id)
-                    instance.product.add(product)
-
-        # # If product_ids are provided, update the related products
-        # if product_ids:
-        #     print("product_id")
-        #     instance.product.set(product_ids)
-
-        # # If full CompleteSet details are provided, create new products and add them.
-        # if products_data:
-        #     print("product_data")
-        #     for product_data in products_data:
-        #         product = CompleteSetSerializer().create(product_data)
-        #         instance.product.add(product)
-
         instance.save()
+
         return instance
 
 
