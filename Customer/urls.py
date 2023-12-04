@@ -12,17 +12,13 @@ urlpatterns = [
          name="get_store_credit_history"),
     path("upload_avatar", views.uploadCustomerAvatar, name="upload_avatar"),
 
-    # Below is for shopping list
-    path("shoppinglist/<int:list_id>",
-         views.get_shopping_list, name='get_shopping_list'),
-    path("shoppinglist/update/<int:list_id>",
-         views.update_shopping_list, name='update_shopping_list'),
-    path("shoppinglist/new", views.create_shopping_list,
-         name='create_shopping_list'),
-    path("shoppinglist/assign/<int:list_id>",
-         views.assign_shopping_list, name='assign_shopping_list'),
-    path("shoppinglist/delete/<int:list_id>",
-         views.delete_shopping_list, name='delete_shopping_list'),
+    # Below is for shopping cart
+    path("get_shopping_cart/<int:cart_id>",
+         views.getShoppingCart, name='get_shopping_cart'),
+    path("update_shopping_cart/<int:cart_id>",
+         views.updateShoppingCart, name='update_shopping_cart'),
+    path("create_shopping_cart", views.createShoppingCart,
+         name='create_shopping_cart'),
 
     # Below is for customer login & logout
     path("login", views.login_view, name='user_login'),
@@ -51,11 +47,6 @@ urlpatterns = [
     path("get_user_wish_list", views.getUserWishList, name="get_user_wish_list"),
     path("get_wish_list/<int:list_id>",
          views.getTargetWishList, name="get_wish_list"),
-    path("add_wish_list", views.addWishList, name="add_wish_list"),
     path("update_wish_list/<int:list_id>",
          views.updateWishList, name="update_wish_list"),
-    path("delete_wish_list/<int:list_id>",
-         views.deleteWishList, name="delete_wish_list"),
-    path("assign_wish_list/<int:list_id>",
-         views.assignWishList, name="assign_wish_list"),
 ]
