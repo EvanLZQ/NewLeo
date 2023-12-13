@@ -197,6 +197,8 @@ class CompleteSet(models.Model):
         'Lens.LensIndex', on_delete=models.SET_NULL, null=True)
     density = models.ForeignKey(
         'Lens.LensDensity', on_delete=models.SET_NULL, null=True)
+    prescription = models.ManyToManyField(
+        'Prescription.PrescriptionInfo', blank=True)
     sub_total = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     sub_color = models.CharField(max_length=50, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)

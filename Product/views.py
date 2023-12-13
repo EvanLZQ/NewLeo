@@ -54,7 +54,6 @@ def getModel(request, model):
 @api_view(['GET'])
 def getModelUsingSku(request, sku):
     product_id = ProductInstance.objects.get(sku=sku).product_id
-    print(product_id)
     product = ProductInfo.objects.get(id=product_id)
     serializer = SKUtoModelSerializer(product, many=False)
     return Response(serializer.data)
