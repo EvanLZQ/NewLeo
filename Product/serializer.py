@@ -198,6 +198,7 @@ class SKUtoModelSerializer(serializers.ModelSerializer):
         fields = [
             'model_number',
             'name',
+            'price',
         ]
 
 
