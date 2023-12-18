@@ -13,7 +13,7 @@ urlpatterns = [
     path("upload_avatar", views.uploadCustomerAvatar, name="upload_avatar"),
 
     # Below is for shopping cart
-    path("get_user_shopping_cart", views.getUserShoppingCart,
+    path("get_user_shopping_cart/<int:cart_id>", views.getUserShoppingCart,
          name="get_user_shopping_cart"),
     path("get_shopping_cart/<int:cart_id>",
          views.getShoppingCart, name='get_shopping_cart'),

@@ -68,6 +68,8 @@ class CustomerInfo(AbstractUser, PermissionsMixin):
         if not self.pk:
             wish_list = WishList.objects.create()
             self.wish_list = wish_list
+            shopping_cart = ShoppingCart.objects.create()
+            self.shopping_cart = shopping_cart
         super().save(*args, **kwargs)
 
     class Meta:
@@ -80,6 +82,23 @@ class ShoppingCart(models.Model):
     eyeglasses_set = models.ManyToManyField('Order.CompleteSet', blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def merge_with(self, other_cart):
+        # Get CompleteSet IDs from both carts
+        current_set_ids = set(self.eyeglasses_set.values_list('id', flat=True))
+        other_set_ids = set(
+            other_cart.eyeglasses_set.values_list('id', flat=True))
+
+        # Find unique IDs
+        unique_set_ids = current_set_ids.union(other_set_ids)
+
+        # Update this cart with the union of both sets
+        self.eyeglasses_set.set(unique_set_ids)
+        self.save()
+
+        # Clear the other cart
+        other_cart.eyeglasses_set.clear()
+        other_cart.save()
 
     class Meta:
         db_table = 'ShoppingCart'

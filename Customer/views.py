@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
@@ -60,9 +60,16 @@ def getShoppingCart(request, cart_id):
 @api_view(['GET'])
 @authentication_classes([SessionAuthentication])
 @permission_classes([IsAuthenticated])
-def getUserShoppingCart(request):
+def getUserShoppingCart(request, cart_id):
     user = request.user
     shopping_cart = user.shopping_cart
+    if cart_id:
+        # Get the local shopping cart, or return a 404 if not found
+        local_cart = get_object_or_404(ShoppingCart, id=cart_id)
+
+        # Merge the local shopping cart into the user's cart
+        shopping_cart.merge_with(local_cart)
+
     serializer = ShoppingCartSerializer(shopping_cart)
     return Response(serializer.data)
 

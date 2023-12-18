@@ -109,6 +109,9 @@ class CurrencyConversion(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return self.currency
+
     class Meta:
         db_table = 'CurrencyConversion'
         verbose_name = 'Currency Conversion'
