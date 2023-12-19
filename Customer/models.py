@@ -1,7 +1,9 @@
+from datetime import timezone
 from django.db import models
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import BaseUserManager, PermissionsMixin, AbstractUser
 from django.core.validators import MinValueValidator, MaxValueValidator
+from tinymce.models import HTMLField
 
 
 class CustomUserManager(BaseUserManager):
@@ -174,3 +176,41 @@ class StoreCreditActivity(models.Model):
         db_table = "StoreCreditActivity"
         verbose_name = "Store Credit Activity"
         verbose_name_plural = "Store Credit Activities"
+
+
+class CustomerMessage(models.Model):
+    customer = models.ForeignKey(
+        'Customer.CustomerInfo', null=True, on_delete=models.CASCADE, related_name='customer_message')
+    subject = models.CharField(max_length=100, blank=True, null=True)
+    content = models.TextField(blank=True)
+    message_from = models.CharField(max_length=100, blank=True, null=True, choices=[
+                                    ('Customer Service', 'Customer Service'), ('Customer', 'Customer')])
+    sent_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    def mark_as_read(self):
+        self.read_at = timezone.now()
+        self.save()
+
+    class Meta:
+        db_table = "CustomerMessage"
+        verbose_name = "Customer Message"
+        verbose_name_plural = "Customer Messages"
+
+
+class CustomerNotification(models.Model):
+    customer = models.ForeignKey(
+        'Customer.CustomerInfo', on_delete=models.CASCADE, related_name='customer_notification')
+    title = models.CharField(max_length=150)
+    brief = models.CharField(max_length=150, blank=True, null=True)
+    content = HTMLField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.title
+
+    class Meta:
+        db_table = "CustomerNotification"
+        verbose_name = "Customer Notification"
+        verbose_name_plural = "Customer Notifications"
