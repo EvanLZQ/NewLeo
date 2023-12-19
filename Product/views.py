@@ -96,7 +96,8 @@ def filterProduct(request):
         # Build the Q object for tags
         shape = filter_dict.get('Shape', [])
         material = filter_dict.get('Material', [])
-        tags = shape + material
+        usage = filter_dict.get('Usage', [])
+        tags = shape + material + usage
         tag_q_objects = Q()
         for tag in tags:
             tag_q_objects |= Q(productTag__name=tag)
