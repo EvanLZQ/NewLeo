@@ -134,3 +134,38 @@ class OrderSerializer(serializers.ModelSerializer):
             "complete_set",
             "address"
         ]
+
+
+class CompleteSetObjectSerializer(serializers.ModelSerializer):
+    color = LensColorSerializer()
+    usage = LensUsageSerializer()
+    coating = LensCoatingSerializer()
+    index = LensIndexSerializer()
+    frame = serializers.SerializerMethodField()
+    density = serializers.CharField(
+        source='density.name', required=False, allow_null=True, default=None)
+
+    class Meta:
+        model = CompleteSet
+        fields = [
+            'id',
+            'frame',
+            'usage',
+            'color',
+            'coating',
+            'index',
+            'density',
+            'sub_color',
+            'sub_total',
+        ]
+
+    def get_frame(self, obj):
+        return obj.frame.sku
+
+    def to_representation(self, obj):
+        rep = super().to_representation(obj)
+        instance = ProductInstance.objects.get(sku=obj.frame)
+        rep['frame'] = ProductInstanceSerializer(instance).data
+        if not rep['sub_color']:
+            rep['sub_color'] = "None"
+        return rep
