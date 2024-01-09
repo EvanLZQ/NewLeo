@@ -102,6 +102,14 @@ def filterProduct(request):
         for tag in tags:
             tag_q_objects |= Q(productTag__name=tag)
 
+        # Build the Q object for keyword search
+        search = filter_dict.get('Search', [])
+        if search:
+            search_q_objects = Q()
+            search_q_objects |= Q(name__icontains=search)
+            search_q_objects |= Q(model_number__icontains=search)
+            products = products.filter(search_q_objects)
+
         # Combine search results
         combined_q_objects = color_q_objects & gender_q_objects & size_q_objects & rim_q_objects & tag_q_objects
         # Filter search results
