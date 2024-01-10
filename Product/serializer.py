@@ -98,6 +98,14 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
 
 
 class ProductTagSerializer(serializers.ModelSerializer):
+    def to_representation(self, obj):
+        rep = super().to_representation(obj)
+        rep.pop('created_at', None)
+        rep.pop('updated_at', None)
+        rep.pop('id', None)
+        rep.pop('product', None)
+        return rep
+
     class Meta:
         model = ProductTag
         fields = '__all__'
