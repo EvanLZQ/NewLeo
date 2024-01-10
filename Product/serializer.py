@@ -97,9 +97,16 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
                   'description']
 
 
+class ProductTagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductTag
+        fields = '__all__'
+
+
 class ProductSerializer(serializers.ModelSerializer):
     productInstance = serializers.SerializerMethodField()
     productReview = ProductReviewSerializer(many=True)
+    productTag = ProductTagSerializer(many=True)
 
     def get_productInstance(self, obj):
         instances = obj.productInstance.filter(online=True)
@@ -138,6 +145,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'pd_lower_range',
             'productInstance',
             'productReview',
+            'productTag'
         ]
 
 
