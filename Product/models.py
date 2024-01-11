@@ -51,7 +51,7 @@ class ProductInfo(models.Model):
 
 class ProductPromotion(models.Model):
     productInstance = models.ManyToManyField(
-        'Product.ProductInstance', blank=True)
+        'Product.ProductInstance', blank=True, related_name='productPromotion')
     name = models.CharField(max_length=100)
     code = models.CharField(max_length=20)
     promo_type = models.CharField(max_length=50, choices=[(
