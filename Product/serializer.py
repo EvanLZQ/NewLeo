@@ -18,6 +18,22 @@ class ProductReviewSerializer(serializers.ModelSerializer):
         ]
 
 
+class ProductPromotionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductPromotion
+        fields = [
+            'name',
+            'code',
+            'promo_type',
+            'promo_value',
+            'description',
+            'slug',
+            'is_featured',
+            'is_active',
+            'promo_img',
+        ]
+
+
 class ProductImageImageOnlySerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
 
@@ -48,6 +64,7 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
     carousel_img = serializers.SerializerMethodField()
     detail_img = serializers.SerializerMethodField()
     color_img_url = serializers.SerializerMethodField()
+    productPromotion = ProductPromotionSerializer(many=True)
 
     def get_carousel_img(self, obj):
         images = ProductImage.objects.filter(
@@ -94,7 +111,8 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
                   'color_img_url',
                   'color_base_name',
                   'color_display_name',
-                  'description']
+                  'description',
+                  'productPromotion']
 
 
 class ProductTagSerializer(serializers.ModelSerializer):
@@ -215,20 +233,4 @@ class SKUtoModelSerializer(serializers.ModelSerializer):
             'model_number',
             'name',
             'price',
-        ]
-
-
-class ProductPromotionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ProductPromotion
-        fields = [
-            'name',
-            'code',
-            'promo_type',
-            'promo_value',
-            'description',
-            'slug',
-            'is_featured',
-            'is_active',
-            'promo_img',
         ]
