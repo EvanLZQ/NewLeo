@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.db.models import Sum
 # Create your models here.
 
 __all__ = ['OrderInfo', 'OrderTax',
@@ -48,6 +49,16 @@ class OrderInfo(models.Model):
 
     def __str__(self):
         return self.order_number
+
+    def calculate_sub_total(self):
+        # Calculate the sum of sub_total of all related CompleteSet instances
+        total = CompleteSet.objects.filter(order=self).aggregate(
+            Sum('sub_total'))['sub_total__sum']
+        return total if total is not None else 0
+
+    def save(self, *args, **kwargs):
+        self.sub_total = self.calculate_sub_total()
+        super(OrderInfo, self).save(*args, **kwargs)
 
     class Meta:
         db_table = 'OrderInfo'
@@ -199,10 +210,31 @@ class CompleteSet(models.Model):
         'Lens.LensDensity', on_delete=models.SET_NULL, null=True)
     prescription = models.ManyToManyField(
         'Prescription.PrescriptionInfo', blank=True)
+    saved_for_later = models.BooleanField(default=False)
     sub_total = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     sub_color = models.CharField(max_length=50, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def calculate_sub_total(self):
+        total_price = 0
+        if self.frame:
+            total_price += self.frame.price
+        if self.usage:
+            total_price += self.usage.price
+        if self.color:
+            total_price += self.color.price
+        if self.coating:
+            total_price += self.coating.price
+        if self.index:
+            total_price += self.index.price
+        if self.density:
+            total_price += self.density.price
+        return total_price
+
+    def save(self, *args, **kwargs):
+        self.sub_total = self.calculate_sub_total()
+        super(CompleteSet, self).save(*args, **kwargs)
 
     class Meta:
         db_table = 'CompleteSet'
