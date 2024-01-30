@@ -29,6 +29,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             'density',
             'sub_color',
             'sub_total',
+            'saved_for_later',
         ]
 
     def get_frame(self, obj):
@@ -157,6 +158,7 @@ class CompleteSetObjectSerializer(serializers.ModelSerializer):
             'density',
             'sub_color',
             'sub_total',
+            'saved_for_later',
         ]
 
     def get_frame(self, obj):
