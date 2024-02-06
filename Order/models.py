@@ -229,15 +229,15 @@ class CompleteSet(models.Model):
                 if self.frame.product and self.frame.product.price is not None:
                     total_price += self.frame.product.price
         if self.usage:
-            total_price += self.usage.price
+            total_price += self.usage.add_on_price
         if self.color:
-            total_price += self.color.price
+            total_price += self.color.add_on_price
         if self.coating:
-            total_price += self.coating.price
+            total_price += self.coating.add_on_price
         if self.index:
-            total_price += self.index.price
+            total_price += self.index.add_on_price
         if self.density:
-            total_price += self.density.price
+            total_price += self.density.add_on_price
         return total_price
 
     def save(self, *args, **kwargs):
