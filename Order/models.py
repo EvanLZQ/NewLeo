@@ -218,8 +218,16 @@ class CompleteSet(models.Model):
 
     def calculate_sub_total(self):
         total_price = 0
+        # Check if self.frame is not None
         if self.frame:
-            total_price += self.frame.price
+            # Check if self.frame.price is not None
+            if self.frame.price is not None:
+                total_price += self.frame.price
+            else:
+                # If self.frame.price is None, get the price from the linked ProductInfo
+                # Ensure there's a link to a ProductInfo and it has a price
+                if self.frame.product and self.frame.product.price is not None:
+                    total_price += self.frame.product.price
         if self.usage:
             total_price += self.usage.price
         if self.color:
