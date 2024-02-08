@@ -100,6 +100,10 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             density_name = validated_data.pop('density')['name']
             instance.density = LensDensity.objects.get(name=density_name)
 
+        if 'saved_for_later' in validated_data:
+            saved_for_later = validated_data.pop('saved_for_later')
+            instance.saved_for_later = saved_for_later
+
         instance.save()
         return instance
 
