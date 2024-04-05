@@ -34,7 +34,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 DEBUG = True
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1',
-                 'admin.eyelovewear.com', 'www.eyelovewear.com']
+                 'admin.eyelovewear.com', 'www.eyelovewear.com', 'eyelovewear.com']
 
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 
