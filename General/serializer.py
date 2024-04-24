@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Address, ImageUpload, Coupon, CurrencyConversion
+from .models import Address, ImageUpload, Coupon, CurrencyConversion, FAQ
 
 
 class AddressSerializer(serializers.ModelSerializer):
@@ -46,3 +46,9 @@ class CurrencySerializer(serializers.ModelSerializer):
             'currency',
             'rate',
         ]
+
+
+class FAQSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FAQ
+        fields = '__all__'
