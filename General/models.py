@@ -116,3 +116,19 @@ class CurrencyConversion(models.Model):
         db_table = 'CurrencyConversion'
         verbose_name = 'Currency Conversion'
         verbose_name_plural = 'Currency Conversions'
+
+
+class FAQ(models.Model):
+    title = models.CharField(max_length=500)
+    content = models.TextField()
+    img_url = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.title
+
+    class Meta:
+        db_table = 'FAQ'
+        verbose_name = 'Question and Answer'
+        verbose_name_plural = 'Questions and Answers'
