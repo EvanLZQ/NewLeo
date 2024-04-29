@@ -8,4 +8,7 @@ urlpatterns = [
     path('home_page_blog', views.getFirstBlogBrief, name='home_page_blog'),
     path('target_blog_brief/<slug:blog_slug>',
          views.getTargetBlogBrief, name='target_blog_brief'),
+    path('api/categories/', views.get_distinct_categories,
+         name='distinct_categories'),
+
 ]
