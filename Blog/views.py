@@ -41,6 +41,12 @@ def getBlogDetails(request, blog_slug):
     return Response(serializer.data)
 
 
-def get_distinct_categories(request):
+@api_view(["GET"])
+def getBlogsInEachCategory(request):
     categories = BlogInfo.objects.values_list('category', flat=True).distinct()
-    return JsonResponse(list(categories), safe=False)
+    result = {}
+    for category in categories:
+        blogs = BlogInfo.objects.filter(category=category)
+        serializer = BlogBriefSerializer(blogs)
+        result[category] = serializer.data
+    return Response(result)
