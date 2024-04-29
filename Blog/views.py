@@ -1,5 +1,6 @@
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
+from django.http import JsonResponse
 
 from .models import *
 from .serializer import *
@@ -38,3 +39,8 @@ def getBlogDetails(request, blog_slug):
     blog = BlogInfo.objects.get(slug=blog_slug)
     serializer = BlogSerializer(blog)
     return Response(serializer.data)
+
+
+def get_distinct_categories(request):
+    categories = BlogInfo.objects.values_list('category', flat=True).distinct()
+    return JsonResponse(list(categories), safe=False)

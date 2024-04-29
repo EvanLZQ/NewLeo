@@ -4,6 +4,7 @@ from tinymce.models import HTMLField
 
 class BlogInfo(models.Model):
     title = models.CharField(max_length=100)
+    category = models.CharField(max_length=150, default="Other")
     slug = models.SlugField(max_length=200, unique=True, null=True, blank=True)
     content = HTMLField()
     sub_title = models.CharField(max_length=200, blank=True, null=True)
