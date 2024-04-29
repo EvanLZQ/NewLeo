@@ -47,6 +47,6 @@ def getBlogsInEachCategory(request):
     result = {}
     for category in categories:
         blogs = BlogInfo.objects.filter(category=category)
-        serializer = BlogBriefSerializer(blogs)
+        serializer = BlogBriefSerializer(blogs, many=True)
         result[category] = serializer.data
     return Response(result)
