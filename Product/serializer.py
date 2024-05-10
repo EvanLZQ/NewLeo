@@ -128,6 +128,17 @@ class ProductTagSerializer(serializers.ModelSerializer):
         model = ProductTag
         fields = '__all__'
 
+    def create(self, validated_data):
+        # Ensures that existing tags are used instead of creating new ones
+        tag, _ = ProductTag.objects.get_or_create(**validated_data)
+        return tag
+
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
+
 
 class ProductSerializer(serializers.ModelSerializer):
     productInstance = serializers.SerializerMethodField()
@@ -144,6 +155,21 @@ class ProductSerializer(serializers.ModelSerializer):
         rep.pop('created_at', None)
         rep.pop('updated_at', None)
         return rep
+
+    def update(self, instance, validated_data):
+        tags_data = validated_data.pop('productTag', [])
+        # Handling existing tags and linking them properly
+        instance.productTag.clear()
+        for tag_data in tags_data:
+            tag, _ = ProductTag.objects.get_or_create(**tag_data)
+            instance.productTag.add(tag)
+
+        # Update other product fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        return instance
 
     class Meta:
         model = ProductInfo
