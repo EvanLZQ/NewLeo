@@ -1,13 +1,22 @@
-from django.shortcuts import render
+from django.conf import settings
+from django.shortcuts import redirect
 from rest_framework.response import Response
+from django.http import JsonResponse
 from rest_framework.decorators import api_view
 from rest_framework import status
+import paypalrestsdk
 
 from .models import *
 from .serializer import CompleteSetSerializer, OrderSerializer, CompleteSetObjectSerializer
 
+paypalrestsdk.configure({
+    "mode": settings.PAYPAL_MODE,
+    "client_id": settings.PAYPAL_CLIENT_ID,
+    "client_secret": settings.PAYPAL_CLIENT_SECRET,
+})
 
 # Create your views here.
+
 
 @api_view(['GET'])
 def getCompleteSet(request):
@@ -75,3 +84,38 @@ def getCompleteSetLoader(request, set_id):
     set = CompleteSet.objects.get(id=set_id)
     serializer = CompleteSetObjectSerializer(set, many=False)
     return Response(serializer.data)
+
+
+# PayPal View
+def payment(request):
+
+    payment = paypalrestsdk.Payment({
+        "intent": "sale",
+        "payer": {
+            "payment_method": "paypal",
+        },
+        "redirect_urls": {
+            "return_url": "https://admin.eyelovewear.com/payment/execute/",
+            "cancel_url": "https://admin.eyelovewear.com/payment/canceled/",
+        },
+        "transactions": [{
+            "amount": {
+                "total": "10.00",
+                "currency": "USD"
+            },
+            "description": "Testing PayPal payment transaction."
+        }]
+    })
+
+    if payment.create():
+        for link in payment.links:
+            if link.rel == "approval_url":
+                # Convert to str to avoid Google App Engine Unicode issue
+                # https://github.com/paypal/rest-api-sdk-python/pull/58
+                approval_url = str(link.href)
+                # return JsonResponse({'approval_url': approval_url})
+                print("Redirect for approval: %s" % (approval_url))
+                return redirect(approval_url)
+    else:
+        print(payment.error)
+        return JsonResponse({'error': 'payment not created'})

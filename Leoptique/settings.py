@@ -261,3 +261,7 @@ AUTHENTICATION_BACKENDS = {
 #     'https://www.googleapis.com/auth/userinfo.email',
 #     'https://www.googleapis.com/auth/userinfo.profile',
 # ]
+
+PAYPAL_CLIENT_ID = 'AWlqoPFcKFhlQmjV3xRz35bKkBhRCPpOZmOmQXW_yVojG6KyW1WWpDhIMPaC6nbiWmGOdWkppsU9-wNp'
+PAYPAL_CLIENT_SECRET = 'EMGtvP4DSRuS0w44a1qJVI0ybMw1myM_iijM4Z83hZE9AagQd1kFzsgx54Wzz5kiJStmDL8ZVcIla3qF'
+PAYPAL_MODE = 'sandbox'
