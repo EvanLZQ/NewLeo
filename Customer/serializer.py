@@ -112,6 +112,9 @@ class ShoppingCartSerializer(serializers.ModelSerializer):
 
         return instance
 
+    def get_active_subtotal(self, obj):
+        return obj.active_sets_subtotal()
+
 
 class StoreCreditActivitySerializer(serializers.ModelSerializer):
     class Meta:
