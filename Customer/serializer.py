@@ -84,12 +84,14 @@ class CustomerProfileSerializer(serializers.ModelSerializer):
 
 class ShoppingCartSerializer(serializers.ModelSerializer):
     eyeglasses_set = CompleteSetSerializer(many=True, required=False)
+    active_subtotal = serializers.SerializerMethodField()
 
     class Meta:
         model = ShoppingCart
         fields = [
             'id',
             'eyeglasses_set',
+            'active_subtotal',
             'created_at',
             'updated_at',
         ]

@@ -102,6 +102,9 @@ class ShoppingCart(models.Model):
         other_cart.eyeglasses_set.clear()
         other_cart.save()
 
+    def active_sets_subtotal(self):
+        return sum([cs.sub_total for cs in self.eyeglasses_set.filter(saved_for_later=False)])
+
     class Meta:
         db_table = 'ShoppingCart'
         verbose_name = 'Shopping Cart'
