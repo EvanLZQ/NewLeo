@@ -16,9 +16,13 @@ class UploadImageAdmin(admin.ModelAdmin):
         return None
 
 
+class PageImageAdmin(admin.ModelAdmin):
+    list_display = ('page', 'section', 'order')
+
+
 admin.site.register(Address)
 admin.site.register(Coupon)
 admin.site.register(ImageUpload, UploadImageAdmin)
 admin.site.register(CurrencyConversion)
 admin.site.register(FAQ)
-admin.site.register(PageImage)
+admin.site.register(PageImage, PageImageAdmin)
