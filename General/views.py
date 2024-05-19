@@ -22,8 +22,8 @@ def getFAQContents(request):
 
 @api_view(['GET'])
 def getPageImage(request):
-    imgPage = request.data.get('page')
-    imgSection = request.data.get('section')
+    imgPage = request.query_params.get('page')
+    imgSection = request.query_params.get('section')
     pageImages = PageImage.objects.filter(
         page=imgPage, section=imgSection)
     serializer = PageImageSerializer(pageImages, many=True)
