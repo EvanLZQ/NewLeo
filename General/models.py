@@ -139,8 +139,8 @@ class PageImage(models.Model):
     image = models.ImageField(upload_to='page_images/')
     page = models.CharField(max_length=200)
     section = models.CharField(max_length=200)
-    order = models.IntegerField(MaxValueValidator(
-        20), MinValueValidator(1), default=1)
+    order = models.IntegerField(validators=[MaxValueValidator(
+        20), MinValueValidator(1)], default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
