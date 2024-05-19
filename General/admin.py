@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Address, Coupon, ImageUpload, CurrencyConversion, FAQ
+from .models import Address, Coupon, ImageUpload, CurrencyConversion, FAQ, PageImage
 
 # Register your models here.
 
@@ -21,3 +21,4 @@ admin.site.register(Coupon)
 admin.site.register(ImageUpload, UploadImageAdmin)
 admin.site.register(CurrencyConversion)
 admin.site.register(FAQ)
+admin.site.register(PageImage)
