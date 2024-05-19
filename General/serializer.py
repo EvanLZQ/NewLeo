@@ -55,9 +55,9 @@ class FAQSerializer(serializers.ModelSerializer):
 
 
 class PageImageSerializer(serializers.ModelSerializer):
-    image = serializers.SerializerMethodField
+    img_url = serializers.SerializerMethodField
 
-    def get_image(self, obj):
+    def get_img_url(self, obj):
         if obj.image:
             return f'https://admin.eyelovewear.com{obj.image.url}'
         return None
@@ -67,7 +67,7 @@ class PageImageSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'title',
-            'image',
+            'img_url',
             'page',
             'section',
             'order'
