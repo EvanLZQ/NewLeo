@@ -132,3 +132,22 @@ class FAQ(models.Model):
         db_table = 'FAQ'
         verbose_name = 'Question and Answer'
         verbose_name_plural = 'Questions and Answers'
+
+
+class PageImage(models.Model):
+    title = models.CharField(max_length=100)
+    image = models.ImageField(upload_to='page_images/')
+    page = models.CharField(max_length=200)
+    section = models.CharField(max_length=200)
+    order = models.IntegerField(MaxValueValidator(
+        20), MinValueValidator(1), default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.title
+
+    class Meta:
+        db_table = "PageImage"
+        verbose_name = 'Page Image'
+        verbose_name_plural = 'Page Images'

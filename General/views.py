@@ -1,7 +1,7 @@
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
-from .models import CurrencyConversion, FAQ
-from .serializer import CurrencySerializer, FAQSerializer
+from .models import CurrencyConversion, FAQ, PageImage
+from .serializer import CurrencySerializer, FAQSerializer, PageImageSerializer
 
 # Create your views here.
 
@@ -18,3 +18,13 @@ def getFAQContents(request):
     faq = FAQ.objects.all()
     serializer = FAQSerializer(faq, many=True)
     return Response(serializer)
+
+
+@api_view(['GET'])
+def getPageImage(request):
+    imgCategory = request.get('category')
+    imgSection = request.get('section')
+    pageImages = PageImage.objects.filter(
+        category=imgCategory, section=imgSection)
+    serializer = PageImageSerializer(pageImages, many=True)
+    return Response(serializer.data)

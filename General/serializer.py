@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Address, ImageUpload, Coupon, CurrencyConversion, FAQ
+from .models import Address, ImageUpload, Coupon, CurrencyConversion, FAQ, PageImage
 
 
 class AddressSerializer(serializers.ModelSerializer):
@@ -52,3 +52,23 @@ class FAQSerializer(serializers.ModelSerializer):
     class Meta:
         model = FAQ
         fields = '__all__'
+
+
+class PageImageSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField
+
+    def get_image(self, obj):
+        if obj.image:
+            return f'https://admin.eyelovewear.com{obj.image.url}'
+        return None
+
+    class Meta:
+        model = PageImage
+        fields = [
+            'id',
+            'title',
+            'image',
+            'page',
+            'section',
+            'order'
+        ]

@@ -24,8 +24,6 @@ admin.site.index_title = 'Home Page'
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    # path("admin/Blog/bloginfo/add/tinymce/upload_image",
-    #      views.upload_image, name="tinymce_upload"),
     path("api/products/", include("Product.urls")),
     path("api/lens/", include("Lens.urls")),
     path('api/user/', include("Customer.urls")),
