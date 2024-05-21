@@ -50,10 +50,10 @@ class Coupon(models.Model):
     online = models.BooleanField(default=False)
     # applied product list
     applied_product = models.ManyToManyField(
-        "Product.ProductInstance", related_name='coupons')
+        "Product.ProductInstance", related_name='coupons', blank=True, null=True)
     # valid customer list
     valid_customer = models.ManyToManyField(
-        "Customer.CustomerInfo", related_name='coupons')
+        "Customer.CustomerInfo", related_name='coupons', blank=True, null=True)
     # discount type for frame
     frame_discount_type = models.CharField(
         max_length=50, choices=DISCOUNT_TYPE, default="Percentage")
