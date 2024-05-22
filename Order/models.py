@@ -1,6 +1,8 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db.models import Sum
+from Order.service.order_service import OrderService
+
 # Create your models here.
 
 __all__ = ['OrderInfo', 'OrderTax',
@@ -13,6 +15,8 @@ class OrderInfo(models.Model):
     email = models.EmailField()
     customer = models.ForeignKey('Customer.CustomerInfo', null=True,
                                  on_delete=models.SET_NULL, blank=True, related_name='order')
+    coupon_used = models.ForeignKey(
+        'General.Coupon', null=True, on_delete=models.SET_NULL, blank=True, related_name='order')
     order_number = models.CharField(max_length=20)
     order_status = models.CharField(max_length=50,
                                     choices=[('NULL', 'Null'), ('PROCESSING', 'Processing'), ('SHIPPED', 'Shipped'),
@@ -50,14 +54,8 @@ class OrderInfo(models.Model):
     def __str__(self):
         return self.order_number
 
-    def calculate_sub_total(self):
-        # Calculate the sum of sub_total of all related CompleteSet instances
-        total = CompleteSet.objects.filter(order=self).aggregate(
-            Sum('sub_total'))['sub_total__sum']
-        return total if total is not None else 0
-
     def save(self, *args, **kwargs):
-        self.sub_total = self.calculate_sub_total()
+        OrderService.update_order_totals(self)
         super(OrderInfo, self).save(*args, **kwargs)
 
     class Meta:
@@ -216,32 +214,8 @@ class CompleteSet(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def calculate_sub_total(self):
-        total_price = 0
-        # Check if self.frame is not None
-        if self.frame:
-            # Check if self.frame.price is not None
-            if self.frame.price is not None:
-                total_price += self.frame.price
-            else:
-                # If self.frame.price is None, get the price from the linked ProductInfo
-                # Ensure there's a link to a ProductInfo and it has a price
-                if self.frame.product and self.frame.product.price is not None:
-                    total_price += self.frame.product.price
-        if self.usage:
-            total_price += self.usage.add_on_price
-        if self.color:
-            total_price += self.color.add_on_price
-        if self.coating:
-            total_price += self.coating.add_on_price
-        if self.index:
-            total_price += self.index.add_on_price
-        if self.density:
-            total_price += self.density.add_on_price
-        return total_price
-
     def save(self, *args, **kwargs):
-        self.sub_total = self.calculate_sub_total()
+        self.sub_total = OrderService.calculate_complete_set_sub_total(self)
         super(CompleteSet, self).save(*args, **kwargs)
 
     class Meta:
