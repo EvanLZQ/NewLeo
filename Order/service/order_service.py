@@ -1,6 +1,6 @@
 # your_app/services/order_service.py
 from django.db.models import Sum
-from ..models import CompleteSet
+from django.apps import apps
 
 
 class OrderService:
@@ -60,6 +60,7 @@ class OrderService:
 
     @staticmethod
     def calculate_sub_total(order):
+        CompleteSet = apps.get_model('Order', 'CompleteSet')
         complete_sets = CompleteSet.objects.filter(order=order)
         total = 0
         for complete_set in complete_sets:
