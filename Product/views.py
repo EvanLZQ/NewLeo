@@ -69,49 +69,89 @@ def filterProduct(request):
         import json
         filter_dict = json.loads(filter_object)
 
+        # Initialize a combined Q object with all True (so it can be used with & operator)
+        combined_q_objects = Q()
+
         # Build the Q object for colors
         colors = filter_dict.get('Color', [])
-        color_q_objects = Q()
-        for color in colors:
-            color_q_objects |= Q(productInstance__color_display_name=color)
+        if colors:
+            color_q_objects = Q()
+            for color in colors:
+                color_q_objects |= Q(productInstance__color_display_name=color)
+            combined_q_objects &= color_q_objects
 
         # Build the Q object for gender
         genders = filter_dict.get('Gender', [])
-        gender_q_objects = Q()
-        for gender in genders:
-            gender_q_objects |= Q(gender=gender)
+        if genders:
+            gender_q_objects = Q()
+            for gender in genders:
+                gender_q_objects |= Q(gender=gender)
+            combined_q_objects &= gender_q_objects
 
         # Build the Q object for size
         sizes = filter_dict.get('Size', [])
-        size_q_objects = Q()
-        for size in sizes:
-            size_q_objects |= Q(letter_size=size)
+        if sizes:
+            size_q_objects = Q()
+            for size in sizes:
+                size_q_objects |= Q(letter_size=size)
+            combined_q_objects &= size_q_objects
 
         # Build the Q object for Rim
         rims = filter_dict.get('Rim', [])
-        rim_q_objects = Q()
-        for rim in rims:
-            rim_q_objects |= Q(frame_style=rim)
-
-        # Build the Q object for tags
-        shape = filter_dict.get('Shape', [])
-        material = filter_dict.get('Material', [])
-        usage = filter_dict.get('Usage', [])
-        tags = shape + material + usage
-        tag_q_objects = Q()
-        for tag in tags:
-            tag_q_objects |= Q(productTag__name=tag)
+        if rims:
+            rim_q_objects = Q()
+            for rim in rims:
+                rim_q_objects |= Q(frame_style=rim)
+            combined_q_objects &= rim_q_objects
 
         # Build the Q object for keyword search
-        search = filter_dict.get('Search', [])
+        search = filter_dict.get('Search', None)
         if search:
             search_q_objects = Q()
             search_q_objects |= Q(name__icontains=search)
             search_q_objects |= Q(model_number__icontains=search)
-            products = products.filter(search_q_objects)
+            combined_q_objects &= search_q_objects
 
-        # Combine search results
-        combined_q_objects = color_q_objects & gender_q_objects & size_q_objects & rim_q_objects & tag_q_objects
+        # Build the Q object for shape
+        shapes = filter_dict.get('Shape', [])
+        if shapes:
+            shape_q_objects = Q()
+            for shape in shapes:
+                shape_q_objects |= Q(productTag__name=shape)
+            combined_q_objects &= shape_q_objects
+
+        # Build the Q object for material
+        materials = filter_dict.get('Material', [])
+        if materials:
+            material_q_objects = Q()
+            for material in materials:
+                material_q_objects |= Q(productTag__name=material)
+            combined_q_objects &= material_q_objects
+
+        # Build the Q object for usage
+        usages = filter_dict.get('Usage', [])
+        if usages:
+            usage_q_objects = Q()
+            for usage in usages:
+                usage_q_objects |= Q(productTag__name=usage)
+            combined_q_objects &= usage_q_objects
+
+        # Build the Q object for occasion
+        occasions = filter_dict.get('Occasion', [])
+        if occasions:
+            occasion_q_objects = Q()
+            for occasion in occasions:
+                occasion_q_objects |= Q(productTag__name=occasion)
+            combined_q_objects &= occasion_q_objects
+
+        # Build the Q object for collection
+        collections = filter_dict.get('Collection', [])
+        if collections:
+            collection_q_objects = Q()
+            for collection in collections:
+                collection_q_objects |= Q(productTag__name=collection)
+            combined_q_objects &= collection_q_objects
+
         # Filter search results
         products = products.filter(combined_q_objects).distinct()
 
