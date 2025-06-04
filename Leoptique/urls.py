@@ -18,8 +18,8 @@ from django.urls import path, include, re_path
 from . import views
 
 
-admin.site.site_header = 'Leoptique Admin Site'
-admin.site.site_title = 'Leoptique Admin'
+admin.site.site_header = 'Eyelovewear Admin Site'
+admin.site.site_title = 'Eyelovewear Admin'
 admin.site.index_title = 'Home Page'
 
 urlpatterns = [
@@ -30,5 +30,6 @@ urlpatterns = [
     path('api/order/', include("Order.urls")),
     path('api/blog/', include("Blog.urls")),
     path('api/general/', include("General.urls")),
+    path("api/prescriptions/", include("Prescription.urls")),
     re_path(r'^auth/', include('drf_social_oauth2.urls', namespace='drf')),
 ]
