@@ -46,3 +46,18 @@ def prescription_detail(request, pk):
     elif request.method == 'DELETE':
         prescription.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['POST'])
+def fetch_prescriptions_by_ids_post(request):
+    ids = request.data.get('ids')
+
+    if not ids or not isinstance(ids, list):
+        return Response(
+            {"error": "'ids' must be a non-empty list."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    prescriptions = PrescriptionInfo.objects.filter(id__in=ids)
+    serializer = PrescriptionSerializer(prescriptions, many=True)
+    return Response(serializer.data)
