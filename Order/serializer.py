@@ -5,6 +5,8 @@ from Product.serializer import ProductInstanceSerializer
 from Lens.models import *
 from Product.models import ProductInstance
 from General.serializer import AddressSerializer
+from Prescription.serializer import PrescriptionSerializer
+from Prescription.models import PrescriptionInfo
 
 
 class CompleteSetSerializer(serializers.ModelSerializer):
@@ -16,6 +18,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
     frame = serializers.SerializerMethodField()
     density = serializers.CharField(
         source='density.name', required=False, allow_null=True, default=None)
+    prescription = PrescriptionSerializer()  # Return full nested data
 
     class Meta:
         model = CompleteSet
@@ -27,6 +30,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             'coating',
             'index',
             'density',
+            'prescription',
             'sub_color',
             'sub_total',
             'saved_for_later',
@@ -44,7 +48,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         return rep
 
     def create(self, data):
-        print(self.context['request'].data)
+        # print(self.context['request'].data)
         usage_name = data.pop('usage')['name']
         usage_obj = LensUsage.objects.get(name=usage_name)
 
@@ -63,8 +67,20 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         density_name = data.pop('density')['name']
         density_obj = LensDensity.objects.get(name=density_name)
 
+        prescription_data = self.context['request'].data.get('prescription')
+        prescription_obj = PrescriptionInfo.objects.get(
+            id=prescription_data['id']) if prescription_data else None
+
         completeset = CompleteSet.objects.create(
-            color=color_obj, usage=usage_obj, coating=coating_obj, frame=frame_obj, density=density_obj, index=index_obj, sub_total=data.get('sub_total', 0))
+            color=color_obj,
+            usage=usage_obj,
+            coating=coating_obj,
+            frame=frame_obj,
+            density=density_obj,
+            index=index_obj,
+            prescription=prescription_obj,
+            sub_total=data.get('sub_total', 0)
+        )
 
         return completeset
 
@@ -103,6 +119,11 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         if 'saved_for_later' in validated_data:
             saved_for_later = validated_data.pop('saved_for_later')
             instance.saved_for_later = saved_for_later
+
+        prescription_data = self.context['request'].data.get('prescription')
+        if prescription_data:
+            instance.prescription = PrescriptionInfo.objects.get(
+                id=prescription_data['id'])
 
         instance.save()
         return instance
@@ -149,6 +170,7 @@ class CompleteSetObjectSerializer(serializers.ModelSerializer):
     frame = serializers.SerializerMethodField()
     density = serializers.CharField(
         source='density.name', required=False, allow_null=True, default=None)
+    prescription = PrescriptionSerializer(allow_null=True)
 
     class Meta:
         model = CompleteSet
@@ -163,6 +185,7 @@ class CompleteSetObjectSerializer(serializers.ModelSerializer):
             'sub_color',
             'sub_total',
             'saved_for_later',
+            'prescription',
         ]
 
     def get_frame(self, obj):
