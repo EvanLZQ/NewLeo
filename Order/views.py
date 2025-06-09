@@ -57,7 +57,8 @@ def updateCompleteSet(request, set_id):
     except CompleteSet.DoesNotExist:
         return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
     serializer = CompleteSetSerializer(
-        instance=set, data=request.data, partial=True)
+        instance=set, data=request.data, partial=True, context={'request': request}
+    )
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
