@@ -18,7 +18,8 @@ class CompleteSetSerializer(serializers.ModelSerializer):
     frame = serializers.SerializerMethodField()
     density = serializers.CharField(
         source='density.name', required=False, allow_null=True, default=None)
-    prescription = PrescriptionSerializer()  # Return full nested data
+    prescription = PrescriptionSerializer(
+        required=False, allow_null=True)  # Return full nested data
 
     class Meta:
         model = CompleteSet
@@ -124,6 +125,9 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         if prescription_data:
             instance.prescription = PrescriptionInfo.objects.get(
                 id=prescription_data['id'])
+        else:
+            # If explicitly null, clear the FK
+            instance.prescription = None
 
         instance.save()
         return instance
