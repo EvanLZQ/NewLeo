@@ -21,19 +21,47 @@ def getProducts(request):
 def getPageProducts(request):
     exclude = request.GET.get('exclude', None)
     tag = request.GET.get('tag', None)
+
+    # Filter the products, only include those with a non-null 'productInstance' that is marked as 'online'
     products = ProductInfo.objects.filter(
         Q(productInstance__isnull=False) & Q(productInstance__online=True)).distinct()
+
+    # If the 'exclude' parameter is provided, exclude products with the specified model number
     if exclude:
         products = products.exclude(model_number=exclude)
+
+    # If the 'tag' parameter is provided, filter products by the provided tag name
     if tag:
         products = products.filter(productTag__name=tag)
+
+    # Get the 'number' parameter from the query string (items per page), default to 6 if not provided
     number_of_page = request.GET.get('number', 6)
+
+    # Try to convert 'number' to an integer, and handle invalid values
+    try:
+        # Convert the number of items per page to an integer
+        number_of_page = int(number_of_page)
+        if number_of_page <= 0:  # If the number is non-positive, default it to 6
+            number_of_page = 6
+    except ValueError:  # Catch ValueError if 'number' can't be converted to an integer
+        number_of_page = 6  # Default to 6 if the value is invalid
+
+    # Create a Paginator object to paginate the products based on the 'number_of_page'
     paginator = Paginator(products, number_of_page)
+
+    # Get the 'page' parameter from the query string (default is page 1)
     page_number = int(request.GET.get('page', 1))
+
+    # Check if the page number is out of range (greater than the number of available pages or less than 1)
     if page_number > paginator.num_pages or page_number < 1:
-        return Response([])
+        return Response([])  # Return an empty list if the page is out of range
+
+    # Get the page object for the requested page number
     page_obj = paginator.get_page(page_number)
+
+    # Serialize the paginated products for the response
     serializer = ProductSerializer(page_obj, many=True)
+
     return Response(serializer.data)
 
 

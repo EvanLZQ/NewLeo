@@ -121,13 +121,24 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             saved_for_later = validated_data.pop('saved_for_later')
             instance.saved_for_later = saved_for_later
 
-        prescription_data = self.context['request'].data.get('prescription')
-        if prescription_data:
-            instance.prescription = PrescriptionInfo.objects.get(
-                id=prescription_data['id'])
-        else:
-            # If explicitly null, clear the FK
-            instance.prescription = None
+        if 'prescription' in self.context['request'].data:
+            prescription_payload = self.context['request'].data.get(
+                'prescription')
+            if prescription_payload is None:
+                # 显式传 null => 清空处方
+                instance.prescription = None
+            else:
+                # 只需 id 即可
+                try:
+                    rx_id = prescription_payload.get('id')
+                    instance.prescription = PrescriptionInfo.objects.get(
+                        id=rx_id)
+                except (TypeError, KeyError):
+                    raise serializers.ValidationError(
+                        {'prescription': 'Expected object with { "id": <number> }'})
+                except PrescriptionInfo.DoesNotExist:
+                    raise serializers.ValidationError(
+                        {'prescription': f'Prescription id {rx_id} not found'})
 
         instance.save()
         return instance
