@@ -11,57 +11,82 @@ from .serializer import *
 
 @api_view(['GET'])
 def getProducts(request):
-    products = ProductInfo.objects.filter(
-        Q(productInstance__isnull=False) & Q(productInstance__online=True)).distinct()
+    products = (
+        ProductInfo.objects.filter(
+            Q(productInstance__isnull=False) & Q(productInstance__online=True)
+        )
+        # 外键
+        .select_related('supplier')
+        # 一对多 / 多对多
+        .prefetch_related(
+            'productInstance__color_img',     # 实例的颜色图
+            'productInstance__productImage',  # 实例下的所有图片
+            'productReview',                  # 产品评论
+            'productTag'                      # 产品标签 (M2M)
+        )
+        .distinct()
+    )
     serializer = ProductSerializer(products, many=True)
     return Response(serializer.data)
 
 
 @api_view(['GET'])
 def getPageProducts(request):
-    exclude = request.GET.get('exclude', None)
-    tag = request.GET.get('tag', None)
+    # 从前端 query string 获取可选参数
+    exclude = request.GET.get('exclude', None)   # 需要排除的型号
+    tag = request.GET.get('tag', None)           # 标签筛选
 
-    # Filter the products, only include those with a non-null 'productInstance' that is marked as 'online'
-    products = ProductInfo.objects.filter(
-        Q(productInstance__isnull=False) & Q(productInstance__online=True)).distinct()
+    # 基础查询：只取有实例（productInstance）且实例标记为 online 的产品
+    products = (
+        ProductInfo.objects.filter(
+            Q(productInstance__isnull=False) & Q(productInstance__online=True)
+        )
+        # select_related：用于一对一/多对一关系（例如 supplier），避免 N+1 查询
+        .select_related('supplier')
+        # prefetch_related：用于一对多/多对多关系，提前把相关数据取出来，避免序列化时反复查数据库
+        .prefetch_related(
+            'productInstance__color_img',     # ProductInstance → ProductColorImg
+            'productInstance__productImage',  # ProductInstance → ProductImage
+            'productReview',                  # ProductInfo → ProductReview
+            'productTag'                      # ProductInfo → ProductTag (M2M)
+        )
+        .distinct()  # 防止因多对多或连接关系导致重复数据
+    )
 
-    # If the 'exclude' parameter is provided, exclude products with the specified model number
+    # 按需排除某个型号
     if exclude:
         products = products.exclude(model_number=exclude)
 
-    # If the 'tag' parameter is provided, filter products by the provided tag name
+    # 按需筛选标签
     if tag:
         products = products.filter(productTag__name=tag)
 
-    # Get the 'number' parameter from the query string (items per page), default to 6 if not provided
-    number_of_page = request.GET.get('number', 6)
-
-    # Try to convert 'number' to an integer, and handle invalid values
+    # 获取分页大小（默认 8 个产品）
+    number_of_page = request.GET.get('number', 8)
     try:
-        # Convert the number of items per page to an integer
         number_of_page = int(number_of_page)
-        if number_of_page <= 0:  # If the number is non-positive, default it to 6
-            number_of_page = 6
-    except ValueError:  # Catch ValueError if 'number' can't be converted to an integer
-        number_of_page = 6  # Default to 6 if the value is invalid
+        if number_of_page <= 0:
+            number_of_page = 8
+    except ValueError:
+        number_of_page = 8
 
-    # Create a Paginator object to paginate the products based on the 'number_of_page'
+    # 创建分页器
     paginator = Paginator(products, number_of_page)
 
-    # Get the 'page' parameter from the query string (default is page 1)
+    # 获取当前页码（默认为第 1 页）
     page_number = int(request.GET.get('page', 1))
 
-    # Check if the page number is out of range (greater than the number of available pages or less than 1)
+    # 如果页码超出范围，则返回空数组
     if page_number > paginator.num_pages or page_number < 1:
-        return Response([])  # Return an empty list if the page is out of range
+        return Response([])
 
-    # Get the page object for the requested page number
+    # 获取对应页的数据
     page_obj = paginator.get_page(page_number)
 
-    # Serialize the paginated products for the response
+    # 序列化分页结果
     serializer = ProductSerializer(page_obj, many=True)
 
+    # 返回结果为纯数组，方便前端无限滚动直接使用
     return Response(serializer.data)
 
 

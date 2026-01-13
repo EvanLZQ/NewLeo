@@ -1,0 +1,18 @@
+{% extends "admin/base_site.html" %} {% load i18n %} {% block content %}
+<h1>{{ title }}</h1>
+
+<div class="module">
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    <fieldset class="module aligned">{{ form.as_p }}</fieldset>
+    <div class="submit-row">
+      <input type="submit" value="开始导入" class="default" />
+      <a class="button" href="../">返回列表</a>
+    </div>
+  </form>
+</div>
+
+<p style="margin-top: 16px; opacity: 0.8">
+  注意：若 Excel 指向的图片在 zip 内找不到，该图片会被跳过，并在导入结果中提示。
+</p>
+{% endblock %}
