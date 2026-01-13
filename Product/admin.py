@@ -4,6 +4,34 @@ from .models import *
 from django.utils.safestring import mark_safe
 
 
+class ProductImportForm(forms.Form):  # 使用 Form（不落库）
+    excel_file = forms.FileField(  # Excel 上传字段
+        label="Excel 文件（.xlsx）",  # 字段显示名
+        help_text="必须包含 sheet：Product、ProductImage，且列名固定。",  # 说明
+    )  # 字段结束
+    images_zip_file = forms.FileField(  # zip 上传字段
+        label="图片 zip 文件（.zip）",  # 字段显示名
+        help_text="zip 内文件路径/文件名应与 ProductImage.images 列匹配（支持容错）。",  # 说明
+    )  # 字段结束
+    replace_existing_images = forms.BooleanField(  # 是否替换旧图片
+        label="替换已有图片（删除旧 ProductImage 记录）",  # 显示名
+        required=False,  # 可选
+        initial=False,  # 默认不替换（更安全）
+    )  # 字段结束
+
+    def clean_excel_file(self):  # 校验 Excel 扩展名
+        f = self.cleaned_data["excel_file"]  # 取文件
+        if not f.name.lower().endswith(".xlsx"):  # 只允许 xlsx
+            raise forms.ValidationError("请上传 .xlsx 格式的 Excel")  # 抛表单错误
+        return f  # 返回文件
+
+    def clean_images_zip_file(self):  # 校验 zip 扩展名
+        f = self.cleaned_data["images_zip_file"]  # 取文件
+        if not f.name.lower().endswith(".zip"):  # 只允许 zip
+            raise forms.ValidationError("请上传 .zip 格式的图片压缩包")  # 抛表单错误
+        return f  # 返回文件
+
+
 class ProductTagInline(admin.TabularInline):
     model = ProductTag.product.through
 
