@@ -1,0 +1,11 @@
+{% extends "admin/change_list.html" %} {% load i18n admin_urls %} {% block
+object-tools %} {{ block.super }}
+<li>
+  <a
+    href="{% url 'admin:'|add:opts.app_label|add:'_'|add:opts.model_name|add:'_import' %}"
+    class="addlink"
+  >
+    导入产品（Excel + zip）
+  </a>
+</li>
+{% endblock %}
