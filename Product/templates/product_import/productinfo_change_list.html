@@ -1,6 +1,9 @@
-{% extends "admin/change_list.html" %} {% load i18n %} {% block
-object-tools-items %} {{ block.super }}
-<li>
-  <a href="import/" class="addlink">导入产品（Excel + zip）</a>
-</li>
+{% extends "admin/change_list.html" %} 
+{% load i18n %} 
+
+{% block object-tools-items %} 
+    {{ block.super }}
+    <li>
+        <a href="import/" class="addlink">导入产品（Excel + zip）</a>
+    </li>
 {% endblock %}
