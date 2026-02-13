@@ -127,6 +127,9 @@ def google_login(request):
     if not credential:
         return Response({"error": "Missing credential"}, status=400)
 
+    if not settings.GOOGLE_OAUTH_CLIENT_ID:
+        return Response({"error": "Server misconfigured: missing GOOGLE_OAUTH_CLIENT_ID"}, status=500)
+
     # verify against server-side Google client id (NOT request.data["clientId"])
     try:
         id_info = id_token.verify_oauth2_token(

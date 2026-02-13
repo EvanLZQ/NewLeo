@@ -119,8 +119,6 @@ MIDDLEWARE = [
 ]
 
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
-if not GOOGLE_OAUTH_CLIENT_ID:
-    raise RuntimeError("Missing GOOGLE_OAUTH_CLIENT_ID environment variable")
 
 ROOT_URLCONF = "Leoptique.urls"
 
