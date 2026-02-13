@@ -7,7 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from General.models import Coupon, Address
 from General.serializer import CouponSerializer, ImageSerializer, AddressSerializer
 from rest_framework.parsers import MultiPartParser
-
+from django.conf import settings
 from Prescription.models import PrescriptionInfo
 from Prescription.serializer import PrescriptionSerializer
 from .serializer import *
@@ -16,11 +16,12 @@ from rest_framework.authentication import SessionAuthentication
 from Leoptique.authentication import AccessTokenAuthentication
 from google.oauth2 import id_token
 from django.utils import timezone
+import uuid
 import datetime
 from .models import CustomerInfo, ShoppingCart, StoreCreditActivity, WishList
 from oauth2_provider.models import AccessToken, Application, RefreshToken
 from rest_framework.permissions import AllowAny
-from google.auth.transport import requests
+from google.auth.transport import requests as google_requests
 import uuid
 from django.views.decorators.csrf import csrf_exempt
 from Order.serializer import OrderSerializer
@@ -119,66 +120,73 @@ def logout_view(request):
     return Response({"message": "Logged out successfully!"})
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([AllowAny])
 def google_login(request):
-    credential = request.data.get('credential')
-    client_id = request.data.get('clientId')
+    credential = request.data.get("credential")
+    if not credential:
+        return Response({"error": "Missing credential"}, status=400)
 
-    # Verify the token
+    # verify against server-side Google client id (NOT request.data["clientId"])
     try:
         id_info = id_token.verify_oauth2_token(
-            credential, requests.Request(), client_id)
-        if id_info['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
-            raise ValueError('Wrong issuer.')
-    except ValueError:
-        return Response({'error': 'Invalid token'}, status=400)
+            credential,
+            google_requests.Request(),
+            settings.GOOGLE_OAUTH_CLIENT_ID,
+        )
+        if id_info.get("iss") not in ["accounts.google.com", "https://accounts.google.com"]:
+            return Response({"error": "Wrong issuer"}, status=400)
+    except Exception:
+        return Response({"error": "Invalid token"}, status=400)
 
-    # Get or create user
-    # Extract the relevant fields from id_info
-    family_name = id_info.get('family_name', '')
-    given_name = id_info.get('given_name', '')
-    email = id_info.get('email', '')
-    picture = id_info.get('picture', '')
+    email = id_info.get("email")
+    if not email:
+        return Response({"error": "Missing email"}, status=400)
 
-    # Get or create user
+    if id_info.get("email_verified") is not True:
+        return Response({"error": "Email not verified"}, status=400)
+
+    family_name = id_info.get("family_name", "")
+    given_name = id_info.get("given_name", "")
+    picture = id_info.get("picture", "")
+
     user, created = CustomerInfo.objects.get_or_create(
         username=email,
-        defaults={
-            'first_name': given_name,
-            'last_name': family_name,
-            'icon_url': picture
-        }
+        defaults={"first_name": given_name,
+                  "last_name": family_name, "icon_url": picture},
     )
-
-    # If the user already exists, update their details
     if not created:
         user.first_name = given_name
         user.last_name = family_name
         user.icon_url = picture
         user.save()
 
-    application = Application.objects.get(
-        client_id="l5cAOrriN5gIvTiLjOENupQsp6ppISdp1iYyU8iu")
+    # get DOT Application by stable name; create if missing
+    application, _ = Application.objects.get_or_create(
+        name="eyelovewear-web",
+        defaults={
+            "client_type": Application.CLIENT_CONFIDENTIAL,
+            "authorization_grant_type": Application.GRANT_PASSWORD,  # or whatever you use
+        },
+    )
 
-    generated_token = str(uuid.uuid4())
-    # Generate access token
+    access_token_value = uuid.uuid4().hex  # better than str(uuid.uuid4())
     token = AccessToken.objects.create(
         user=user,
-        token=generated_token,
+        token=access_token_value,
         application=application,
-        expires=timezone.now() + datetime.timedelta(days=1)
+        expires=timezone.now() + datetime.timedelta(days=1),
+        scope="read write",
     )
 
     refresh_token = RefreshToken.objects.create(
         user=user,
-        token=str(uuid.uuid4()),
+        token=uuid.uuid4().hex,
         access_token=token,
-        application=application
+        application=application,
     )
 
-    user.backend = 'django.contrib.auth.backends.ModelBackend'
-
+    user.backend = "django.contrib.auth.backends.ModelBackend"
     login(request, user)
 
     user_brief = {
@@ -191,11 +199,27 @@ def google_login(request):
     }
     response = Response(user_brief, status=200)
 
-    # Set the tokens as cookies
-    response.set_cookie('access_token', token.token,
-                        max_age=3600 * 24, samesite=None, domain='.eyelovewear.com', path='/', httponly=True, secure=True)  # 1 day
-    response.set_cookie('refresh_token', refresh_token.token,
-                        max_age=3600 * 24 * 30, samesite=None, domain='.eyelovewear.com', path='/', httponly=True, secure=True)  # 30 days
+    # cookie settings: samesite must be "None" string when secure cross-site
+    response.set_cookie(
+        "access_token",
+        token.token,
+        max_age=3600 * 24,
+        samesite="None",
+        domain=".eyelovewear.com",
+        path="/",
+        httponly=True,
+        secure=True,
+    )
+    response.set_cookie(
+        "refresh_token",
+        refresh_token.token,
+        max_age=3600 * 24 * 30,
+        samesite="None",
+        domain=".eyelovewear.com",
+        path="/",
+        httponly=True,
+        secure=True,
+    )
     return response
 
 
