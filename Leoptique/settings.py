@@ -84,6 +84,7 @@ INSTALLED_APPS = [
     "General",
     "Lens",
     "Prescription",
+    "lens_workflow",
     "Accessory",
     "Supplier",
     "Blog",
