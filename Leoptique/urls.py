@@ -31,5 +31,6 @@ urlpatterns = [
     path('api/blog/', include("Blog.urls")),
     path('api/general/', include("General.urls")),
     path("api/prescriptions/", include("Prescription.urls")),
+    path("api/lens-workflow/", include("lens_workflow.urls")),
     re_path(r'^auth/', include('drf_social_oauth2.urls', namespace='drf')),
 ]
