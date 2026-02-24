@@ -56,10 +56,18 @@ CSRF_COOKIE_SECURE = True
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
-    'https://localhost:5173',
-    'http://*.eyelovewear.com',
-    'https://*.eyelovewear.com',
-    'https://www.eyelovewear.com',
+    "https://localhost:5173",
+    "https://www.eyelovewear.com",
+    "https://admin.eyelovewear.com",
+    "https://eyelovewear.com",
+]
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.eyelovewear\.com$",
+]
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "x-csrftoken",
+    "x-csrftoken".upper(),
+    "x-csrf-token",
 ]
 
 SITE_ID = 1
