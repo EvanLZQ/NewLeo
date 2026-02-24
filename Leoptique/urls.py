@@ -16,7 +16,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include, re_path
 from . import views
-
+from .views import csrf
 
 admin.site.site_header = 'Eyelovewear Admin Site'
 admin.site.site_title = 'Eyelovewear Admin'
@@ -32,5 +32,6 @@ urlpatterns = [
     path('api/general/', include("General.urls")),
     path("api/prescriptions/", include("Prescription.urls")),
     path("api/lens-workflow/", include("lens_workflow.urls")),
+    path("api/csrf/", csrf),
     re_path(r'^auth/', include('drf_social_oauth2.urls', namespace='drf')),
 ]
