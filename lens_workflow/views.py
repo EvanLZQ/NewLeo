@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-from django.db.models import Prefetch
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -9,9 +8,26 @@ from .models import LensStep, LensOption, LensStepRule, LensOptionAvailability
 from .serializers import (
     LensStepSerializer,
     LensOptionSerializer,
-    NextStepRequestSerializer,
-    SelectionSummaryRequestSerializer,
 )
+
+
+def _parse_int_list(raw_value):
+    """
+    Parse comma-separated integers from query param string.
+    Example: '1,2,3' -> [1, 2, 3]
+    """
+    if not raw_value:
+        return []
+    result = []
+    for part in str(raw_value).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            result.append(int(part))
+        except ValueError:
+            raise ValueError(f"Invalid integer value: '{part}'")
+    return result
 
 
 class LensWorkflowStartView(APIView):
@@ -56,20 +72,35 @@ class LensWorkflowNextView(APIView):
     """
     Given a selected option, return the next step and the valid options for that next step.
 
-    Logic:
-    1) Find selected option
-    2) Find the active step rule for that selected option
-    3) Determine next step from rule
-    4) Find child options from LensOptionAvailability(parent=selected)
-    5) Filter children so they match next_step.code
+    GET params:
+      - selected_option_id: int (required)
+      - selection_path: comma-separated ids (optional), e.g. "1,5,9"
     """
 
-    def post(self, request):
-        serializer = NextStepRequestSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+    def get(self, request):
+        selected_option_id_raw = request.query_params.get("selected_option_id")
+        if not selected_option_id_raw:
+            return Response(
+                {"detail": "selected_option_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        selected_option_id = serializer.validated_data["selected_option_id"]
-        selection_path = serializer.validated_data.get("selection_path", [])
+        try:
+            selected_option_id = int(selected_option_id_raw)
+        except ValueError:
+            return Response(
+                {"detail": "selected_option_id must be an integer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        selection_path_raw = request.query_params.get("selection_path", "")
+        try:
+            selection_path = _parse_int_list(selection_path_raw)
+        except ValueError as e:
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             selected_option = LensOption.objects.get(
@@ -82,9 +113,6 @@ class LensWorkflowNextView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Find workflow rule for this selected option
-        # We do not require the frontend to send current_step_id; selected_option uniquely maps
-        # in this seeded design. If later you add ambiguity, include current_step_id in request.
         rule = (
             LensStepRule.objects.select_related("current_step", "next_step")
             .filter(
@@ -99,7 +127,6 @@ class LensWorkflowNextView(APIView):
 
         # No next step means end of flow
         if not rule:
-            # still return updated path so frontend can finalize
             updated_path = self._append_unique(
                 selection_path, selected_option.id)
             return Response(
@@ -115,7 +142,6 @@ class LensWorkflowNextView(APIView):
 
         next_step = rule.next_step
 
-        # Child options available from selected parent
         availability_qs = (
             LensOptionAvailability.objects.select_related("child_option")
             .filter(
@@ -128,7 +154,6 @@ class LensWorkflowNextView(APIView):
         )
 
         child_options = [row.child_option for row in availability_qs]
-
         updated_path = self._append_unique(selection_path, selected_option.id)
 
         return Response(
@@ -143,7 +168,6 @@ class LensWorkflowNextView(APIView):
 
     @staticmethod
     def _append_unique(selection_path, option_id):
-        # Keep order, avoid accidental duplicates
         if option_id in selection_path:
             return selection_path
         return [*selection_path, option_id]
@@ -153,14 +177,27 @@ class LensWorkflowSummaryView(APIView):
     """
     Optional helper endpoint:
     Given selected option IDs, return selected option details + total add_on_price.
-    Useful for final review screen before add-to-cart.
+
+    GET params:
+      - selected_option_ids: comma-separated ids (required), e.g. "3,10,21,30"
     """
 
-    def post(self, request):
-        serializer = SelectionSummaryRequestSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+    def get(self, request):
+        selected_ids_raw = request.query_params.get("selected_option_ids", "")
 
-        selected_ids = serializer.validated_data["selected_option_ids"]
+        try:
+            selected_ids = _parse_int_list(selected_ids_raw)
+        except ValueError as e:
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not selected_ids:
+            return Response(
+                {"detail": "selected_option_ids is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         options = list(
             LensOption.objects.filter(id__in=selected_ids, is_active=True)
