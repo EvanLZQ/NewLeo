@@ -197,15 +197,30 @@ class CompleteSet(models.Model):
     frame = models.ForeignKey(
         'Product.ProductInstance', on_delete=models.CASCADE)
     usage = models.ForeignKey(
-        'Lens.LensUsage', on_delete=models.SET_NULL, null=True)
+        'lens_workflow.LensOption',
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='complete_sets_as_usage',
+        limit_choices_to={'option_type': 'COLOR_TYPE'},
+    )
     color = models.ForeignKey(
-        'Lens.LensColor', on_delete=models.SET_NULL, null=True)
+        'lens_workflow.LensOption',
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='complete_sets_as_color',
+        limit_choices_to={'option_type': 'COLOR'},
+    )
     coating = models.ForeignKey(
-        'Lens.LensCoating', on_delete=models.SET_NULL, null=True)
+        'lens_workflow.LensOption',
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='complete_sets_as_coating',
+        limit_choices_to={'option_type': 'COATING'},
+    )
     index = models.ForeignKey(
-        'Lens.LensIndex', on_delete=models.SET_NULL, null=True)
-    density = models.ForeignKey(
-        'Lens.LensDensity', on_delete=models.SET_NULL, null=True)
+        'lens_workflow.LensOption',
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='complete_sets_as_index',
+        limit_choices_to={'option_type': 'INDEX'},
+    )
+    density = models.CharField(max_length=50, blank=True, null=True)
     prescription = models.ForeignKey(
         'Prescription.PrescriptionInfo',
         on_delete=models.SET_NULL,
