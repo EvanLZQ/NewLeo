@@ -46,7 +46,7 @@ class OrderService:
     @staticmethod
     def calculate_lens_discount(order, complete_set):
         frame_price = complete_set.frame.price if complete_set.frame and complete_set.frame.price else 0
-        lens_price = complete_set.calculate_sub_total() - frame_price
+        lens_price = OrderService.calculate_complete_set_sub_total(complete_set) - frame_price
         lens_discount = 0
 
         if OrderService.is_coupon_applicable(order):
@@ -153,6 +153,5 @@ class OrderService:
             total_price += complete_set.coating.add_on_price
         if complete_set.index:
             total_price += complete_set.index.add_on_price
-        if complete_set.density:
-            total_price += complete_set.density.add_on_price
+        # density is now a plain CharField — no add_on_price contribution
         return total_price
