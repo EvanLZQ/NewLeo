@@ -106,7 +106,7 @@ class ProductInstance(models.Model):
     reduced_price = models.DecimalField(
         max_digits=5, decimal_places=2, default=0)
     price = models.DecimalField(
-        max_digits=5, decimal_places=2, blank=True, null=True)
+        max_digits=5, decimal_places=2, blank=True, default=0)
     color_img = models.ForeignKey(
         'Product.ProductColorImg', on_delete=models.SET_NULL, null=True)
     color_base_name = models.CharField(max_length=20, choices=COLOR_CHOICES)
@@ -115,6 +115,11 @@ class ProductInstance(models.Model):
     online = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if not self.price and self.product_id:
+            self.price = self.product.price
+        super().save(*args, **kwargs)
 
     def color_image_preview(self):
         return mark_safe(f'<img src="{self.color_img_url}" style="max-width: 300px; margin: 5px; border-style: solid;">')

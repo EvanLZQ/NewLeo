@@ -135,16 +135,8 @@ class OrderService:
     @staticmethod
     def calculate_complete_set_sub_total(complete_set):
         total_price = 0
-        # Check if complete_set.frame is not None
         if complete_set.frame:
-            # Check if complete_set.frame.price is not None
-            if complete_set.frame.price is not None:
-                total_price += complete_set.frame.price
-            else:
-                # If complete_set.frame.price is None, get the price from the linked ProductInfo
-                # Ensure there's a link to a ProductInfo and it has a price
-                if complete_set.frame.product and complete_set.frame.product.price is not None:
-                    total_price += complete_set.frame.product.price
+            total_price += complete_set.frame.price
         if complete_set.usage:
             total_price += complete_set.usage.add_on_price
         if complete_set.color:
