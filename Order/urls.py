@@ -14,4 +14,7 @@ urlpatterns = [
          views.getCompleteSetLoader, name='get_set_loader'),
     path('updatecompleteset/<int:set_id>',
          views.updateCompleteSet, name='update_target_set'),
+    # Payment flow
+    path('create_pending', views.createPendingOrder, name='create_pending_order'),
+    path('confirm_payment', views.confirmPayment, name='confirm_payment'),
 ]
