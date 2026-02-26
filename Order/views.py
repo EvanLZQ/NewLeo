@@ -32,14 +32,74 @@ def deleteCompleteSet(request, set_id):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+def build_price_check(request_data, instance):
+    """
+    Compare the frontend-submitted sub_total against the backend-calculated
+    sub_total on the newly-created CompleteSet, and return a structured
+    price_check dict for the API response.
+
+    frontend_price_snapshot (optional in request body):
+        { frame, usage, color, coating, index }  — the prices the frontend
+        used when it calculated its sub_total.  Enables a per-item diff.
+        Defaults to 0 for any missing key (shows full backend price as delta).
+    """
+    frontend_sub_total = float(request_data.get('sub_total') or 0)
+    backend_sub_total  = float(instance.sub_total)
+    snapshot           = request_data.get('frontend_price_snapshot') or {}
+
+    breakdown = []
+
+    # ── Frame ────────────────────────────────────────────────────────────────
+    backend_frame  = float(instance.frame.price) if instance.frame else 0.0
+    frontend_frame = float(snapshot.get('frame') or 0)
+    breakdown.append({
+        'component':      'frame',
+        'label':          f'Frame ({instance.frame.sku})',
+        'frontend_price': frontend_frame,
+        'backend_price':  backend_frame,
+        'changed':        abs(backend_frame - frontend_frame) > 0.005,
+    })
+
+    # ── Lens options (skip null FKs — e.g. color is null for Clear type) ────
+    for component, option_obj in [
+        ('usage',   instance.usage),
+        ('color',   instance.color),
+        ('coating', instance.coating),
+        ('index',   instance.index),
+    ]:
+        if option_obj is None:
+            continue
+        backend_p  = float(option_obj.add_on_price)
+        frontend_p = float(snapshot.get(component) or 0)
+        breakdown.append({
+            'component':      component,
+            'label':          option_obj.name,
+            'option_type':    option_obj.option_type,
+            'frontend_price': frontend_p,
+            'backend_price':  backend_p,
+            'changed':        abs(backend_p - frontend_p) > 0.005,
+        })
+
+    difference = round(backend_sub_total - frontend_sub_total, 2)
+    return {
+        'match':              abs(difference) < 0.005,
+        'frontend_sub_total': frontend_sub_total,
+        'backend_sub_total':  backend_sub_total,
+        'difference':         difference,   # positive = price went up
+        'breakdown':          breakdown,
+    }
+
+
 @api_view(['POST'])
 def createCompleteSet(request):
     if request.method == 'POST':
         serializer = CompleteSetSerializer(
             data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            instance = serializer.save()
+            response_data = dict(serializer.data)
+            response_data['price_check'] = build_price_check(request.data, instance)
+            return Response(response_data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
