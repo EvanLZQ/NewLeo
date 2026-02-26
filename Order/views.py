@@ -1,3 +1,6 @@
+import uuid
+import datetime
+
 from django.conf import settings
 from django.shortcuts import redirect
 from rest_framework.response import Response
@@ -8,6 +11,7 @@ import paypalrestsdk
 
 from .models import *
 from .serializer import CompleteSetSerializer, OrderSerializer, CompleteSetObjectSerializer
+from .service.order_service import OrderService
 
 paypalrestsdk.configure({
     "mode": settings.PAYPAL_MODE,
@@ -147,7 +151,159 @@ def getCompleteSetLoader(request, set_id):
     return Response(serializer.data)
 
 
-# PayPal View
+# ── Order helpers ─────────────────────────────────────────────────────────────
+
+def generate_order_number():
+    """Produce a unique order number like ELW-20260226-A3F7B1."""
+    today = datetime.datetime.now().strftime('%Y%m%d')
+    suffix = uuid.uuid4().hex[:6].upper()
+    return f"ELW-{today}-{suffix}"
+
+
+@api_view(['POST'])
+def createPendingOrder(request):
+    """
+    Create a pending (UNPAID) OrderInfo from the items in the customer's cart.
+
+    Request body:
+        complete_set_ids  – list[int]   IDs of CompleteSet rows to attach
+        address_id        – int         FK to General.Address
+        shipping_method   – str         e.g. "Primary express" / "Xpresspost" / "UPS"
+        country           – str         e.g. "United States"  (used for shipping calc)
+        email             – str         customer e-mail for the order record
+
+    Response (201):
+        { order_id, order_number, sub_total, shipping_cost, total_before_tax }
+    """
+    data             = request.data
+    complete_set_ids = data.get('complete_set_ids', [])
+    address_id       = data.get('address_id')
+    shipping_method  = data.get('shipping_method', '')
+    email            = data.get('email', '')
+
+    if not complete_set_ids:
+        return Response(
+            {'error': 'complete_set_ids is required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Validate: every requested set must be unattached and not saved-for-later
+    valid_sets = CompleteSet.objects.filter(
+        id__in=complete_set_ids,
+        order=None,
+        saved_for_later=False,
+    )
+    if valid_sets.count() != len(complete_set_ids):
+        return Response(
+            {'error': 'One or more complete sets are invalid or already attached to an order'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # ── Step 1: create the OrderInfo shell ───────────────────────────────────
+    # We supply placeholder totals (0) so the model's save() hook runs without
+    # error; we will overwrite them with real values in step 3.
+    try:
+        order = OrderInfo(
+            email=email,
+            order_number=generate_order_number(),
+            order_status='PROCESSING',
+            payment_status='UNPAID',
+            payment_type='paypal',
+            address_id=address_id,
+            shipping_company=shipping_method,   # used by OrderService for cost lookup
+            comment='',
+            refound_status='',
+            refound_amount=0,
+            sub_total=0,
+            shipping_cost=0,
+            total_amount=0,
+        )
+        order.save()   # triggers update_order_totals → 0 totals (no sets yet)
+    except Exception as exc:
+        return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    # ── Step 2: link the complete sets ───────────────────────────────────────
+    # Use QuerySet.update() to bypass CompleteSet.save() (sub_totals already set)
+    CompleteSet.objects.filter(id__in=complete_set_ids).update(order=order)
+
+    # ── Step 3: recalculate totals and persist without re-triggering save() ──
+    OrderService.update_order_totals(order)   # mutates order.sub_total etc.
+    OrderInfo.objects.filter(pk=order.pk).update(
+        sub_total=order.sub_total,
+        shipping_cost=order.shipping_cost,
+        total_amount=order.total_amount,
+    )
+
+    return Response(
+        {
+            'order_id':         order.pk,
+            'order_number':     order.order_number,
+            'sub_total':        str(order.sub_total),
+            'shipping_cost':    str(order.shipping_cost),
+            'total_before_tax': str(order.total_amount),  # sub_total + shipping
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(['POST'])
+def confirmPayment(request):
+    """
+    Record a completed PayPal payment and mark the order as PAID.
+
+    Request body:
+        order_id               – int    our internal OrderInfo PK
+        paypal_transaction_id  – str    PayPal capture / transaction ID
+        payer_email            – str    PayPal payer e-mail
+        transaction_amount     – str    amount actually charged (decimal string)
+        payment_response       – dict   full PayPal capture response (stored for audit)
+
+    Response (200):
+        { success: true, order_number }
+    """
+    data                  = request.data
+    order_id              = data.get('order_id')
+    paypal_transaction_id = data.get('paypal_transaction_id', '')
+    payer_email           = data.get('payer_email', '')
+    transaction_amount    = data.get('transaction_amount', '0')
+    payment_response      = data.get('payment_response', {})
+
+    if not order_id:
+        return Response({'error': 'order_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        order = OrderInfo.objects.get(pk=order_id)
+    except OrderInfo.DoesNotExist:
+        return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if order.payment_status == 'PAID':
+        return Response({'error': 'Order is already paid'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Create the payment record
+    OrderPayment.objects.create(
+        transaction_id=paypal_transaction_id,
+        order=order,
+        payment_gateway='paypal',
+        transaction_amount=transaction_amount,
+        payer_email=payer_email,
+        gateway_transaction_id=paypal_transaction_id,
+        payment_response=payment_response,
+        transaction_status='completed',
+    )
+
+    # Mark the order PAID — bypass save() to avoid re-running update_order_totals
+    OrderInfo.objects.filter(pk=order.pk).update(
+        payment_status='PAID',
+        payment_type='paypal',
+    )
+
+    return Response(
+        {'success': True, 'order_number': order.order_number},
+        status=status.HTTP_200_OK,
+    )
+
+
+# ── Legacy PayPal View (unwired — kept for reference) ─────────────────────────
 def payment(request):
 
     payment = paypalrestsdk.Payment({
