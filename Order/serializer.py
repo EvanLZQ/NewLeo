@@ -19,6 +19,9 @@ class CompleteSetSerializer(serializers.ModelSerializer):
     # density is now a plain CharField on the model — no source traversal needed
     density  = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
     prescription = PrescriptionSerializer(required=False, allow_null=True)
+    # Exposes the raw FK integer (or null) so the frontend can tell whether
+    # this item is currently attached to a pending (UNPAID) order.
+    order_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = CompleteSet
@@ -34,6 +37,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             'sub_color',
             'sub_total',
             'saved_for_later',
+            'order_id',
         ]
 
     def get_frame(self, obj):
