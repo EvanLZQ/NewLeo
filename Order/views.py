@@ -179,7 +179,11 @@ def createPendingOrder(request):
     complete_set_ids = data.get('complete_set_ids', [])
     address_id       = data.get('address_id')
     shipping_method  = data.get('shipping_method', '')
-    email            = data.get('email', '')
+    country          = data.get('country', '')
+    email            = data.get('email', '') or ''
+    # Always prefer the authenticated user's e-mail over whatever the client sends
+    if getattr(request.user, 'is_authenticated', False):
+        email = getattr(request.user, 'email', None) or email
 
     if not complete_set_ids:
         return Response(
@@ -199,18 +203,32 @@ def createPendingOrder(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # ── Step 0: auto-cancel stale UNPAID orders for this user ────────────────
+    # Handles abandoned checkouts (page refresh / tab close / browser close).
+    # Without this, cart items attached to a stale UNPAID order would be
+    # permanently blocked from future checkout attempts.
+    is_authenticated = getattr(request.user, 'is_authenticated', False)
+    if is_authenticated:
+        stale = OrderInfo.objects.filter(
+            customer=request.user,
+            payment_status='UNPAID',
+        )
+        if stale.exists():
+            CompleteSet.objects.filter(order__in=stale).update(order=None)
+            stale.delete()
+
     # ── Step 1: create the OrderInfo shell ───────────────────────────────────
-    # We supply placeholder totals (0) so the model's save() hook runs without
-    # error; we will overwrite them with real values in step 3.
+    # Supply placeholder totals (0); overwritten with real values in step 3.
     try:
         order = OrderInfo(
+            customer=request.user if is_authenticated else None,
             email=email,
             order_number=generate_order_number(),
             order_status='PROCESSING',
             payment_status='UNPAID',
             payment_type='paypal',
             address_id=address_id,
-            shipping_company=shipping_method,   # used by OrderService for cost lookup
+            shipping_company=shipping_method,
             comment='',
             refound_status='',
             refound_amount=0,
@@ -223,11 +241,19 @@ def createPendingOrder(request):
         return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
     # ── Step 2: link the complete sets ───────────────────────────────────────
-    # Use QuerySet.update() to bypass CompleteSet.save() (sub_totals already set)
     CompleteSet.objects.filter(id__in=complete_set_ids).update(order=order)
 
-    # ── Step 3: recalculate totals and persist without re-triggering save() ──
-    OrderService.update_order_totals(order)   # mutates order.sub_total etc.
+    # ── Step 3: calculate totals using country + method from the request ──────
+    # AddressForm collects address fields locally without saving them to the DB,
+    # so order.address is null.  We use the country from the request body directly
+    # to avoid that dependency.
+    order.sub_total     = OrderService.calculate_sub_total(order)
+    order.shipping_cost = OrderService.calculate_shipping_cost(
+        country, float(order.sub_total), shipping_method,
+    )
+    order.total_amount  = order.sub_total + order.shipping_cost
+
+    # Persist via QuerySet.update() to bypass the save() hook
     OrderInfo.objects.filter(pk=order.pk).update(
         sub_total=order.sub_total,
         shipping_cost=order.shipping_cost,
@@ -301,6 +327,27 @@ def confirmPayment(request):
         {'success': True, 'order_number': order.order_number},
         status=status.HTTP_200_OK,
     )
+
+
+@api_view(['DELETE'])
+def cancelPendingOrder(request, order_id):
+    """
+    Cancel a pending (UNPAID) order created by createPendingOrder.
+
+    Unlinks the attached CompleteSet objects (so they return to the cart) and
+    deletes the OrderInfo record.  Used when the user goes back from the Payment
+    step to avoid accumulating stale UNPAID orders.
+    """
+    try:
+        order = OrderInfo.objects.get(pk=order_id, payment_status='UNPAID')
+    except OrderInfo.DoesNotExist:
+        return Response({'error': 'Pending order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Return items to the cart (order FK → None) before deleting the order
+    CompleteSet.objects.filter(order=order).update(order=None)
+    order.delete()
+
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # ── Legacy PayPal View (unwired — kept for reference) ─────────────────────────

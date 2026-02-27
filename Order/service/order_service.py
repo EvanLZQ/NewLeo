@@ -1,4 +1,5 @@
 # your_app/services/order_service.py
+from decimal import Decimal
 from django.db.models import Sum
 from django.apps import apps
 
@@ -74,28 +75,30 @@ class OrderService:
 
     @staticmethod
     def calculate_shipping_cost(country, sub_total, shipping_method):
+        # Return Decimal values so they are compatible with DecimalField arithmetic
+        # (mixing float + Decimal raises TypeError in Python 3).
         if country == "United States":
             if sub_total < 59:
-                primary_express, ups = 8.95, 19.95
+                primary_express, ups = Decimal('8.95'), Decimal('19.95')
             elif sub_total <= 100:
-                primary_express, ups = 0, 14.95
+                primary_express, ups = Decimal('0'), Decimal('14.95')
             elif sub_total <= 150:
-                primary_express, ups = 0, 9.95
+                primary_express, ups = Decimal('0'), Decimal('9.95')
             elif sub_total <= 200:
-                primary_express, ups = 0, 4.95
+                primary_express, ups = Decimal('0'), Decimal('4.95')
             else:
-                primary_express, ups = 0, 0
+                primary_express, ups = Decimal('0'), Decimal('0')
         else:
             if sub_total < 59:
-                xpresspost, ups = 13.95, 24.95
+                xpresspost, ups = Decimal('13.95'), Decimal('24.95')
             elif sub_total <= 100:
-                xpresspost, ups = 0, 19.95
+                xpresspost, ups = Decimal('0'), Decimal('19.95')
             elif sub_total <= 150:
-                xpresspost, ups = 0, 14.95
+                xpresspost, ups = Decimal('0'), Decimal('14.95')
             elif sub_total <= 200:
-                xpresspost, ups = 0, 9.95
+                xpresspost, ups = Decimal('0'), Decimal('9.95')
             else:
-                xpresspost, ups = 0, 0
+                xpresspost, ups = Decimal('0'), Decimal('0')
 
         if country == "United States":
             return primary_express if shipping_method == "Primary express" else ups
