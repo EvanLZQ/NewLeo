@@ -198,13 +198,16 @@ def createPendingOrder(request):
     #   • Frontend cancel failures  (network error, page refresh, tab close)
     # ALL CompleteSet rows on those orders are freed — not just the requested
     # ones — so the order is left in a consistent state before deletion.
-    stuck_orders = OrderInfo.objects.filter(
-        completeset__id__in=complete_set_ids,
-        payment_status='UNPAID',
-    ).distinct()
-    if stuck_orders.exists():
-        CompleteSet.objects.filter(order__in=stuck_orders).update(order=None)
-        stuck_orders.delete()
+    # Materialise PKs first — Django forbids .delete() on a .distinct() queryset.
+    stuck_order_ids = list(
+        OrderInfo.objects.filter(
+            completeset__id__in=complete_set_ids,
+            payment_status='UNPAID',
+        ).distinct().values_list('pk', flat=True)
+    )
+    if stuck_order_ids:
+        CompleteSet.objects.filter(order_id__in=stuck_order_ids).update(order=None)
+        OrderInfo.objects.filter(pk__in=stuck_order_ids).delete()
 
     # ── Step 0b: user-based cleanup ───────────────────────────────────────────
     # Cancel any remaining stale UNPAID orders for this authenticated user
