@@ -191,7 +191,37 @@ def createPendingOrder(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Validate: every requested set must be unattached and not saved-for-later
+    # ── Step 0a: item-based cleanup (runs BEFORE validation) ─────────────────
+    # Cancel any UNPAID orders that currently own the requested items,
+    # regardless of who created them.  This recovers items stuck because of:
+    #   • Orders created before customer= FK was added  (customer=NULL)
+    #   • Frontend cancel failures  (network error, page refresh, tab close)
+    # ALL CompleteSet rows on those orders are freed — not just the requested
+    # ones — so the order is left in a consistent state before deletion.
+    stuck_orders = OrderInfo.objects.filter(
+        completeset__id__in=complete_set_ids,
+        payment_status='UNPAID',
+    ).distinct()
+    if stuck_orders.exists():
+        CompleteSet.objects.filter(order__in=stuck_orders).update(order=None)
+        stuck_orders.delete()
+
+    # ── Step 0b: user-based cleanup ───────────────────────────────────────────
+    # Cancel any remaining stale UNPAID orders for this authenticated user
+    # that don't own these specific items (e.g. orders from another device).
+    is_authenticated = getattr(request.user, 'is_authenticated', False)
+    if is_authenticated:
+        stale = OrderInfo.objects.filter(
+            customer=request.user,
+            payment_status='UNPAID',
+        )
+        if stale.exists():
+            CompleteSet.objects.filter(order__in=stale).update(order=None)
+            stale.delete()
+
+    # ── Validate (after cleanup so freed items now pass) ──────────────────────
+    # Only fails here for genuinely bad input: non-existent IDs, wrong user's
+    # items, or items the user intentionally marked as saved-for-later.
     valid_sets = CompleteSet.objects.filter(
         id__in=complete_set_ids,
         order=None,
@@ -202,20 +232,6 @@ def createPendingOrder(request):
             {'error': 'One or more complete sets are invalid or already attached to an order'},
             status=status.HTTP_400_BAD_REQUEST,
         )
-
-    # ── Step 0: auto-cancel stale UNPAID orders for this user ────────────────
-    # Handles abandoned checkouts (page refresh / tab close / browser close).
-    # Without this, cart items attached to a stale UNPAID order would be
-    # permanently blocked from future checkout attempts.
-    is_authenticated = getattr(request.user, 'is_authenticated', False)
-    if is_authenticated:
-        stale = OrderInfo.objects.filter(
-            customer=request.user,
-            payment_status='UNPAID',
-        )
-        if stale.exists():
-            CompleteSet.objects.filter(order__in=stale).update(order=None)
-            stale.delete()
 
     # ── Step 1: create the OrderInfo shell ───────────────────────────────────
     # Supply placeholder totals (0); overwritten with real values in step 3.
