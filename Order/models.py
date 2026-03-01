@@ -6,7 +6,7 @@ from Order.service.order_service import OrderService
 # Create your models here.
 
 __all__ = ['OrderInfo', 'OrderTax',
-           'OrderImage', 'OrderUpdates', 'CompleteSet']
+           'OrderImage', 'OrderUpdates', 'CompleteSet', 'OrderPayment']
 
 
 class OrderInfo(models.Model):
