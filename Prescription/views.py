@@ -9,8 +9,9 @@ from .serializer import PrescriptionSerializer
 def prescription_list_create(request):
     if request.method == 'GET':
         if request.user.is_authenticated:
+            # CustomerInfo IS the user model (AbstractUser) — filter directly
             prescriptions = PrescriptionInfo.objects.filter(
-                customer__user=request.user)
+                customer=request.user)
         else:
             prescriptions = PrescriptionInfo.objects.none()
         serializer = PrescriptionSerializer(prescriptions, many=True)
@@ -19,7 +20,13 @@ def prescription_list_create(request):
     elif request.method == 'POST':
         serializer = PrescriptionSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            # Link to the logged-in customer so it appears in their GET list.
+            # Guest prescriptions (unauthenticated) are saved with customer=null
+            # and retrieved later via the batch endpoint using localStorage IDs.
+            if request.user.is_authenticated:
+                serializer.save(customer=request.user)
+            else:
+                serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
