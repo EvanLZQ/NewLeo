@@ -342,6 +342,15 @@ def confirmPayment(request):
         payment_type='paypal',
     )
 
+    # Remove paid items from all shopping carts (they've been purchased).
+    # CompleteSet.order FK is intentionally kept pointing to this order for the
+    # audit trail — only the cart M2M entries are removed.
+    from Customer.models import ShoppingCart as ShoppingCartModel
+    paid_set_ids = list(CompleteSet.objects.filter(order=order).values_list('id', flat=True))
+    if paid_set_ids:
+        for cart in ShoppingCartModel.objects.filter(eyeglasses_set__id__in=paid_set_ids).distinct():
+            cart.eyeglasses_set.remove(*paid_set_ids)
+
     return Response(
         {'success': True, 'order_number': order.order_number},
         status=status.HTTP_200_OK,
