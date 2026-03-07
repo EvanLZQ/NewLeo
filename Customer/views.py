@@ -254,6 +254,14 @@ def createCustomer(request):
     serializer = CustomerCreateSerializer(data=request.data)
     if serializer.is_valid():
         serializer.save()
+        try:
+            from Customer.email_service import send_welcome_email
+            send_welcome_email(serializer.instance)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                'Failed to send welcome email to %s', getattr(serializer.instance, 'email', 'unknown')
+            )
         return Response("User created successfully", status=201)
     return Response(serializer.errors, status=400)
 

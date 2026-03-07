@@ -1,0 +1,132 @@
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Order Confirmed — {{ order.order_number }}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f9f9f9;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9f9f9;padding:32px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+
+        <!-- Header -->
+        <tr>
+          <td style="background-color:#e7468c;padding:28px 32px;text-align:center;">
+            <h1 style="margin:0;color:#ffffff;font-size:26px;letter-spacing:1px;">Eyelovewear</h1>
+          </td>
+        </tr>
+
+        <!-- Order confirmed banner -->
+        <tr>
+          <td style="background-color:#FDEBF7;padding:20px 32px;border-bottom:1px solid #f0d0e8;">
+            <h2 style="margin:0 0 4px;color:#e7468c;font-size:20px;">Order Confirmed ✓</h2>
+            <p style="margin:0;color:#555;font-size:14px;">
+              Order <strong>{{ order.order_number }}</strong> &nbsp;·&nbsp; {{ order.created_at|date:"N j, Y" }}
+            </p>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:28px 32px;">
+            <p style="margin:0 0 24px;color:#555555;font-size:15px;line-height:1.6;">
+              Thank you for your order! We're preparing your eyewear and will notify you once it ships.
+            </p>
+
+            <!-- Items -->
+            <h3 style="margin:0 0 12px;color:#333;font-size:15px;text-transform:uppercase;letter-spacing:0.5px;">Items Ordered</h3>
+            {% for item in complete_sets %}
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;border:1px solid #eeeeee;border-radius:6px;overflow:hidden;">
+              <tr>
+                <td style="padding:14px 16px;background:#fafafa;">
+                  <strong style="color:#333;font-size:14px;">{{ item.frame.slug }}</strong>
+                  <span style="color:#888;font-size:13px;"> — {{ item.frame.color_display_name }}</span>
+                </td>
+                <td style="padding:14px 16px;background:#fafafa;text-align:right;">
+                  <strong style="color:#333;font-size:14px;">${{ item.sub_total }}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td colspan="2" style="padding:10px 16px;font-size:13px;color:#666;line-height:1.6;">
+                  {% if item.usage %}<span><strong>Usage:</strong> {{ item.usage }}</span><br />{% endif %}
+                  {% if item.color %}<span><strong>Lens Color:</strong> {{ item.color }}</span><br />{% endif %}
+                  {% if item.coating %}<span><strong>Coating:</strong> {{ item.coating }}</span><br />{% endif %}
+                  {% if item.index %}<span><strong>Index:</strong> {{ item.index }}</span><br />{% endif %}
+                  {% if item.prescription %}<span><strong>Prescription:</strong> {{ item.prescription.nickname }}</span>{% endif %}
+                </td>
+              </tr>
+            </table>
+            {% empty %}
+            <p style="color:#888;font-size:14px;">No items found.</p>
+            {% endfor %}
+
+            <!-- Totals -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;border-top:2px solid #eeeeee;padding-top:16px;">
+              <tr>
+                <td style="padding:4px 0;font-size:14px;color:#555;">Subtotal</td>
+                <td style="padding:4px 0;font-size:14px;color:#555;text-align:right;">${{ order.sub_total }}</td>
+              </tr>
+              <tr>
+                <td style="padding:4px 0;font-size:14px;color:#555;">Shipping</td>
+                <td style="padding:4px 0;font-size:14px;color:#555;text-align:right;">
+                  {% if order.shipping_cost == 0 %}Free{% else %}${{ order.shipping_cost }}{% endif %}
+                </td>
+              </tr>
+              {% if order.discount > 0 %}
+              <tr>
+                <td style="padding:4px 0;font-size:14px;color:#27ae60;">Discount</td>
+                <td style="padding:4px 0;font-size:14px;color:#27ae60;text-align:right;">-${{ order.discount }}</td>
+              </tr>
+              {% endif %}
+              {% if order.store_credit_used > 0 %}
+              <tr>
+                <td style="padding:4px 0;font-size:14px;color:#27ae60;">Store Credit</td>
+                <td style="padding:4px 0;font-size:14px;color:#27ae60;text-align:right;">-${{ order.store_credit_used }}</td>
+              </tr>
+              {% endif %}
+              <tr>
+                <td style="padding:10px 0 4px;font-size:16px;font-weight:bold;color:#333;border-top:1px solid #eee;">Total</td>
+                <td style="padding:10px 0 4px;font-size:16px;font-weight:bold;color:#e7468c;text-align:right;border-top:1px solid #eee;">${{ order.total_amount }}</td>
+              </tr>
+            </table>
+
+            <!-- Shipping address -->
+            {% if order.address %}
+            <h3 style="margin:24px 0 8px;color:#333;font-size:15px;text-transform:uppercase;letter-spacing:0.5px;">Ship To</h3>
+            <p style="margin:0;font-size:14px;color:#555;line-height:1.7;">
+              {{ order.address.full_name }}<br />
+              {{ order.address.address }}<br />
+              {{ order.address.city }}, {{ order.address.province_state }} {{ order.address.post_code }}<br />
+              {{ order.address.country }}
+            </p>
+            {% endif %}
+
+            <!-- CTA -->
+            <table cellpadding="0" cellspacing="0" style="margin-top:28px;">
+              <tr>
+                <td style="background-color:#e7468c;border-radius:24px;padding:12px 28px;">
+                  <a href="{{ site_url }}/user/order" style="color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;">View My Orders</a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr><td style="padding:0 32px;"><hr style="border:none;border-top:1px solid #eeeeee;margin:0;" /></td></tr>
+        <tr>
+          <td style="padding:20px 32px;text-align:center;">
+            <p style="margin:0;color:#aaaaaa;font-size:12px;">
+              &copy; 2026 Eyelovewear &nbsp;|&nbsp;
+              <a href="{{ site_url }}" style="color:#e7468c;text-decoration:none;">eyelovewear.com</a>
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

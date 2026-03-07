@@ -351,6 +351,17 @@ def confirmPayment(request):
         for cart in ShoppingCartModel.objects.filter(eyeglasses_set__id__in=paid_set_ids).distinct():
             cart.eyeglasses_set.remove(*paid_set_ids)
 
+    # Send order confirmation email — wrapped so a mail failure never breaks the response
+    try:
+        order.refresh_from_db()
+        from Order.email_service import send_order_confirmation
+        send_order_confirmation(order)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            'Failed to send order confirmation email for order %s', order.order_number
+        )
+
     return Response(
         {'success': True, 'order_number': order.order_number},
         status=status.HTTP_200_OK,
