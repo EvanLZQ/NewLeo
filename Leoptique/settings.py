@@ -98,6 +98,7 @@ INSTALLED_APPS = [
     "Blog",
     "tinymce",
     "phonenumber_field",
+    "anymail",
     "django.contrib.sites",
     'oauth2_provider',
     'social_django',
@@ -167,6 +168,16 @@ DATABASES = {
 }
 
 
+
+
+# ── Email — Mailgun via anymail ─────────────────────────────────────────────
+EMAIL_BACKEND = 'anymail.backends.mailgun.EmailBackend'
+ANYMAIL = {
+    'MAILGUN_API_KEY': os.environ.get('MAILGUN_API_KEY', ''),
+    'MAILGUN_SENDER_DOMAIN': os.environ.get('MAILGUN_DOMAIN', ''),
+}
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Eyelovewear <noreply@eyelovewear.com>')
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
 # Password validation
 # https://docs.djangoproject.com/en/4.1/ref/settings/#auth-password-validators
 

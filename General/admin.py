@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Address, Coupon, ImageUpload, CurrencyConversion, FAQ, PageImage
+from .models import Address, Coupon, ImageUpload, CurrencyConversion, FAQ, PageImage, NewsletterSubscriber
 
 # Register your models here.
 
@@ -26,3 +26,13 @@ admin.site.register(ImageUpload, UploadImageAdmin)
 admin.site.register(CurrencyConversion)
 admin.site.register(FAQ)
 admin.site.register(PageImage, PageImageAdmin)
+
+
+class NewsletterSubscriberAdmin(admin.ModelAdmin):
+    list_display = ('email', 'subscribed_at', 'is_active')
+    list_filter = ('is_active',)
+    search_fields = ('email',)
+    ordering = ('-subscribed_at',)
+
+
+admin.site.register(NewsletterSubscriber, NewsletterSubscriberAdmin)

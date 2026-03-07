@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Order Update — {{ order.order_number }}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f9f9f9;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9f9f9;padding:32px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+
+        <!-- Header -->
+        <tr>
+          <td style="background-color:#e7468c;padding:28px 32px;text-align:center;">
+            <h1 style="margin:0;color:#ffffff;font-size:26px;letter-spacing:1px;">Eyelovewear</h1>
+          </td>
+        </tr>
+
+        <!-- Status banner -->
+        <tr>
+          <td style="background-color:#FDEBF7;padding:20px 32px;border-bottom:1px solid #f0d0e8;">
+            <p style="margin:0 0 4px;color:#555;font-size:13px;">Order <strong>{{ order.order_number }}</strong></p>
+            <h2 style="margin:0;color:#e7468c;font-size:20px;">
+              {% if order.order_status == 'PROCESSING' %}Your order is being processed 🔄
+              {% elif order.order_status == 'SHIPPED' %}Your order has shipped! 🚚
+              {% elif order.order_status == 'DELIVERED' %}Your order has been delivered! 🎉
+              {% elif order.order_status == 'CANCELLED' %}Your order has been cancelled
+              {% elif order.order_status == 'COMPLETE' %}Your order is complete ✓
+              {% elif order.order_status == 'REFUND' %}Refund update for your order
+              {% else %}Order status update{% endif %}
+            </h2>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:28px 32px;">
+
+            {% if order.order_status == 'PROCESSING' %}
+            <p style="margin:0 0 16px;color:#555;font-size:15px;line-height:1.6;">
+              We've received your order and our team is now preparing your eyewear. You'll receive another email once your order ships.
+            </p>
+
+            {% elif order.order_status == 'SHIPPED' %}
+            <p style="margin:0 0 16px;color:#555;font-size:15px;line-height:1.6;">
+              Great news — your order is on its way!
+            </p>
+            {% if order.shipping_company or order.tracking_number %}
+            <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eeeeee;border-radius:6px;overflow:hidden;margin-bottom:20px;">
+              <tr><td style="background:#fafafa;padding:14px 16px;">
+                {% if order.shipping_company %}
+                <p style="margin:0 0 6px;font-size:14px;color:#555;">
+                  <strong>Carrier:</strong> {{ order.shipping_company }}
+                </p>
+                {% endif %}
+                {% if order.tracking_number %}
+                <p style="margin:0;font-size:14px;color:#555;">
+                  <strong>Tracking Number:</strong>
+                  <span style="font-family:monospace;background:#f0f0f0;padding:2px 6px;border-radius:3px;">{{ order.tracking_number }}</span>
+                </p>
+                {% endif %}
+              </td></tr>
+            </table>
+            {% endif %}
+
+            {% elif order.order_status == 'DELIVERED' %}
+            <p style="margin:0 0 16px;color:#555;font-size:15px;line-height:1.6;">
+              Your order has been delivered. We hope you love your new eyewear! If you have any questions or issues, don't hesitate to contact us.
+            </p>
+
+            {% elif order.order_status == 'CANCELLED' %}
+            <p style="margin:0 0 16px;color:#555;font-size:15px;line-height:1.6;">
+              Your order has been cancelled. If you believe this is a mistake or have any questions, please contact our support team.
+            </p>
+
+            {% else %}
+            <p style="margin:0 0 16px;color:#555;font-size:15px;line-height:1.6;">
+              There's an update on your order. Please log in to your account to view the details.
+            </p>
+            {% endif %}
+
+            <!-- Items summary -->
+            {% if complete_sets %}
+            <h3 style="margin:0 0 10px;color:#333;font-size:14px;text-transform:uppercase;letter-spacing:0.5px;">Your Items</h3>
+            {% for item in complete_sets %}
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">
+              &bull; {{ item.frame.slug }} — {{ item.frame.color_display_name }}
+            </p>
+            {% endfor %}
+            {% endif %}
+
+            <!-- CTA -->
+            <table cellpadding="0" cellspacing="0" style="margin-top:28px;">
+              <tr>
+                <td style="background-color:#e7468c;border-radius:24px;padding:12px 28px;">
+                  <a href="{{ site_url }}/user/order" style="color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;">View Order Details</a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr><td style="padding:0 32px;"><hr style="border:none;border-top:1px solid #eeeeee;margin:0;" /></td></tr>
+        <tr>
+          <td style="padding:20px 32px;text-align:center;">
+            <p style="margin:0;color:#aaaaaa;font-size:12px;">
+              &copy; 2026 Eyelovewear &nbsp;|&nbsp;
+              <a href="{{ site_url }}" style="color:#e7468c;text-decoration:none;">eyelovewear.com</a>
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

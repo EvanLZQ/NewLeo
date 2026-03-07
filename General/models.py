@@ -151,3 +151,17 @@ class PageImage(models.Model):
         db_table = "PageImage"
         verbose_name = 'Page Image'
         verbose_name_plural = 'Page Images'
+
+
+class NewsletterSubscriber(models.Model):
+    email = models.EmailField(unique=True)
+    subscribed_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.email
+
+    class Meta:
+        db_table = 'NewsletterSubscriber'
+        verbose_name = 'Newsletter Subscriber'
+        verbose_name_plural = 'Newsletter Subscribers'
