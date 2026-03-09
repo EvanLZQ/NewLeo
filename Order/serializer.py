@@ -45,9 +45,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
 
     def to_representation(self, obj):
         rep = super().to_representation(obj)
-        rep['frame'] = ProductInstanceSerializer(
-            ProductInstance.objects.get(sku=obj.frame)
-        ).data
+        rep['frame'] = ProductInstanceSerializer(obj.frame).data
         # Normalize None → "" for color: frontend sends empty string when no
         # color step applies (e.g. COLOR_TYPE = Clear).
         if rep.get('color') is None:
@@ -216,9 +214,7 @@ class CompleteSetObjectSerializer(serializers.ModelSerializer):
 
     def to_representation(self, obj):
         rep = super().to_representation(obj)
-        rep['frame'] = ProductInstanceSerializer(
-            ProductInstance.objects.get(sku=obj.frame)
-        ).data
+        rep['frame'] = ProductInstanceSerializer(obj.frame).data
         if not rep.get('sub_color'):
             rep['sub_color'] = 'None'
         return rep
