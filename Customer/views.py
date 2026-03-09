@@ -64,6 +64,12 @@ def getShoppingCart(request, cart_id):
 def getUserShoppingCart(request, cart_id):
     user = request.user
     shopping_cart = user.shopping_cart
+
+    # Guard: if the FK was set to NULL (cart deleted), lazily create a new one
+    if shopping_cart is None:
+        shopping_cart = ShoppingCart.objects.create()
+        CustomerInfo.objects.filter(pk=user.pk).update(shopping_cart=shopping_cart)
+
     if cart_id:
         # Get the local shopping cart, or return a 404 if not found
         local_cart = get_object_or_404(ShoppingCart, id=cart_id)
