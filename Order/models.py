@@ -55,6 +55,9 @@ class OrderInfo(models.Model):
         return self.order_number
 
     def save(self, *args, **kwargs):
+        # Auto-populate email from the linked customer whenever email is blank
+        if not self.email and self.customer_id:
+            self.email = self.customer.email or ''
         OrderService.update_order_totals(self)
         super(OrderInfo, self).save(*args, **kwargs)
 
