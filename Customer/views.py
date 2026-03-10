@@ -123,7 +123,12 @@ def login_view(request):
 @api_view(['POST'])
 def logout_view(request):
     logout(request)
-    return Response({"message": "Logged out successfully!"})
+    response = Response({"message": "Logged out successfully!"})
+    # Expire the OAuth cookies so AccessTokenAuthentication can no longer
+    # resolve the old user between logout and the next login.
+    response.delete_cookie("access_token",  path="/", domain=".eyelovewear.com", samesite="None")
+    response.delete_cookie("refresh_token", path="/", domain=".eyelovewear.com", samesite="None")
+    return response
 
 
 @api_view(["POST"])
