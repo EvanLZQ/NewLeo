@@ -70,8 +70,9 @@ def getUserShoppingCart(request, cart_id):
         shopping_cart = ShoppingCart.objects.create()
         CustomerInfo.objects.filter(pk=user.pk).update(shopping_cart=shopping_cart)
 
-    if cart_id:
-        # Get the local shopping cart, or return a 404 if not found
+    if cart_id and cart_id != shopping_cart.id:
+        # Get the local (guest) shopping cart, or return a 404 if not found.
+        # Skip when the local cart IS the user's own cart (nothing to merge).
         local_cart = get_object_or_404(ShoppingCart, id=cart_id)
 
         # Merge the local shopping cart into the user's cart
