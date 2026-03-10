@@ -1,8 +1,20 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
+from django.db.models import Q
 from .models import PrescriptionInfo
 from .serializer import PrescriptionSerializer
+
+
+def _can_access_prescription(user, prescription):
+    """
+    Ownership check — a user may only access a prescription if:
+    • they are authenticated AND the prescription belongs to them, OR
+    • the prescription is a guest prescription (customer is NULL).
+    """
+    if prescription.customer is None:
+        return True
+    return user.is_authenticated and prescription.customer_id == user.pk
 
 
 @api_view(['GET', 'POST'])
@@ -38,6 +50,10 @@ def prescription_detail(request, pk):
     except PrescriptionInfo.DoesNotExist:
         return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
 
+    # Ownership guard: prevent cross-user access
+    if not _can_access_prescription(request.user, prescription):
+        return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+
     if request.method == 'GET':
         serializer = PrescriptionSerializer(prescription)
         return Response(serializer.data)
@@ -65,6 +81,13 @@ def fetch_prescriptions_by_ids_post(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    prescriptions = PrescriptionInfo.objects.filter(id__in=ids)
-    serializer = PrescriptionSerializer(prescriptions, many=True)
+    # Ownership filter: authenticated users see their own + guest prescriptions;
+    # unauthenticated users see only guest (customer=NULL) prescriptions.
+    qs = PrescriptionInfo.objects.filter(id__in=ids)
+    if request.user.is_authenticated:
+        qs = qs.filter(Q(customer=request.user) | Q(customer__isnull=True))
+    else:
+        qs = qs.filter(customer__isnull=True)
+
+    serializer = PrescriptionSerializer(qs, many=True)
     return Response(serializer.data)
