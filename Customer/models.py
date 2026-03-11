@@ -59,6 +59,15 @@ class CustomerInfo(AbstractUser, PermissionsMixin):
     USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = []
 
+    def save(self, *args, **kwargs):
+        # Keep the inherited email field in sync with username (which is the
+        # actual email address).  All email-sending code reads self.email, so
+        # this ensures welcome, order-confirmation, and status-update emails
+        # always have a recipient address.
+        if self.username:
+            self.email = self.username
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.username
 

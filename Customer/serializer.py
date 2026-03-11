@@ -64,6 +64,7 @@ class CustomerCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         user = CustomerInfo(**validated_data)
+        user.email = validated_data['username']   # sync inherited email field
         user.password = make_password(validated_data['password'])
         user.save()
         return user

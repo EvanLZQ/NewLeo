@@ -176,6 +176,17 @@ def google_login(request):
         user.icon_url = picture
         user.save()
 
+    # Send welcome email for first-time Google users
+    if created:
+        try:
+            from Customer.email_service import send_welcome_email
+            send_welcome_email(user)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                'Failed to send welcome email to %s', email
+            )
+
     # get DOT Application by stable name; create if missing
     application, _ = Application.objects.get_or_create(
         name="eyelovewear-web",
