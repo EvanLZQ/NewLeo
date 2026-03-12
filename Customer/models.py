@@ -66,6 +66,11 @@ class CustomerInfo(AbstractUser, PermissionsMixin):
         # always have a recipient address.
         if self.username:
             self.email = self.username
+        if not self.pk:
+            wish_list = WishList.objects.create()
+            self.wish_list = wish_list
+            shopping_cart = ShoppingCart.objects.create()
+            self.shopping_cart = shopping_cart
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -74,14 +79,6 @@ class CustomerInfo(AbstractUser, PermissionsMixin):
     @property
     def full_name(self):
         return f'{self.first_name} {self.last_name}'
-
-    def save(self, *args, **kwargs):
-        if not self.pk:
-            wish_list = WishList.objects.create()
-            self.wish_list = wish_list
-            shopping_cart = ShoppingCart.objects.create()
-            self.shopping_cart = shopping_cart
-        super().save(*args, **kwargs)
 
     class Meta:
         db_table = 'CustomerInfo'
@@ -226,3 +223,38 @@ class CustomerNotification(models.Model):
         db_table = "CustomerNotification"
         verbose_name = "Customer Notification"
         verbose_name_plural = "Customer Notifications"
+
+
+class PasswordResetCode(models.Model):
+    email = models.EmailField(db_index=True)
+    code = models.CharField(max_length=6)
+    attempts = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    used = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "PasswordResetCode"
+
+    @property
+    def is_expired(self):
+        from django.utils import timezone as tz
+        from datetime import timedelta
+        return tz.now() > self.created_at + timedelta(minutes=10)
+
+    @property
+    def is_valid(self):
+        return not self.used and not self.is_expired and self.attempts < 5
+
+    @staticmethod
+    def generate_code():
+        import random
+        return f"{random.randint(0, 999999):06d}"
+
+    @staticmethod
+    def can_request(email):
+        from django.utils import timezone as tz
+        from datetime import timedelta
+        one_hour_ago = tz.now() - timedelta(hours=1)
+        return PasswordResetCode.objects.filter(
+            email=email, created_at__gte=one_hour_ago
+        ).count() < 3

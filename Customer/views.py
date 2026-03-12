@@ -18,7 +18,9 @@ from google.oauth2 import id_token
 from django.utils import timezone
 import uuid
 import datetime
-from .models import CustomerInfo, ShoppingCart, StoreCreditActivity, WishList
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+from .models import CustomerInfo, ShoppingCart, StoreCreditActivity, WishList, PasswordResetCode
 from oauth2_provider.models import AccessToken, Application, RefreshToken
 from rest_framework.permissions import AllowAny
 from google.auth.transport import requests as google_requests
@@ -481,3 +483,155 @@ def deleteWishList(request, list_id):
 
     wish_list.delete()
     return Response(status=204)
+
+
+User = get_user_model()
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def request_password_reset_code(request):
+    email = (request.data.get('email') or '').strip().lower()
+    if not email:
+        return Response(
+            {'error': 'Email is required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    generic_msg = 'If an account with that email exists, a verification code has been sent.'
+
+    if not PasswordResetCode.can_request(email):
+        return Response({'message': generic_msg}, status=status.HTTP_200_OK)
+
+    try:
+        user = User.objects.get(username=email)
+    except User.DoesNotExist:
+        return Response({'message': generic_msg}, status=status.HTTP_200_OK)
+
+    code = PasswordResetCode.generate_code()
+    PasswordResetCode.objects.create(email=email, code=code)
+
+    try:
+        from Customer.email_service import send_password_reset_code
+        send_password_reset_code(email, code, user.first_name)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            'Failed to send password reset code to %s', email
+        )
+
+    return Response({'message': generic_msg}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_password_reset_code(request):
+    email = (request.data.get('email') or '').strip().lower()
+    code = (request.data.get('code') or '').strip()
+
+    if not email or not code:
+        return Response(
+            {'error': 'Email and code are required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        reset_code = PasswordResetCode.objects.filter(
+            email=email, used=False
+        ).latest('created_at')
+    except PasswordResetCode.DoesNotExist:
+        return Response(
+            {'error': 'Invalid or expired code.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not reset_code.is_valid:
+        return Response(
+            {'error': 'Invalid or expired code.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    reset_code.attempts += 1
+    reset_code.save(update_fields=['attempts'])
+
+    if reset_code.code != code:
+        return Response(
+            {'error': 'Invalid or expired code.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return Response({'message': 'Code verified.'}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def reset_password(request):
+    email = (request.data.get('email') or '').strip().lower()
+    code = (request.data.get('code') or '').strip()
+    new_password = request.data.get('new_password', '')
+    confirm_password = request.data.get('confirm_password', '')
+
+    if not all([email, code, new_password, confirm_password]):
+        return Response(
+            {'error': 'All fields are required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if new_password != confirm_password:
+        return Response(
+            {'error': 'Passwords do not match.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        reset_code = PasswordResetCode.objects.filter(
+            email=email, used=False
+        ).latest('created_at')
+    except PasswordResetCode.DoesNotExist:
+        return Response(
+            {'error': 'Invalid or expired code.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not reset_code.is_valid:
+        return Response(
+            {'error': 'Invalid or expired code.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    reset_code.attempts += 1
+    reset_code.save(update_fields=['attempts'])
+
+    if reset_code.code != code:
+        return Response(
+            {'error': 'Invalid or expired code.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        user = User.objects.get(username=email)
+    except User.DoesNotExist:
+        return Response(
+            {'error': 'Invalid or expired code.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        validate_password(new_password, user=user)
+    except ValidationError as e:
+        return Response(
+            {'error': e.messages},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user.set_password(new_password)
+    user.save()
+
+    reset_code.used = True
+    reset_code.save(update_fields=['used'])
+    PasswordResetCode.objects.filter(email=email, used=False).update(used=True)
+
+    return Response(
+        {'message': 'Password reset successfully.'},
+        status=status.HTTP_200_OK,
+    )

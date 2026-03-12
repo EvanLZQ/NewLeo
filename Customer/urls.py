@@ -28,6 +28,11 @@ urlpatterns = [
     path("googlelogin", views.google_login, name='google_login'),
     path('check_credential', views.is_authenticated, name='check_credential'),
 
+    # Below is for forgot password
+    path("forgot-password/request-code", views.request_password_reset_code, name='request_password_reset_code'),
+    path("forgot-password/verify-code", views.verify_password_reset_code, name='verify_password_reset_code'),
+    path("forgot-password/reset", views.reset_password, name='reset_password'),
+
     # Below is for customer order
     path("get_customer_order", views.getCustomerOrders, name="get_customer_order"),
 
