@@ -67,3 +67,38 @@ def send_newsletter_confirmation(email: str) -> None:
     msg.attach_alternative(html_content, 'text/html')
     msg.send()
     logger.info('Newsletter confirmation sent to %s', email)
+
+
+def send_password_reset_code(email: str, code: str, first_name: str = '') -> None:
+    """Send a 6-digit password reset verification code."""
+    if not email:
+        logger.warning('send_password_reset_code: no email — skipped.')
+        return
+
+    display_name = first_name or 'there'
+
+    context = {
+        'code':       code,
+        'first_name': display_name,
+        'site_url':   SITE_URL,
+    }
+
+    subject      = 'Your Eyelovewear Password Reset Code'
+    html_content = render_to_string('email/password_reset.html', context)
+    text_content = (
+        f'Hi {display_name},\n\n'
+        f'Your password reset verification code is: {code}\n\n'
+        f'This code expires in 10 minutes. If you did not request this, '
+        f'you can safely ignore this email.\n\n'
+        f'— Eyelovewear'
+    )
+
+    msg = EmailMultiAlternatives(
+        subject=subject,
+        body=text_content,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[email],
+    )
+    msg.attach_alternative(html_content, 'text/html')
+    msg.send()
+    logger.info('Password reset code sent to %s', email)
