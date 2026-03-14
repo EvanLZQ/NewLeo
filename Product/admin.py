@@ -69,6 +69,12 @@ class ProductInstanceAdmin(admin.ModelAdmin):
 class ProductInfoAdmin(admin.ModelAdmin):
     inlines = [ProductInstanceInline, ProductTagInline]  # 保留你原有 inline
 
+    @admin.display(description="Model Number")
+    def display_model_number(self, obj):
+        return obj.model_number
+
+    list_display = ["display_model_number", "name", "price", "supplier"]
+
     change_list_template = "product_import/productinfo_change_list.html"  # 关键：指向你当前模板真实路径
 
     def get_inline_instances(self, request, obj=None):  # 你原来的逻辑：改 verbose_name
@@ -163,10 +169,34 @@ class ProductColorImgAdmin(admin.ModelAdmin):
 
     color_image_preview.short_description = 'Color Image Preview'
 
+    @admin.display(description="Name")
+    def display_title(self, obj):
+        return obj.title
+
+    @admin.display(description="Image")
+    def display_color_img(self, obj):
+        if obj.color_img:
+            return mark_safe(f'<img src="{obj.color_img.url}" width="40" height="40">')
+        return "-"
+
+    list_display = ["display_title", "display_color_img"]
+
+
+class ProductTagAdmin(admin.ModelAdmin):
+    list_display = ["name", "category", "description"]
+
+
+class ProductPromotionAdmin(admin.ModelAdmin):
+    @admin.display(description="Type")
+    def display_promo_type(self, obj):
+        return obj.get_promo_type_display()
+
+    list_display = ["name", "code", "display_promo_type", "description"]
+
 
 admin.site.register(ProductInfo, ProductInfoAdmin)
-admin.site.register(ProductPromotion)
+admin.site.register(ProductPromotion, ProductPromotionAdmin)
 admin.site.register(ProductInstance, ProductInstanceAdmin)
-admin.site.register(ProductReview)
-admin.site.register(ProductTag)
+# admin.site.register(ProductReview)
+admin.site.register(ProductTag, ProductTagAdmin)
 admin.site.register(ProductColorImg, ProductColorImgAdmin)
