@@ -181,9 +181,11 @@ def createPendingOrder(request):
     shipping_method  = data.get('shipping_method', '')
     country          = data.get('country', '')
     email            = data.get('email', '') or ''
-    # Always prefer the authenticated user's e-mail over whatever the client sends
+    # Always prefer the authenticated user's e-mail over whatever the client sends.
+    # Try .email first (inherited AbstractUser field), fall back to .username
+    # (which is an EmailField and always stores the actual email address).
     if getattr(request.user, 'is_authenticated', False):
-        email = getattr(request.user, 'email', None) or email
+        email = getattr(request.user, 'email', None) or getattr(request.user, 'username', None) or email
 
     if not complete_set_ids:
         return Response(
