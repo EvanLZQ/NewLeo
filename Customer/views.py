@@ -279,6 +279,7 @@ def createCustomer(request):
     serializer = CustomerCreateSerializer(data=request.data)
     if serializer.is_valid():
         serializer.save()
+        login(request, serializer.instance)
         try:
             from Customer.email_service import send_welcome_email
             send_welcome_email(serializer.instance)
