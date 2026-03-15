@@ -37,6 +37,14 @@ class ProductTagInline(admin.TabularInline):
     model = ProductTag.product.through  # M2M through 表
 
 
+class ProductTagProductInline(admin.TabularInline):
+    model = ProductTag.product.through
+    extra = 1
+    verbose_name = "Product"
+    verbose_name_plural = "Products"
+    autocomplete_fields = ["productinfo"]
+
+
 class ProductImageInline(admin.StackedInline):
     model = ProductImage  # 图片模型
     extra = 1  # 默认多一行
@@ -74,6 +82,7 @@ class ProductInfoAdmin(admin.ModelAdmin):
         return obj.model_number
 
     list_display = ["display_model_number", "name", "price", "supplier"]
+    search_fields = ["model_number", "name"]
 
     change_list_template = "product_import/productinfo_change_list.html"  # 关键：指向你当前模板真实路径
 
@@ -184,6 +193,8 @@ class ProductColorImgAdmin(admin.ModelAdmin):
 
 class ProductTagAdmin(admin.ModelAdmin):
     list_display = ["name", "category", "description"]
+    inlines = [ProductTagProductInline]
+    exclude = ["product"]
 
 
 class ProductPromotionAdmin(admin.ModelAdmin):
