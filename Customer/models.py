@@ -227,13 +227,23 @@ class CustomerNotification(models.Model):
 
 class PasswordResetCode(models.Model):
     email = models.EmailField(db_index=True)
-    code = models.CharField(max_length=6)
+    code = models.CharField(max_length=128)  # stores hashed code
     attempts = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     used = models.BooleanField(default=False)
 
     class Meta:
         db_table = "PasswordResetCode"
+
+    def set_code(self, raw_code):
+        """Hash and store the reset code."""
+        from django.contrib.auth.hashers import make_password
+        self.code = make_password(raw_code)
+
+    def check_code(self, raw_code):
+        """Verify a raw code against the stored hash."""
+        from django.contrib.auth.hashers import check_password
+        return check_password(raw_code, self.code)
 
     @property
     def is_expired(self):

@@ -2,13 +2,17 @@ import uuid
 import datetime
 
 from django.conf import settings
+from django.db import transaction
 from django.shortcuts import redirect
 from rest_framework.response import Response
 from django.http import JsonResponse
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import SessionAuthentication
 from rest_framework import status
 import paypalrestsdk
 
+from Leoptique.authentication import AccessTokenAuthentication
 from .models import *
 from .serializer import CompleteSetSerializer, OrderSerializer, CompleteSetObjectSerializer
 from .service.order_service import OrderService
@@ -19,20 +23,54 @@ paypalrestsdk.configure({
     "client_secret": settings.PAYPAL_CLIENT_SECRET,
 })
 
-# Create your views here.
+AUTH_CLASSES = [SessionAuthentication, AccessTokenAuthentication]
 
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _user_owns_complete_set(user, set_id):
+    """Check if a CompleteSet belongs to the user's cart or an order they own."""
+    cart = getattr(user, 'shopping_cart', None)
+    if cart and cart.eyeglasses_set.filter(id=set_id).exists():
+        return True
+    return CompleteSet.objects.filter(id=set_id, order__customer=user).exists()
+
+
+def generate_order_number():
+    """Produce a unique order number like ELW-20260226-A3F7B1."""
+    today = datetime.datetime.now().strftime('%Y%m%d')
+    suffix = uuid.uuid4().hex[:6].upper()
+    return f"ELW-{today}-{suffix}"
+
+
+# ── CompleteSet CRUD ─────────────────────────────────────────────────────────
 
 @api_view(['GET'])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes([IsAuthenticated])
 def getCompleteSet(request):
-    set = CompleteSet.objects.all()
-    serializer = CompleteSetSerializer(set, many=True)
+    cart = getattr(request.user, 'shopping_cart', None)
+    cart_set_ids = list(cart.eyeglasses_set.values_list('id', flat=True)) if cart else []
+    order_set_ids = list(
+        CompleteSet.objects.filter(order__customer=request.user).values_list('id', flat=True)
+    )
+    all_ids = set(cart_set_ids + order_set_ids)
+    sets = CompleteSet.objects.filter(id__in=all_ids)
+    serializer = CompleteSetSerializer(sets, many=True)
     return Response(serializer.data)
 
 
 @api_view(['DELETE'])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes([IsAuthenticated])
 def deleteCompleteSet(request, set_id):
-    set = CompleteSet.objects.get(id=set_id)
-    set.delete()
+    if not _user_owns_complete_set(request.user, set_id):
+        return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        complete_set = CompleteSet.objects.get(id=set_id)
+    except CompleteSet.DoesNotExist:
+        return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
+    complete_set.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -95,6 +133,8 @@ def build_price_check(request_data, instance):
 
 
 @api_view(['POST'])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes([IsAuthenticated])
 def createCompleteSet(request):
     if request.method == 'POST':
         serializer = CompleteSetSerializer(
@@ -108,20 +148,31 @@ def createCompleteSet(request):
 
 
 @api_view(['GET'])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes([IsAuthenticated])
 def getTargetCompleteSet(request, set_id):
-    set = CompleteSet.objects.get(id=set_id)
-    serializer = CompleteSetSerializer(set, many=False)
+    if not _user_owns_complete_set(request.user, set_id):
+        return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        complete_set = CompleteSet.objects.get(id=set_id)
+    except CompleteSet.DoesNotExist:
+        return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
+    serializer = CompleteSetSerializer(complete_set, many=False)
     return Response(serializer.data)
 
 
 @api_view(['PATCH'])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes([IsAuthenticated])
 def updateCompleteSet(request, set_id):
+    if not _user_owns_complete_set(request.user, set_id):
+        return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
     try:
-        set = CompleteSet.objects.get(id=set_id)
+        complete_set = CompleteSet.objects.get(id=set_id)
     except CompleteSet.DoesNotExist:
         return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
     serializer = CompleteSetSerializer(
-        instance=set, data=request.data, partial=True, context={'request': request}
+        instance=complete_set, data=request.data, partial=True, context={'request': request}
     )
     if serializer.is_valid():
         serializer.save()
@@ -130,37 +181,48 @@ def updateCompleteSet(request, set_id):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# ── Order views ──────────────────────────────────────────────────────────────
+
 @api_view(['GET'])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes([IsAuthenticated])
 def getAllOrders(request):
-    orders = OrderInfo.objects.all()
+    orders = OrderInfo.objects.filter(customer=request.user)
     serializer = OrderSerializer(orders, many=True)
     return Response(serializer.data)
 
 
 @api_view(['GET'])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes([IsAuthenticated])
 def getTargetOrder(request, id):
-    order = OrderInfo.objects.get(id=id)
+    try:
+        order = OrderInfo.objects.get(id=id, customer=request.user)
+    except OrderInfo.DoesNotExist:
+        return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
     serializer = OrderSerializer(order)
     return Response(serializer.data)
 
 
 @api_view(['GET'])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes([IsAuthenticated])
 def getCompleteSetLoader(request, set_id):
-    set = CompleteSet.objects.get(id=set_id)
-    serializer = CompleteSetObjectSerializer(set, many=False)
+    if not _user_owns_complete_set(request.user, set_id):
+        return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        complete_set = CompleteSet.objects.get(id=set_id)
+    except CompleteSet.DoesNotExist:
+        return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
+    serializer = CompleteSetObjectSerializer(complete_set, many=False)
     return Response(serializer.data)
 
 
 # ── Order helpers ─────────────────────────────────────────────────────────────
 
-def generate_order_number():
-    """Produce a unique order number like ELW-20260226-A3F7B1."""
-    today = datetime.datetime.now().strftime('%Y%m%d')
-    suffix = uuid.uuid4().hex[:6].upper()
-    return f"ELW-{today}-{suffix}"
-
-
 @api_view(['POST'])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes([IsAuthenticated])
 def createPendingOrder(request):
     """
     Create a pending (UNPAID) OrderInfo from the items in the customer's cart.
@@ -182,10 +244,7 @@ def createPendingOrder(request):
     country          = data.get('country', '')
     email            = data.get('email', '') or ''
     # Always prefer the authenticated user's e-mail over whatever the client sends.
-    # Try .email first (inherited AbstractUser field), fall back to .username
-    # (which is an EmailField and always stores the actual email address).
-    if getattr(request.user, 'is_authenticated', False):
-        email = getattr(request.user, 'email', None) or getattr(request.user, 'username', None) or email
+    email = getattr(request.user, 'email', None) or getattr(request.user, 'username', None) or email
 
     if not complete_set_ids:
         return Response(
@@ -193,29 +252,28 @@ def createPendingOrder(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # ── Step 0a: item-based cleanup (runs BEFORE validation) ─────────────────
-    # Cancel any UNPAID orders that currently own the requested items,
-    # regardless of who created them.  This recovers items stuck because of:
-    #   • Orders created before customer= FK was added  (customer=NULL)
-    #   • Frontend cancel failures  (network error, page refresh, tab close)
-    # ALL CompleteSet rows on those orders are freed — not just the requested
-    # ones — so the order is left in a consistent state before deletion.
-    # Materialise PKs first — Django forbids .delete() on a .distinct() queryset.
-    stuck_order_ids = list(
-        OrderInfo.objects.filter(
-            completeset__id__in=complete_set_ids,
-            payment_status='UNPAID',
-        ).distinct().values_list('pk', flat=True)
-    )
-    if stuck_order_ids:
-        CompleteSet.objects.filter(order_id__in=stuck_order_ids).update(order=None)
-        OrderInfo.objects.filter(pk__in=stuck_order_ids).delete()
+    with transaction.atomic():
+        # ── Step 0a: item-based cleanup (runs BEFORE validation) ─────────────
+        # Cancel any UNPAID orders that currently own the requested items,
+        # regardless of who created them.  This recovers items stuck because of:
+        #   • Orders created before customer= FK was added  (customer=NULL)
+        #   • Frontend cancel failures  (network error, page refresh, tab close)
+        # ALL CompleteSet rows on those orders are freed — not just the requested
+        # ones — so the order is left in a consistent state before deletion.
+        # Materialise PKs first — Django forbids .delete() on a .distinct() queryset.
+        stuck_order_ids = list(
+            OrderInfo.objects.filter(
+                completeset__id__in=complete_set_ids,
+                payment_status='UNPAID',
+            ).distinct().values_list('pk', flat=True)
+        )
+        if stuck_order_ids:
+            CompleteSet.objects.filter(order_id__in=stuck_order_ids).update(order=None)
+            OrderInfo.objects.filter(pk__in=stuck_order_ids).delete()
 
-    # ── Step 0b: user-based cleanup ───────────────────────────────────────────
-    # Cancel any remaining stale UNPAID orders for this authenticated user
-    # that don't own these specific items (e.g. orders from another device).
-    is_authenticated = getattr(request.user, 'is_authenticated', False)
-    if is_authenticated:
+        # ── Step 0b: user-based cleanup ─────────────────────────────────────────
+        # Cancel any remaining stale UNPAID orders for this authenticated user
+        # that don't own these specific items (e.g. orders from another device).
         stale = OrderInfo.objects.filter(
             customer=request.user,
             payment_status='UNPAID',
@@ -224,62 +282,55 @@ def createPendingOrder(request):
             CompleteSet.objects.filter(order__in=stale).update(order=None)
             stale.delete()
 
-    # ── Validate (after cleanup so freed items now pass) ──────────────────────
-    # Only fails here for genuinely bad input: non-existent IDs, wrong user's
-    # items, or items the user intentionally marked as saved-for-later.
-    valid_sets = CompleteSet.objects.filter(
-        id__in=complete_set_ids,
-        order=None,
-        saved_for_later=False,
-    )
-    if valid_sets.count() != len(complete_set_ids):
-        return Response(
-            {'error': 'One or more complete sets are invalid or already attached to an order'},
-            status=status.HTTP_400_BAD_REQUEST,
+        # ── Validate (after cleanup so freed items now pass) ────────────────────
+        valid_sets = CompleteSet.objects.filter(
+            id__in=complete_set_ids,
+            order=None,
+            saved_for_later=False,
         )
+        if valid_sets.count() != len(complete_set_ids):
+            return Response(
+                {'error': 'One or more complete sets are invalid or already attached to an order'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-    # ── Step 1: create the OrderInfo shell ───────────────────────────────────
-    # Supply placeholder totals (0); overwritten with real values in step 3.
-    try:
-        order = OrderInfo(
-            customer=request.user if is_authenticated else None,
-            email=email,
-            order_number=generate_order_number(),
-            order_status='PROCESSING',
-            payment_status='UNPAID',
-            payment_type='paypal',
-            address_id=address_id,
-            shipping_company=shipping_method,
-            comment='',
-            refound_status='',
-            refound_amount=0,
-            sub_total=0,
-            shipping_cost=0,
-            total_amount=0,
+        # ── Step 1: create the OrderInfo shell ─────────────────────────────────
+        try:
+            order = OrderInfo(
+                customer=request.user,
+                email=email,
+                order_number=generate_order_number(),
+                order_status='PROCESSING',
+                payment_status='UNPAID',
+                payment_type='paypal',
+                address_id=address_id,
+                shipping_company=shipping_method,
+                comment='',
+                refound_status='',
+                refound_amount=0,
+                sub_total=0,
+                shipping_cost=0,
+                total_amount=0,
+            )
+            order.save()
+        except Exception as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # ── Step 2: link the complete sets ─────────────────────────────────────
+        CompleteSet.objects.filter(id__in=complete_set_ids).update(order=order)
+
+        # ── Step 3: calculate totals ───────────────────────────────────────────
+        order.sub_total     = OrderService.calculate_sub_total(order)
+        order.shipping_cost = OrderService.calculate_shipping_cost(
+            country, float(order.sub_total), shipping_method,
         )
-        order.save()   # triggers update_order_totals → 0 totals (no sets yet)
-    except Exception as exc:
-        return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        order.total_amount  = order.sub_total + order.shipping_cost
 
-    # ── Step 2: link the complete sets ───────────────────────────────────────
-    CompleteSet.objects.filter(id__in=complete_set_ids).update(order=order)
-
-    # ── Step 3: calculate totals using country + method from the request ──────
-    # AddressForm collects address fields locally without saving them to the DB,
-    # so order.address is null.  We use the country from the request body directly
-    # to avoid that dependency.
-    order.sub_total     = OrderService.calculate_sub_total(order)
-    order.shipping_cost = OrderService.calculate_shipping_cost(
-        country, float(order.sub_total), shipping_method,
-    )
-    order.total_amount  = order.sub_total + order.shipping_cost
-
-    # Persist via QuerySet.update() to bypass the save() hook
-    OrderInfo.objects.filter(pk=order.pk).update(
-        sub_total=order.sub_total,
-        shipping_cost=order.shipping_cost,
-        total_amount=order.total_amount,
-    )
+        OrderInfo.objects.filter(pk=order.pk).update(
+            sub_total=order.sub_total,
+            shipping_cost=order.shipping_cost,
+            total_amount=order.total_amount,
+        )
 
     return Response(
         {
@@ -287,13 +338,15 @@ def createPendingOrder(request):
             'order_number':     order.order_number,
             'sub_total':        str(order.sub_total),
             'shipping_cost':    str(order.shipping_cost),
-            'total_before_tax': str(order.total_amount),  # sub_total + shipping
+            'total_before_tax': str(order.total_amount),
         },
         status=status.HTTP_201_CREATED,
     )
 
 
 @api_view(['POST'])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes([IsAuthenticated])
 def confirmPayment(request):
     """
     Record a completed PayPal payment and mark the order as PAID.
@@ -318,35 +371,35 @@ def confirmPayment(request):
     if not order_id:
         return Response({'error': 'order_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        order = OrderInfo.objects.get(pk=order_id)
-    except OrderInfo.DoesNotExist:
-        return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+    with transaction.atomic():
+        try:
+            order = OrderInfo.objects.select_for_update().get(
+                pk=order_id, customer=request.user)
+        except OrderInfo.DoesNotExist:
+            return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    if order.payment_status == 'PAID':
-        return Response({'error': 'Order is already paid'}, status=status.HTTP_400_BAD_REQUEST)
+        if order.payment_status == 'PAID':
+            return Response({'error': 'Order is already paid'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Create the payment record
-    OrderPayment.objects.create(
-        transaction_id=paypal_transaction_id,
-        order=order,
-        payment_gateway='paypal',
-        transaction_amount=transaction_amount,
-        payer_email=payer_email,
-        gateway_transaction_id=paypal_transaction_id,
-        payment_response=payment_response,
-        transaction_status='completed',
-    )
+        # Create the payment record
+        OrderPayment.objects.create(
+            transaction_id=paypal_transaction_id,
+            order=order,
+            payment_gateway='paypal',
+            transaction_amount=transaction_amount,
+            payer_email=payer_email,
+            gateway_transaction_id=paypal_transaction_id,
+            payment_response=payment_response,
+            transaction_status='completed',
+        )
 
-    # Mark the order PAID — bypass save() to avoid re-running update_order_totals
-    OrderInfo.objects.filter(pk=order.pk).update(
-        payment_status='PAID',
-        payment_type='paypal',
-    )
+        # Mark the order PAID
+        OrderInfo.objects.filter(pk=order.pk).update(
+            payment_status='PAID',
+            payment_type='paypal',
+        )
 
     # Remove paid items from all shopping carts (they've been purchased).
-    # CompleteSet.order FK is intentionally kept pointing to this order for the
-    # audit trail — only the cart M2M entries are removed.
     from Customer.models import ShoppingCart as ShoppingCartModel
     paid_set_ids = list(CompleteSet.objects.filter(order=order).values_list('id', flat=True))
     if paid_set_ids:
@@ -371,6 +424,8 @@ def confirmPayment(request):
 
 
 @api_view(['DELETE'])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes([IsAuthenticated])
 def cancelPendingOrder(request, order_id):
     """
     Cancel a pending (UNPAID) order created by createPendingOrder.
@@ -380,7 +435,8 @@ def cancelPendingOrder(request, order_id):
     step to avoid accumulating stale UNPAID orders.
     """
     try:
-        order = OrderInfo.objects.get(pk=order_id, payment_status='UNPAID')
+        order = OrderInfo.objects.get(
+            pk=order_id, payment_status='UNPAID', customer=request.user)
     except OrderInfo.DoesNotExist:
         return Response({'error': 'Pending order not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -415,12 +471,7 @@ def payment(request):
     if payment.create():
         for link in payment.links:
             if link.rel == "approval_url":
-                # Convert to str to avoid Google App Engine Unicode issue
-                # https://github.com/paypal/rest-api-sdk-python/pull/58
                 approval_url = str(link.href)
-                # return JsonResponse({'approval_url': approval_url})
-                print("Redirect for approval: %s" % (approval_url))
                 return redirect(approval_url)
     else:
-        print(payment.error)
         return JsonResponse({'error': 'payment not created'})

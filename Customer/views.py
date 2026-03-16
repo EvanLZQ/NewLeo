@@ -25,7 +25,7 @@ from oauth2_provider.models import AccessToken, Application, RefreshToken
 from rest_framework.permissions import AllowAny
 from google.auth.transport import requests as google_requests
 import uuid
-from django.views.decorators.csrf import csrf_exempt
+from django.core.cache import cache
 from Order.serializer import OrderSerializer
 from Order.models import OrderInfo
 # from django.contrib.auth.backends import ModelBackend
@@ -33,6 +33,20 @@ from Order.models import OrderInfo
 # Create your views here.
 
 User = get_user_model()
+
+RATE_LIMIT_RESPONSE = Response(
+    {'error': 'Too many attempts. Please try again later.'},
+    status=status.HTTP_429_TOO_MANY_REQUESTS,
+)
+
+
+def _is_rate_limited(key, max_attempts=5, window=300):
+    """Return True if rate limit exceeded. window = seconds (default 5 min)."""
+    count = cache.get(key, 0)
+    if count >= max_attempts:
+        return True
+    cache.set(key, count + 1, window)
+    return False
 
 
 @api_view(['GET'])
@@ -112,6 +126,10 @@ def updateShoppingCart(request, cart_id):
 
 @api_view(['POST'])
 def login_view(request):
+    ip = request.META.get('REMOTE_ADDR', 'unknown')
+    if _is_rate_limited(f'rl:login:{ip}'):
+        return RATE_LIMIT_RESPONSE
+
     username = request.data.get('username')
     password = request.data.get('password')
     user = authenticate(request, username=username, password=password)
@@ -122,15 +140,14 @@ def login_view(request):
         return Response({"error": "Invalid credentials"}, status=400)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def logout_view(request):
     logout(request)
     response = Response({"message": "Logged out successfully!"})
     # Expire the OAuth cookies so AccessTokenAuthentication can no longer
     # resolve the old user between logout and the next login.
-    response.delete_cookie("access_token",  path="/", domain=".eyelovewear.com", samesite="None")
-    response.delete_cookie("refresh_token", path="/", domain=".eyelovewear.com", samesite="None")
+    response.delete_cookie("access_token",  path="/", domain=settings.COOKIE_DOMAIN, samesite="None")
+    response.delete_cookie("refresh_token", path="/", domain=settings.COOKIE_DOMAIN, samesite="None")
     return response
 
 
@@ -233,7 +250,7 @@ def google_login(request):
         token.token,
         max_age=3600 * 24,
         samesite="None",
-        domain=".eyelovewear.com",
+        domain=settings.COOKIE_DOMAIN,
         path="/",
         httponly=True,
         secure=True,
@@ -243,7 +260,7 @@ def google_login(request):
         refresh_token.token,
         max_age=3600 * 24 * 30,
         samesite="None",
-        domain=".eyelovewear.com",
+        domain=settings.COOKIE_DOMAIN,
         path="/",
         httponly=True,
         secure=True,
@@ -360,7 +377,7 @@ def addCustomerPrescription(request):
 @permission_classes([IsAuthenticated])
 def updateCustomerPrescription(request, prescription_id):
     try:
-        prescription = PrescriptionInfo.objects.get(id=prescription_id)
+        prescription = PrescriptionInfo.objects.get(id=prescription_id, customer=request.user)
     except PrescriptionInfo.DoesNotExist:
         return Response({'error': 'Prescription not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -399,7 +416,7 @@ def addCustomerAddress(request):
 @permission_classes([IsAuthenticated])
 def updateCustomerAddress(request, address_id):
     try:
-        address = Address.objects.get(id=address_id)
+        address = Address.objects.get(id=address_id, customer=request.user)
     except Address.DoesNotExist:
         return Response({'error': 'Address not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -416,7 +433,7 @@ def updateCustomerAddress(request, address_id):
 @permission_classes([IsAuthenticated])
 def deleteCustomerAddress(request, address_id):
     try:
-        address = Address.objects.get(id=address_id)
+        address = Address.objects.get(id=address_id, customer=request.user)
     except Address.DoesNotExist:
         return Response({'error': 'Address not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -510,7 +527,9 @@ def request_password_reset_code(request):
         return Response({'message': generic_msg}, status=status.HTTP_200_OK)
 
     code = PasswordResetCode.generate_code()
-    PasswordResetCode.objects.create(email=email, code=code)
+    reset_obj = PasswordResetCode(email=email)
+    reset_obj.set_code(code)
+    reset_obj.save()
 
     try:
         from Customer.email_service import send_password_reset_code
@@ -529,6 +548,9 @@ def request_password_reset_code(request):
 def verify_password_reset_code(request):
     email = (request.data.get('email') or '').strip().lower()
     code = (request.data.get('code') or '').strip()
+
+    if email and _is_rate_limited(f'rl:verify:{email}'):
+        return RATE_LIMIT_RESPONSE
 
     if not email or not code:
         return Response(
@@ -555,7 +577,7 @@ def verify_password_reset_code(request):
     reset_code.attempts += 1
     reset_code.save(update_fields=['attempts'])
 
-    if reset_code.code != code:
+    if not reset_code.check_code(code):
         return Response(
             {'error': 'Invalid or expired code.'},
             status=status.HTTP_400_BAD_REQUEST,
@@ -571,6 +593,9 @@ def reset_password(request):
     code = (request.data.get('code') or '').strip()
     new_password = request.data.get('new_password', '')
     confirm_password = request.data.get('confirm_password', '')
+
+    if email and _is_rate_limited(f'rl:reset:{email}'):
+        return RATE_LIMIT_RESPONSE
 
     if not all([email, code, new_password, confirm_password]):
         return Response(
@@ -603,7 +628,7 @@ def reset_password(request):
     reset_code.attempts += 1
     reset_code.save(update_fields=['attempts'])
 
-    if reset_code.code != code:
+    if not reset_code.check_code(code):
         return Response(
             {'error': 'Invalid or expired code.'},
             status=status.HTTP_400_BAD_REQUEST,

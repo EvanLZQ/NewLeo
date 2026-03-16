@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import serializers
 from .models import *
 
@@ -39,7 +40,7 @@ class ProductImageImageOnlySerializer(serializers.ModelSerializer):
 
     def get_image(self, obj):
         if obj.image:
-            return f'https://admin.eyelovewear.com{obj.image.url}'
+            return f'{settings.MEDIA_BASE_URL}{obj.image.url}'
         return None
 
     class Meta:
@@ -52,7 +53,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
     def get_image(self, obj):
         if obj.image:
-            return f'https://admin.eyelovewear.com{obj.image.url}'
+            return f'{settings.MEDIA_BASE_URL}{obj.image.url}'
         return None
 
     class Meta:
@@ -67,20 +68,23 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
     productPromotion = ProductPromotionSerializer(many=True)
 
     def get_carousel_img(self, obj):
-        images = ProductImage.objects.filter(
-            productInstance=obj, image_type='carousel')
-        serialized_data = ProductImageSerializer(images, many=True).data
-        return [item['image'] for item in serialized_data]
+        # Uses prefetched productImage relation — no extra DB queries
+        return [
+            f'{settings.MEDIA_BASE_URL}{img.image.url}'
+            for img in obj.productImage.all()
+            if img.image_type == 'carousel' and img.image
+        ]
 
     def get_detail_img(self, obj):
-        images = ProductImage.objects.filter(
-            productInstance=obj, image_type='detail')
-        serialized_data = ProductImageSerializer(images, many=True).data
-        return [item['image'] for item in serialized_data]
+        return [
+            f'{settings.MEDIA_BASE_URL}{img.image.url}'
+            for img in obj.productImage.all()
+            if img.image_type == 'detail' and img.image
+        ]
 
     def get_color_img_url(self, obj):
         img_url = obj.color_img.color_img.url if obj.color_img else ''
-        return f'https://admin.eyelovewear.com{img_url}'
+        return f'{settings.MEDIA_BASE_URL}{img_url}'
 
     def to_representation(self, obj):
         rep = super().to_representation(obj)
