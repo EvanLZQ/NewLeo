@@ -17,14 +17,14 @@ class OrderInfo(models.Model):
                                  on_delete=models.SET_NULL, blank=True, related_name='order')
     coupon_used = models.ForeignKey(
         'General.Coupon', null=True, on_delete=models.SET_NULL, blank=True, related_name='order')
-    order_number = models.CharField(max_length=20)
-    order_status = models.CharField(max_length=50,
+    order_number = models.CharField(max_length=20, db_index=True)
+    order_status = models.CharField(max_length=50, db_index=True,
                                     choices=[('NULL', 'Null'), ('PROCESSING', 'Processing'), ('SHIPPED', 'Shipped'),
                                              ('DELIVERED', 'Delivered'), ('COMPLETE', 'Complete'), ('CANCELED', 'Canceled'), ('REFUND', 'Refund')], default='PROCESSING')
     refound_status = models.CharField(max_length=20, blank=True)
     refound_amount = models.DecimalField(
         max_digits=5, decimal_places=2, blank=True)
-    payment_status = models.CharField(max_length=50,
+    payment_status = models.CharField(max_length=50, db_index=True,
                                       choices=[('UNPAID', 'Unpaid'), ('PAID', 'Paid'), ('PROCESSING', 'Processing'), ('NULL', 'Null')], default='UNPAID')
     payment_type = models.CharField(max_length=20, null=True)
     # TODO email model

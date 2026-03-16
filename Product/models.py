@@ -10,7 +10,7 @@ __all__ = ['ProductTag', 'ProductInstance', 'ProductPromotion',
 class ProductInfo(models.Model):
     supplier = models.ForeignKey(
         'Supplier.SupplierInfo', on_delete=models.SET_NULL, null=True)
-    model_number = models.CharField(max_length=20)
+    model_number = models.CharField(max_length=20, db_index=True)
     name = models.CharField(max_length=100, blank=True)
     rmb_price = models.DecimalField(
         max_digits=5, decimal_places=2, default=0)

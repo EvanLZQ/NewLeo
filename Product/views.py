@@ -74,7 +74,10 @@ def getPageProducts(request):
     paginator = Paginator(products, number_of_page)
 
     # 获取当前页码（默认为第 1 页）
-    page_number = int(request.GET.get('page', 1))
+    try:
+        page_number = int(request.GET.get('page', 1))
+    except (ValueError, TypeError):
+        page_number = 1
 
     # 如果页码超出范围，则返回空数组
     if page_number > paginator.num_pages or page_number < 1:
@@ -92,22 +95,31 @@ def getPageProducts(request):
 
 @api_view(['GET'])
 def getProduct(request, sku):
-    product_instance = ProductInstance.objects.get(sku=sku)
+    try:
+        product_instance = ProductInstance.objects.get(sku=sku)
+    except ProductInstance.DoesNotExist:
+        return Response({'error': 'Product not found'}, status=404)
     serializer = ProductInstanceSerializer(product_instance)
     return Response(serializer.data)
 
 
 @api_view(['GET'])
 def getModel(request, model):
-    product = ProductInfo.objects.get(model_number=model)
+    try:
+        product = ProductInfo.objects.get(model_number=model)
+    except ProductInfo.DoesNotExist:
+        return Response({'error': 'Product not found'}, status=404)
     serializer = ProductSerializer(product, many=False)
     return Response(serializer.data)
 
 
 @api_view(['GET'])
 def getModelUsingSku(request, sku):
-    product_id = ProductInstance.objects.get(sku=sku).product_id
-    product = ProductInfo.objects.get(id=product_id)
+    try:
+        product_instance = ProductInstance.objects.get(sku=sku)
+        product = ProductInfo.objects.get(id=product_instance.product_id)
+    except (ProductInstance.DoesNotExist, ProductInfo.DoesNotExist):
+        return Response({'error': 'Product not found'}, status=404)
     serializer = SKUtoModelSerializer(product, many=False)
     return Response(serializer.data)
 
@@ -120,7 +132,10 @@ def filterProduct(request):
     filter_object = request.query_params.get('filter', None)
     if filter_object:
         import json
-        filter_dict = json.loads(filter_object)
+        try:
+            filter_dict = json.loads(filter_object)
+        except (json.JSONDecodeError, ValueError):
+            return Response({'error': 'Invalid filter format'}, status=400)
 
         # Initialize a combined Q object with all True (so it can be used with & operator)
         combined_q_objects = Q()
