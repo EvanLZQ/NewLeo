@@ -79,9 +79,14 @@ def getPageProducts(request):
     except (ValueError, TypeError):
         page_number = 1
 
-    # 如果页码超出范围，则返回空数组
+    # 如果页码超出范围，则返回空结果
     if page_number > paginator.num_pages or page_number < 1:
-        return Response([])
+        return Response({
+            'results': [],
+            'total_count': paginator.count,
+            'total_pages': paginator.num_pages,
+            'current_page': page_number,
+        })
 
     # 获取对应页的数据
     page_obj = paginator.get_page(page_number)
@@ -89,8 +94,12 @@ def getPageProducts(request):
     # 序列化分页结果
     serializer = ProductSerializer(page_obj, many=True)
 
-    # 返回结果为纯数组，方便前端无限滚动直接使用
-    return Response(serializer.data)
+    return Response({
+        'results': serializer.data,
+        'total_count': paginator.count,
+        'total_pages': paginator.num_pages,
+        'current_page': page_number,
+    })
 
 
 @api_view(['GET'])
@@ -126,8 +135,19 @@ def getModelUsingSku(request, sku):
 
 @api_view(['GET'])
 def filterProduct(request):
-    products = ProductInfo.objects.filter(
-        productInstance__isnull=False).distinct()
+    products = (
+        ProductInfo.objects.filter(
+            Q(productInstance__isnull=False) & Q(productInstance__online=True)
+        )
+        .select_related('supplier')
+        .prefetch_related(
+            'productInstance__color_img',
+            'productInstance__productImage',
+            'productReview',
+            'productTag'
+        )
+        .distinct()
+    )
 
     filter_object = request.query_params.get('filter', None)
     if filter_object:
@@ -137,10 +157,8 @@ def filterProduct(request):
         except (json.JSONDecodeError, ValueError):
             return Response({'error': 'Invalid filter format'}, status=400)
 
-        # Initialize a combined Q object with all True (so it can be used with & operator)
         combined_q_objects = Q()
 
-        # Build the Q object for colors
         colors = filter_dict.get('Color', [])
         if colors:
             color_q_objects = Q()
@@ -148,7 +166,6 @@ def filterProduct(request):
                 color_q_objects |= Q(productInstance__color_display_name=color)
             combined_q_objects &= color_q_objects
 
-        # Build the Q object for gender
         genders = filter_dict.get('Gender', [])
         if genders:
             gender_q_objects = Q()
@@ -156,7 +173,6 @@ def filterProduct(request):
                 gender_q_objects |= Q(gender=gender)
             combined_q_objects &= gender_q_objects
 
-        # Build the Q object for size
         sizes = filter_dict.get('Size', [])
         if sizes:
             size_q_objects = Q()
@@ -164,7 +180,6 @@ def filterProduct(request):
                 size_q_objects |= Q(letter_size=size)
             combined_q_objects &= size_q_objects
 
-        # Build the Q object for Rim
         rims = filter_dict.get('Rim', [])
         if rims:
             rim_q_objects = Q()
@@ -172,7 +187,6 @@ def filterProduct(request):
                 rim_q_objects |= Q(frame_style=rim)
             combined_q_objects &= rim_q_objects
 
-        # Build the Q object for keyword search
         search = filter_dict.get('Search', None)
         if search:
             search_q_objects = Q()
@@ -180,7 +194,6 @@ def filterProduct(request):
             search_q_objects |= Q(model_number__icontains=search)
             combined_q_objects &= search_q_objects
 
-        # Build the Q object for shape
         shapes = filter_dict.get('Shape', [])
         if shapes:
             shape_q_objects = Q()
@@ -188,7 +201,6 @@ def filterProduct(request):
                 shape_q_objects |= Q(productTag__name=shape)
             combined_q_objects &= shape_q_objects
 
-        # Build the Q object for material
         materials = filter_dict.get('Material', [])
         if materials:
             material_q_objects = Q()
@@ -196,7 +208,6 @@ def filterProduct(request):
                 material_q_objects |= Q(productTag__name=material)
             combined_q_objects &= material_q_objects
 
-        # Build the Q object for usage
         usages = filter_dict.get('Usage', [])
         if usages:
             usage_q_objects = Q()
@@ -204,7 +215,6 @@ def filterProduct(request):
                 usage_q_objects |= Q(productTag__name=usage)
             combined_q_objects &= usage_q_objects
 
-        # Build the Q object for occasion
         occasions = filter_dict.get('Occasion', [])
         if occasions:
             occasion_q_objects = Q()
@@ -212,7 +222,6 @@ def filterProduct(request):
                 occasion_q_objects |= Q(productTag__name=occasion)
             combined_q_objects &= occasion_q_objects
 
-        # Build the Q object for collection
         collections = filter_dict.get('Collection', [])
         if collections:
             collection_q_objects = Q()
@@ -220,11 +229,38 @@ def filterProduct(request):
                 collection_q_objects |= Q(productTag__name=collection)
             combined_q_objects &= collection_q_objects
 
-        # Filter search results
         products = products.filter(combined_q_objects).distinct()
 
-    serializer = ProductSerializer(products, many=True)
-    return Response(serializer.data)
+    # Pagination
+    number_of_page = request.GET.get('number', 30)
+    try:
+        number_of_page = int(number_of_page)
+        if number_of_page <= 0:
+            number_of_page = 30
+    except ValueError:
+        number_of_page = 30
+
+    paginator = Paginator(products, number_of_page)
+
+    try:
+        page_number = int(request.GET.get('page', 1))
+    except (ValueError, TypeError):
+        page_number = 1
+
+    if page_number < 1:
+        page_number = 1
+    if page_number > paginator.num_pages:
+        page_number = paginator.num_pages
+
+    page_obj = paginator.get_page(page_number)
+    serializer = ProductSerializer(page_obj, many=True)
+
+    return Response({
+        'results': serializer.data,
+        'total_count': paginator.count,
+        'total_pages': paginator.num_pages,
+        'current_page': page_number,
+    })
 
 
 @api_view(['GET'])
