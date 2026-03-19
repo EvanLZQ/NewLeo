@@ -7,7 +7,7 @@ from django.shortcuts import redirect
 from rest_framework.response import Response
 from django.http import JsonResponse
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authentication import SessionAuthentication
 from rest_framework import status
 import paypalrestsdk
@@ -475,3 +475,319 @@ def payment(request):
                 return redirect(approval_url)
     else:
         return JsonResponse({'error': 'payment not created'})
+
+
+# ── Guest checkout helpers ────────────────────────────────────────────────────
+
+def _get_or_create_guest_cart(request):
+    """Return a ShoppingCart tied to the current Django session."""
+    from Customer.models import ShoppingCart as ShoppingCartModel
+    cart_id = request.session.get('guest_cart_id')
+    if cart_id:
+        try:
+            return ShoppingCartModel.objects.get(pk=cart_id)
+        except ShoppingCartModel.DoesNotExist:
+            pass
+    cart = ShoppingCartModel.objects.create()
+    request.session['guest_cart_id'] = cart.pk
+    return cart
+
+
+@api_view(['POST'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([AllowAny])
+def guestCart(request):
+    """
+    Manage a session-based shopping cart for unauthenticated users.
+
+    POST body:
+        action           – "get" | "add" | "remove"
+        complete_set_id  – int (required for add/remove)
+    """
+    from Customer.serializer import ShoppingCartSerializer
+    action = request.data.get('action', 'get')
+    cart = _get_or_create_guest_cart(request)
+
+    if action == 'add':
+        cs_id = request.data.get('complete_set_id')
+        if cs_id:
+            cart.eyeglasses_set.add(cs_id)
+    elif action == 'remove':
+        cs_id = request.data.get('complete_set_id')
+        if cs_id:
+            cart.eyeglasses_set.remove(cs_id)
+
+    serializer = ShoppingCartSerializer(cart)
+    return Response(serializer.data)
+
+
+# ── Guest order creation ──────────────────────────────────────────────────────
+
+@api_view(['POST'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([AllowAny])
+def createPendingOrderGuest(request):
+    """
+    Create a pending (UNPAID) OrderInfo for a guest (unauthenticated) user.
+
+    Request body:
+        complete_set_ids  – list[int]
+        email             – str  (required)
+        address_data      – dict {full_name, phone, address, city, province_state, country, post_code}
+        shipping_method   – str
+        country           – str
+    """
+    from General.models import Address
+
+    data             = request.data
+    complete_set_ids = data.get('complete_set_ids', [])
+    email            = (data.get('email') or '').strip()
+    address_data     = data.get('address_data', {})
+    shipping_method  = data.get('shipping_method', '')
+    country          = data.get('country', '')
+
+    if not email:
+        return Response({'error': 'Email is required for guest checkout'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if not complete_set_ids:
+        return Response({'error': 'complete_set_ids is required'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    required_addr = ['full_name', 'phone', 'address', 'city', 'province_state', 'country', 'post_code']
+    for field in required_addr:
+        if not address_data.get(field, '').strip():
+            return Response({'error': f'{field} is required in address_data'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        # Step 0a: item-based cleanup — same as authenticated
+        stuck_order_ids = list(
+            OrderInfo.objects.filter(
+                completeset__id__in=complete_set_ids,
+                payment_status='UNPAID',
+            ).distinct().values_list('pk', flat=True)
+        )
+        if stuck_order_ids:
+            CompleteSet.objects.filter(order_id__in=stuck_order_ids).update(order=None)
+            OrderInfo.objects.filter(pk__in=stuck_order_ids).delete()
+
+        # Step 0b: session-based cleanup — cancel previous guest pending order
+        prev_order_id = request.session.get('guest_pending_order_id')
+        if prev_order_id:
+            stale = OrderInfo.objects.filter(pk=prev_order_id, payment_status='UNPAID')
+            if stale.exists():
+                CompleteSet.objects.filter(order__in=stale).update(order=None)
+                stale.delete()
+
+        # Validate
+        valid_sets = CompleteSet.objects.filter(
+            id__in=complete_set_ids, order=None, saved_for_later=False)
+        if valid_sets.count() != len(complete_set_ids):
+            return Response(
+                {'error': 'One or more complete sets are invalid or already attached to an order'},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        # Create guest address (customer=None)
+        addr = Address.objects.create(
+            customer=None,
+            full_name=address_data['full_name'].strip(),
+            phone=address_data['phone'].strip(),
+            address=address_data['address'].strip(),
+            city=address_data['city'].strip(),
+            province_state=address_data['province_state'].strip(),
+            country=address_data['country'].strip(),
+            post_code=address_data['post_code'].strip(),
+        )
+
+        # Create OrderInfo with customer=None
+        try:
+            order = OrderInfo(
+                customer=None,
+                email=email,
+                order_number=generate_order_number(),
+                order_status='PROCESSING',
+                payment_status='UNPAID',
+                payment_type='paypal',
+                address=addr,
+                shipping_company=shipping_method,
+                comment='',
+                refound_status='',
+                refound_amount=0,
+                sub_total=0,
+                shipping_cost=0,
+                total_amount=0,
+            )
+            order.save()
+        except Exception as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Link complete sets
+        CompleteSet.objects.filter(id__in=complete_set_ids).update(order=order)
+
+        # Calculate totals
+        order.sub_total = OrderService.calculate_sub_total(order)
+        order.shipping_cost = OrderService.calculate_shipping_cost(
+            country, float(order.sub_total), shipping_method)
+        order.total_amount = order.sub_total + order.shipping_cost
+
+        OrderInfo.objects.filter(pk=order.pk).update(
+            sub_total=order.sub_total,
+            shipping_cost=order.shipping_cost,
+            total_amount=order.total_amount,
+        )
+
+    # Track in session for ownership
+    request.session['guest_pending_order_id'] = order.pk
+
+    return Response({
+        'order_id':         order.pk,
+        'order_number':     order.order_number,
+        'sub_total':        str(order.sub_total),
+        'shipping_cost':    str(order.shipping_cost),
+        'total_before_tax': str(order.total_amount),
+    }, status=status.HTTP_201_CREATED)
+
+
+# ── Guest payment confirmation ────────────────────────────────────────────────
+
+@api_view(['POST'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([AllowAny])
+def confirmPaymentGuest(request):
+    """
+    Record a completed PayPal payment for a guest order and mark it PAID.
+    Ownership validated via session (guest_pending_order_id).
+    """
+    data                  = request.data
+    order_id              = data.get('order_id')
+    paypal_transaction_id = data.get('paypal_transaction_id', '')
+    payer_email           = data.get('payer_email', '')
+    transaction_amount    = data.get('transaction_amount', '0')
+    payment_response      = data.get('payment_response', {})
+
+    if not order_id:
+        return Response({'error': 'order_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Session-based ownership check
+    session_order_id = request.session.get('guest_pending_order_id')
+    if session_order_id != order_id:
+        return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    with transaction.atomic():
+        try:
+            order = OrderInfo.objects.select_for_update().get(
+                pk=order_id, customer=None)
+        except OrderInfo.DoesNotExist:
+            return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if order.payment_status == 'PAID':
+            return Response({'error': 'Order is already paid'}, status=status.HTTP_400_BAD_REQUEST)
+
+        OrderPayment.objects.create(
+            transaction_id=paypal_transaction_id,
+            order=order,
+            payment_gateway='paypal',
+            transaction_amount=transaction_amount,
+            payer_email=payer_email,
+            gateway_transaction_id=paypal_transaction_id,
+            payment_response=payment_response,
+            transaction_status='completed',
+        )
+
+        OrderInfo.objects.filter(pk=order.pk).update(
+            payment_status='PAID',
+            payment_type='paypal',
+        )
+
+    # Remove paid items from guest cart
+    from Customer.models import ShoppingCart as ShoppingCartModel
+    paid_set_ids = list(CompleteSet.objects.filter(order=order).values_list('id', flat=True))
+    if paid_set_ids:
+        for cart in ShoppingCartModel.objects.filter(eyeglasses_set__id__in=paid_set_ids).distinct():
+            cart.eyeglasses_set.remove(*paid_set_ids)
+
+    # Clean up session
+    request.session.pop('guest_pending_order_id', None)
+    request.session.pop('guest_cart_id', None)
+    request.session['guest_completed_order'] = {
+        'order_number': order.order_number,
+        'email': order.email,
+    }
+
+    # Send order confirmation email
+    try:
+        order.refresh_from_db()
+        from Order.email_service import send_order_confirmation
+        send_order_confirmation(order)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            'Failed to send order confirmation email for guest order %s', order.order_number)
+
+    return Response(
+        {'success': True, 'order_number': order.order_number},
+        status=status.HTTP_200_OK)
+
+
+# ── Guest cancel pending order ────────────────────────────────────────────────
+
+@api_view(['DELETE'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([AllowAny])
+def cancelPendingOrderGuest(request, order_id):
+    """Cancel a guest's pending (UNPAID) order. Session-based ownership."""
+    session_order_id = request.session.get('guest_pending_order_id')
+    if session_order_id != order_id:
+        return Response({'error': 'Pending order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        order = OrderInfo.objects.get(pk=order_id, payment_status='UNPAID', customer=None)
+    except OrderInfo.DoesNotExist:
+        return Response({'error': 'Pending order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    CompleteSet.objects.filter(order=order).update(order=None)
+    order.delete()
+    request.session.pop('guest_pending_order_id', None)
+
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── Guest order lookup ────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def guestOrderLookup(request):
+    """
+    Look up a guest order by email + order_number.
+    Returns limited order info (no sensitive data).
+    """
+    from django.core.cache import cache
+
+    email = request.query_params.get('email', '').strip().lower()
+    order_number = request.query_params.get('order_number', '').strip()
+
+    if not email or not order_number:
+        return Response({'error': 'email and order_number are required'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    # Rate limit by IP
+    ip = request.META.get('REMOTE_ADDR', 'unknown')
+    rl_key = f'rl:guest_lookup:{ip}'
+    count = cache.get(rl_key, 0)
+    if count >= 10:
+        return Response({'error': 'Too many attempts. Please try again later.'},
+                        status=status.HTTP_429_TOO_MANY_REQUESTS)
+    cache.set(rl_key, count + 1, 300)
+
+    try:
+        order = OrderInfo.objects.get(
+            order_number=order_number, email__iexact=email, customer=None)
+    except OrderInfo.DoesNotExist:
+        return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    return Response({
+        'order_number':   order.order_number,
+        'order_status':   order.order_status,
+        'payment_status': order.payment_status,
+        'created_at':     order.created_at.isoformat(),
+        'shipping_company': order.shipping_company,
+    })

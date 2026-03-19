@@ -94,6 +94,16 @@ def getUserShoppingCart(request, cart_id):
         # Merge the local shopping cart into the user's cart
         shopping_cart.merge_with(local_cart)
 
+    # Also merge guest session cart if present
+    guest_cart_id = request.session.get("guest_cart_id")
+    if guest_cart_id and guest_cart_id != shopping_cart.id:
+        try:
+            guest_cart = ShoppingCart.objects.get(id=guest_cart_id)
+            shopping_cart.merge_with(guest_cart)
+        except ShoppingCart.DoesNotExist:
+            pass
+        del request.session["guest_cart_id"]
+
     serializer = ShoppingCartSerializer(shopping_cart)
     return Response(serializer.data)
 
@@ -661,3 +671,71 @@ def reset_password(request):
         {'message': 'Password reset successfully.'},
         status=status.HTTP_200_OK,
     )
+
+
+# ── Guest → Account creation (post-purchase) ─────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def createFromGuest(request):
+    """
+    Create an account from a guest checkout and link the guest order.
+
+    POST body:
+        email        – str (must match the guest order)
+        password     – str
+        order_number – str
+    """
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+
+    email        = (request.data.get('email') or '').strip()
+    password     = request.data.get('password', '')
+    order_number = request.data.get('order_number', '')
+
+    if not email or not password:
+        return Response({'error': 'Email and password are required'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    # Check if account already exists
+    if CustomerInfo.objects.filter(username=email).exists():
+        return Response({'error': 'An account with this email already exists'},
+                        status=status.HTTP_409_CONFLICT)
+
+    # Validate password strength
+    try:
+        validate_password(password)
+    except ValidationError as e:
+        return Response({'error': e.messages}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Create the user
+    user = CustomerInfo.objects.create_user(username=email, password=password)
+
+    # Link guest order(s) to the new account
+    if order_number:
+        from Order.models import OrderInfo
+        from General.models import Address
+        guest_orders = OrderInfo.objects.filter(
+            order_number=order_number, email__iexact=email, customer=None)
+        for order in guest_orders:
+            order.customer = user
+            order.save(update_fields=['customer'])
+            # Link the order's address to the customer
+            if order.address and order.address.customer is None:
+                Address.objects.filter(pk=order.address_id).update(customer=user)
+
+    # Auto-login
+    user.backend = 'django.contrib.auth.backends.ModelBackend'
+    login(request, user)
+
+    # Send welcome email
+    try:
+        from Customer.email_service import send_welcome_email
+        send_welcome_email(user)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            'Failed to send welcome email to %s', email)
+
+    return Response({'success': True, 'message': 'Account created successfully'},
+                    status=status.HTTP_201_CREATED)
