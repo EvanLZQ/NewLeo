@@ -57,4 +57,6 @@ urlpatterns = [
     path("update_wish_list/<int:list_id>",
          views.updateWishList, name="update_wish_list"),
     path("add_wish_list", views.addWishList, name="create_wish_list"),
+    # Guest account creation
+    path('create_from_guest', views.createFromGuest, name='create_from_guest'),
 ]
