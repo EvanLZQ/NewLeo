@@ -728,17 +728,31 @@ def confirmPaymentGuest(request):
     }
 
     # Send order confirmation email
+    import logging
+    _logger = logging.getLogger(__name__)
+    email_sent = False
+    email_error = None
     try:
         order.refresh_from_db()
+        _logger.info(
+            'Guest order email debug: order=%s email=%r customer=%r',
+            order.order_number, order.email, order.customer_id,
+        )
         from Order.email_service import send_order_confirmation
         send_order_confirmation(order)
-    except Exception:
-        import logging
-        logging.getLogger(__name__).exception(
+        email_sent = True
+    except Exception as exc:
+        email_error = str(exc)
+        _logger.exception(
             'Failed to send order confirmation email for guest order %s', order.order_number)
 
     return Response(
-        {'success': True, 'order_number': order.order_number},
+        {
+            'success': True,
+            'order_number': order.order_number,
+            'email_sent': email_sent,
+            'email_error': email_error,
+        },
         status=status.HTTP_200_OK)
 
 
