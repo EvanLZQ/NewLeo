@@ -62,10 +62,24 @@ def getCompleteSet(request):
 
 @api_view(['DELETE'])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def deleteCompleteSet(request, set_id):
-    if not _user_owns_complete_set(request.user, set_id):
-        return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
+    # Authenticated user: check user ownership
+    if request.user and request.user.is_authenticated:
+        if not _user_owns_complete_set(request.user, set_id):
+            return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
+    else:
+        # Guest: check if the set is in their session cart or has no order (just created)
+        from Customer.models import ShoppingCart as ShoppingCartModel
+        guest_cart_id = request.session.get('guest_cart_id')
+        in_guest_cart = False
+        if guest_cart_id:
+            in_guest_cart = ShoppingCartModel.objects.filter(
+                pk=guest_cart_id, eyeglasses_set__id=set_id).exists()
+        # Also allow deleting unattached sets (just created, not in any cart/order yet)
+        is_unattached = CompleteSet.objects.filter(id=set_id, order=None).exists()
+        if not in_guest_cart and not is_unattached:
+            return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
     try:
         complete_set = CompleteSet.objects.get(id=set_id)
     except CompleteSet.DoesNotExist:
@@ -134,7 +148,7 @@ def build_price_check(request_data, instance):
 
 @api_view(['POST'])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def createCompleteSet(request):
     if request.method == 'POST':
         serializer = CompleteSetSerializer(
