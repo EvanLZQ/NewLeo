@@ -291,9 +291,9 @@ AUTHENTICATION_BACKENDS = {
 #     'https://www.googleapis.com/auth/userinfo.profile',
 # ]
 
-PAYPAL_CLIENT_ID = 'AWlqoPFcKFhlQmjV3xRz35bKkBhRCPpOZmOmQXW_yVojG6KyW1WWpDhIMPaC6nbiWmGOdWkppsU9-wNp'
-PAYPAL_CLIENT_SECRET = 'EMGtvP4DSRuS0w44a1qJVI0ybMw1myM_iijM4Z83hZE9AagQd1kFzsgx54Wzz5kiJStmDL8ZVcIla3qF'
-PAYPAL_MODE = 'sandbox'
+PAYPAL_CLIENT_ID = os.environ.get('PAYPAL_CLIENT_ID', '')
+PAYPAL_CLIENT_SECRET = os.environ.get('PAYPAL_CLIENT_SECRET', '')
+PAYPAL_MODE = os.environ.get('PAYPAL_MODE', 'sandbox')
 
 # ── Domain constants (override via .env for different environments) ────────
 MEDIA_BASE_URL = os.environ.get('MEDIA_BASE_URL', 'https://admin.eyelovewear.com')
