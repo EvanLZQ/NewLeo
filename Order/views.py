@@ -36,6 +36,25 @@ def _user_owns_complete_set(user, set_id):
     return CompleteSet.objects.filter(id=set_id, order__customer=user).exists()
 
 
+def _caller_owns_complete_set(request, set_id):
+    """
+    Ownership check that works for both authenticated users and guests.
+    - Authenticated: delegates to _user_owns_complete_set.
+    - Guest: checks if the CompleteSet is in the session's guest cart, OR
+      is unattached (just created, not yet linked to any order/cart).
+    """
+    if request.user and request.user.is_authenticated:
+        return _user_owns_complete_set(request.user, set_id)
+
+    from Customer.models import ShoppingCart as ShoppingCartModel
+    guest_cart_id = request.session.get('guest_cart_id')
+    if guest_cart_id and ShoppingCartModel.objects.filter(
+            pk=guest_cart_id, eyeglasses_set__id=set_id).exists():
+        return True
+    # Allow operating on unattached sets (just created, not in any cart/order yet)
+    return CompleteSet.objects.filter(id=set_id, order=None).exists()
+
+
 def generate_order_number():
     """Produce a unique order number like ELW-20260226-A3F7B1."""
     today = datetime.datetime.now().strftime('%Y%m%d')
@@ -64,22 +83,8 @@ def getCompleteSet(request):
 @authentication_classes(AUTH_CLASSES)
 @permission_classes([AllowAny])
 def deleteCompleteSet(request, set_id):
-    # Authenticated user: check user ownership
-    if request.user and request.user.is_authenticated:
-        if not _user_owns_complete_set(request.user, set_id):
-            return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
-    else:
-        # Guest: check if the set is in their session cart or has no order (just created)
-        from Customer.models import ShoppingCart as ShoppingCartModel
-        guest_cart_id = request.session.get('guest_cart_id')
-        in_guest_cart = False
-        if guest_cart_id:
-            in_guest_cart = ShoppingCartModel.objects.filter(
-                pk=guest_cart_id, eyeglasses_set__id=set_id).exists()
-        # Also allow deleting unattached sets (just created, not in any cart/order yet)
-        is_unattached = CompleteSet.objects.filter(id=set_id, order=None).exists()
-        if not in_guest_cart and not is_unattached:
-            return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
+    if not _caller_owns_complete_set(request, set_id):
+        return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
     try:
         complete_set = CompleteSet.objects.get(id=set_id)
     except CompleteSet.DoesNotExist:
@@ -163,9 +168,9 @@ def createCompleteSet(request):
 
 @api_view(['GET'])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def getTargetCompleteSet(request, set_id):
-    if not _user_owns_complete_set(request.user, set_id):
+    if not _caller_owns_complete_set(request, set_id):
         return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
     try:
         complete_set = CompleteSet.objects.get(id=set_id)
@@ -177,9 +182,9 @@ def getTargetCompleteSet(request, set_id):
 
 @api_view(['PATCH'])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def updateCompleteSet(request, set_id):
-    if not _user_owns_complete_set(request.user, set_id):
+    if not _caller_owns_complete_set(request, set_id):
         return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
     try:
         complete_set = CompleteSet.objects.get(id=set_id)
@@ -220,9 +225,9 @@ def getTargetOrder(request, id):
 
 @api_view(['GET'])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def getCompleteSetLoader(request, set_id):
-    if not _user_owns_complete_set(request.user, set_id):
+    if not _caller_owns_complete_set(request, set_id):
         return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
     try:
         complete_set = CompleteSet.objects.get(id=set_id)
