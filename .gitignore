@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Secrets / large dumps that must never be committed (see 2026-07-28 history scrub)
+backup.sql
+*.sql
+*.tgz
+nginx/certbot/

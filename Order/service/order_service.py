@@ -140,13 +140,13 @@ class OrderService:
         total_price = 0
         if complete_set.frame:
             total_price += complete_set.frame.price
-        if complete_set.usage:
-            total_price += complete_set.usage.add_on_price
-        if complete_set.color:
-            total_price += complete_set.color.add_on_price
+        if complete_set.function_path:
+            total_price += complete_set.function_path.extra_price
+        if complete_set.index_option:
+            total_price += complete_set.index_option.price
+        if complete_set.color_option:
+            total_price += complete_set.color_option.extra_price
         if complete_set.coating:
-            total_price += complete_set.coating.add_on_price
-        if complete_set.index:
-            total_price += complete_set.index.add_on_price
+            total_price += complete_set.coating.price
         # density is now a plain CharField — no add_on_price contribution
         return total_price

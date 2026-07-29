@@ -1,0 +1,14 @@
+{# Project-level override that adds an "Import from Excel" button next to     #}
+{# the standard "Add" button on every changelist. Falls back to the parent    #}
+{# template (Jazzmin's, then Django's contrib admin) for everything else.     #}
+{% extends "admin/change_list.html" %}
+{% load i18n admin_urls %}
+
+{% block object-tools-items %}
+    <li>
+        <a href="{% url 'admin:'|add:opts.app_label|add:'_'|add:opts.model_name|add:'_import_xlsx' %}" class="importlink">
+            {% blocktrans with name=opts.verbose_name_plural|capfirst %}Import {{ name }} from Excel{% endblocktrans %}
+        </a>
+    </li>
+    {{ block.super }}
+{% endblock %}

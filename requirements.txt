@@ -16,3 +16,4 @@ Pillow
 django-tinymce
 paypalrestsdk
 django-anymail[mailgun]
+openpyxl

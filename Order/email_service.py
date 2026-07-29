@@ -29,7 +29,7 @@ def send_order_confirmation(order) -> None:
         return
 
     complete_sets = order.completeset_set.select_related(
-        'frame', 'usage', 'color', 'coating', 'index', 'prescription'
+        'frame', 'lens_type', 'function_path', 'index_option', 'color_option', 'coating', 'prescription'
     ).all()
 
     context = {

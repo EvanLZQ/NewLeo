@@ -17,6 +17,8 @@ from django.contrib import admin
 from django.urls import path, include, re_path
 from . import views
 from .views import csrf
+from . import admin_export  # noqa: F401  (registers site-wide "Export to Excel" action)
+from . import admin_import  # noqa: F401  (registers site-wide "Import from Excel" URL on every ModelAdmin)
 
 admin.site.site_header = 'Eyelovewear Admin Site'
 admin.site.site_title = 'Eyelovewear Admin'

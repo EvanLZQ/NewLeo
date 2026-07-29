@@ -121,21 +121,21 @@ def build_price_check(request_data, instance):
         'changed':        abs(backend_frame - frontend_frame) > 0.005,
     })
 
-    # ── Lens options (skip null FKs — e.g. color is null for Clear type) ────
-    for component, option_obj in [
-        ('usage',   instance.usage),
-        ('color',   instance.color),
-        ('coating', instance.coating),
-        ('index',   instance.index),
+    # ── Lens options (skip null FKs — e.g. color_option is null when the
+    #    selected function path doesn't require a color step) ──────────────
+    for component, option_obj, price_field, label_field in [
+        ('function_path', instance.function_path, 'extra_price', 'function_label'),
+        ('index_option',  instance.index_option,  'price',       'option_label'),
+        ('color_option',  instance.color_option,   'extra_price', 'color_name'),
+        ('coating',       instance.coating,        'price',      'label'),
     ]:
         if option_obj is None:
             continue
-        backend_p  = float(option_obj.add_on_price)
+        backend_p  = float(getattr(option_obj, price_field))
         frontend_p = float(snapshot.get(component) or 0)
         breakdown.append({
             'component':      component,
-            'label':          option_obj.name,
-            'option_type':    option_obj.option_type,
+            'label':          getattr(option_obj, label_field),
             'frontend_price': frontend_p,
             'backend_price':  backend_p,
             'changed':        abs(backend_p - frontend_p) > 0.005,

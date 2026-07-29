@@ -1,7 +1,19 @@
 from rest_framework import serializers
 from .models import *
-from lens_workflow.models import LensOption
-from lens_workflow.serializers import LensOptionSerializer
+from lens_workflow.models import (
+    LensType,
+    LensFunctionPath,
+    LensIndexOption,
+    LensColorOption,
+    LensCoating,
+)
+from lens_workflow.serializers import (
+    LensTypeSerializer,
+    LensFunctionPathSerializer,
+    LensIndexOptionSerializer,
+    LensColorOptionSerializer,
+    LensCoatingSerializer,
+)
 from Product.serializer import ProductInstanceSerializer
 from Product.models import ProductInstance
 from General.serializer import AddressSerializer
@@ -11,10 +23,13 @@ from Prescription.models import PrescriptionInfo
 
 class CompleteSetSerializer(serializers.ModelSerializer):
     id       = serializers.IntegerField(required=False)
-    usage    = serializers.CharField(source='usage.name',   required=False, allow_null=True, default=None)
-    color    = serializers.CharField(source='color.name',   required=False, allow_null=True, allow_blank=True, default=None)
-    coating  = serializers.CharField(source='coating.name', required=False, allow_null=True, default=None)
-    index    = serializers.CharField(source='index.name',   required=False, allow_null=True, default=None)
+    # Frontend already knows the exact row id it picked at each workflow step
+    # (from the lens_workflow API responses), so these are plain FK ids.
+    lens_type     = serializers.PrimaryKeyRelatedField(queryset=LensType.objects.all(), required=False, allow_null=True)
+    function_path = serializers.PrimaryKeyRelatedField(queryset=LensFunctionPath.objects.all(), required=False, allow_null=True)
+    index_option  = serializers.PrimaryKeyRelatedField(queryset=LensIndexOption.objects.all(), required=False, allow_null=True)
+    color_option  = serializers.PrimaryKeyRelatedField(queryset=LensColorOption.objects.all(), required=False, allow_null=True)
+    coating       = serializers.PrimaryKeyRelatedField(queryset=LensCoating.objects.all(), required=False, allow_null=True)
     frame    = serializers.SerializerMethodField()
     # density is now a plain CharField on the model — no source traversal needed
     density  = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
@@ -28,10 +43,11 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'frame',
-            'usage',
-            'color',
+            'lens_type',
+            'function_path',
+            'index_option',
+            'color_option',
             'coating',
-            'index',
             'density',
             'prescription',
             'sub_color',
@@ -46,41 +62,22 @@ class CompleteSetSerializer(serializers.ModelSerializer):
     def to_representation(self, obj):
         rep = super().to_representation(obj)
         rep['frame'] = ProductInstanceSerializer(obj.frame).data
-        # Normalize None → "" for color: frontend sends empty string when no
-        # color step applies (e.g. COLOR_TYPE = Clear).
-        if rep.get('color') is None:
-            rep['color'] = ''
         if not rep.get('sub_color'):
             rep['sub_color'] = 'None'
+        # Read side shows human-readable labels (matches the pre-rebuild
+        # behaviour of these fields); writes still take plain FK ids via the
+        # PrimaryKeyRelatedField declarations above.
+        rep['lens_type']     = obj.lens_type.label if obj.lens_type else None
+        rep['function_path'] = obj.function_path.function_label if obj.function_path else None
+        rep['index_option']  = obj.index_option.option_label if obj.index_option else None
+        rep['color_option']  = obj.color_option.color_name if obj.color_option else None
+        rep['coating']       = obj.coating.label if obj.coating else None
         return rep
-
-    # ── private helper ───────────────────────────────────────────────────────
-
-    @staticmethod
-    def _resolve_option(val, option_type):
-        """
-        Resolve a lens option name to a LensOption FK instance.
-
-        `val` arrives from validated_data as a nested dict {'name': '<string>'}
-        for dotted-source CharField fields (usage/color/coating/index), or as a
-        plain string / None.  Returns the matching LensOption or None when the
-        name is empty (e.g. color == "" for Clear-type lenses).
-        """
-        name = val.get('name') if isinstance(val, dict) else val
-        if not name:
-            return None
-        return LensOption.objects.get(name=name, option_type=option_type)
 
     # ── create ───────────────────────────────────────────────────────────────
 
     def create(self, validated_data):
         request = self.context['request']
-
-        usage_obj   = self._resolve_option(validated_data.pop('usage',   None), 'COLOR_TYPE')
-        color_obj   = self._resolve_option(validated_data.pop('color',   None), 'COLOR')
-        coating_obj = self._resolve_option(validated_data.pop('coating', None), 'COATING')
-        index_obj   = self._resolve_option(validated_data.pop('index',   None), 'INDEX')
-        density     = validated_data.pop('density', None)   # stored as plain string
 
         frame_data = request.data.get('frame')
         frame_obj  = ProductInstance.objects.get(sku=frame_data['sku'])
@@ -90,11 +87,12 @@ class CompleteSetSerializer(serializers.ModelSerializer):
 
         return CompleteSet.objects.create(
             frame=frame_obj,
-            usage=usage_obj,
-            color=color_obj,
-            coating=coating_obj,
-            index=index_obj,
-            density=density,
+            lens_type=validated_data.get('lens_type'),
+            function_path=validated_data.get('function_path'),
+            index_option=validated_data.get('index_option'),
+            color_option=validated_data.get('color_option'),
+            coating=validated_data.get('coating'),
+            density=validated_data.get('density'),
             prescription=rx_obj,
             sub_color=validated_data.get('sub_color'),
             saved_for_later=validated_data.get('saved_for_later', False),
@@ -108,16 +106,9 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         instance.sub_total       = validated_data.get('sub_total',       instance.sub_total)
         instance.saved_for_later = validated_data.get('saved_for_later', instance.saved_for_later)
 
-        if 'usage'   in validated_data:
-            instance.usage   = self._resolve_option(validated_data.pop('usage'),   'COLOR_TYPE')
-        if 'color'   in validated_data:
-            instance.color   = self._resolve_option(validated_data.pop('color'),   'COLOR')
-        if 'coating' in validated_data:
-            instance.coating = self._resolve_option(validated_data.pop('coating'), 'COATING')
-        if 'index'   in validated_data:
-            instance.index   = self._resolve_option(validated_data.pop('index'),   'INDEX')
-        if 'density' in validated_data:
-            instance.density = validated_data.pop('density')    # plain string
+        for field in ('lens_type', 'function_path', 'index_option', 'color_option', 'coating', 'density'):
+            if field in validated_data:
+                setattr(instance, field, validated_data.get(field))
         if 'frame' in validated_data:
             instance.frame = ProductInstance.objects.get(
                 sku=validated_data.get('frame')['sku'])
@@ -179,16 +170,15 @@ class OrderSerializer(serializers.ModelSerializer):
 
 
 # ── CompleteSetObjectSerializer ──────────────────────────────────────────────
-# Used by /completesetloader/<id>.  Returns full nested LensOption objects
-# (id, code, name, add_on_price, metadata, …) instead of bare name strings.
-# Previously used the five separate Lens*Serializers; all four FK fields now
-# point to the same LensOption model so they all use LensOptionSerializer.
+# Used by /completesetloader/<id>.  Returns full nested lens_workflow objects
+# (id, code/label, price, metadata, …) instead of bare ids.
 
 class CompleteSetObjectSerializer(serializers.ModelSerializer):
-    usage    = LensOptionSerializer(allow_null=True)
-    color    = LensOptionSerializer(allow_null=True)
-    coating  = LensOptionSerializer(allow_null=True)
-    index    = LensOptionSerializer(allow_null=True)
+    lens_type     = LensTypeSerializer(allow_null=True)
+    function_path = LensFunctionPathSerializer(allow_null=True)
+    index_option  = LensIndexOptionSerializer(allow_null=True)
+    color_option  = LensColorOptionSerializer(allow_null=True)
+    coating       = LensCoatingSerializer(allow_null=True)
     frame    = serializers.SerializerMethodField()
     density  = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
     prescription = PrescriptionSerializer(allow_null=True)
@@ -198,10 +188,11 @@ class CompleteSetObjectSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'frame',
-            'usage',
-            'color',
+            'lens_type',
+            'function_path',
+            'index_option',
+            'color_option',
             'coating',
-            'index',
             'density',
             'sub_color',
             'sub_total',
