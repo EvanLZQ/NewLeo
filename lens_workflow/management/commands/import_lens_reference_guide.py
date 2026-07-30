@@ -252,16 +252,21 @@ class Command(BaseCommand):
         """
         A color's extra price doesn't vary by index tier, so this sheet's
         126 rows (one per index tier per color) collapse onto far fewer
-        (function_path, color_name) combinations via update_or_create. If a
-        color's price actually differs across tiers in the source data,
-        that's a real inconsistency worth surfacing rather than silently
-        picking whichever row happened to be processed last.
+        (function_path, color_name) combinations. If a color's price
+        actually differs across tiers in the source data, that's a real
+        inconsistency worth surfacing rather than silently picking whichever
+        row happened to be processed last.
+
+        Availability *does* vary by index tier (e.g. SVD's Polarized Green
+        drops off at 1.67), so — unlike price — every index_value a color
+        appears under is collected rather than collapsed, and written to
+        available_index_values.
         """
-        seen_prices = {}
-        count = 0
+        seen = {}  # (key, clean_color) -> {"price": Decimal, "function_path": obj, "indices": set}
+        order = []
         for row in _rows_after_header(ws, "Lens Type"):
             (lens_type_name, function_name, sun_type_name,
-             _option_label, _index_value, color_name, extra_price) = row
+             _option_label, index_value, color_name, extra_price) = row
 
             key = (
                 LENS_TYPE_CODES[lens_type_name.strip()],
@@ -277,22 +282,35 @@ class Command(BaseCommand):
 
             clean_color = color_name.strip()
             price = Decimal(str(extra_price or 0))
+            index_str = str(index_value).strip()
 
-            price_key = (key, clean_color)
-            if price_key in seen_prices and seen_prices[price_key] != price:
+            entry_key = (key, clean_color)
+            if entry_key not in seen:
+                seen[entry_key] = {
+                    "price": price,
+                    "function_path": function_path,
+                    "indices": set(),
+                }
+                order.append(entry_key)
+            elif seen[entry_key]["price"] != price:
                 raise CommandError(
                     f"Color {clean_color!r} under {key} has inconsistent extra_price "
-                    f"across index tiers ({seen_prices[price_key]} vs {price}) — "
+                    f"across index tiers ({seen[entry_key]['price']} vs {price}) — "
                     "check the Color Compatibility sheet."
                 )
-            seen_prices[price_key] = price
+            seen[entry_key]["indices"].add(index_str)
 
+        count = 0
+        for sort_idx, entry_key in enumerate(order, start=1):
+            _, clean_color = entry_key
+            data = seen[entry_key]
             _, created = LensColorOption.objects.update_or_create(
-                function_path=function_path,
+                function_path=data["function_path"],
                 color_name=clean_color,
                 defaults={
-                    "extra_price": price,
-                    "sort_order": len(seen_prices) * 10,
+                    "extra_price": data["price"],
+                    "available_index_values": sorted(data["indices"]),
+                    "sort_order": sort_idx * 10,
                     "is_active": True,
                 },
             )

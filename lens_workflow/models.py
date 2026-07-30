@@ -161,12 +161,20 @@ class LensColorOption(TimeStampedModel):
     """
     Step 3.1 (conditional): one selectable color, scoped to a function path
     (not to a specific index tier) — the reference data confirms a color's
-    extra price never varies by index, so a color is picked once and then
-    the index step follows, instead of the other way around. This also lets
-    two sibling function paths (e.g. SUN's Solid vs Polarized/Mirrored) show
+    extra price never varies by index, so pricing is defined once per
+    function path rather than once per index tier. This also lets two
+    sibling function paths (e.g. SUN's Solid vs Polarized/Mirrored) show
     their colors together in one merged step, with no separate "pick a sun
     type first" step needed — whichever color the customer picks resolves
     which sibling (and therefore which index price table) applies next.
+
+    Price is uniform across index tiers, but *availability* is not — e.g.
+    SVD's Polarized Green/Brown are offered at 1.56/1.61 but drop off at
+    1.67. available_index_values records which index_value strings (as they
+    appear on LensIndexOption.index_value, e.g. "1.56") this color is
+    actually offered at, so the Color step can be filtered to the
+    prescription's allowed index bracket, and the following Index step can
+    be narrowed to whichever index values the chosen color still supports.
     """
     function_path = models.ForeignKey(
         LensFunctionPath, on_delete=models.CASCADE, related_name="color_options")
@@ -174,6 +182,11 @@ class LensColorOption(TimeStampedModel):
     color_name = models.CharField(max_length=100)
     extra_price = models.DecimalField(
         max_digits=8, decimal_places=2, default=0)
+    available_index_values = models.JSONField(
+        default=list,
+        help_text='Index values this color is offered at, e.g. ["1.56", "1.61"]. '
+                  "Populated from the Color Compatibility sheet's per-row Index column.",
+    )
 
     sort_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)

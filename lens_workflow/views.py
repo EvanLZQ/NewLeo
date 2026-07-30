@@ -113,6 +113,22 @@ def _match_recommendation_rule(category, combined_power):
     return None
 
 
+def _rx_recommendation_rule(lens_type, prescription_id):
+    """The LensIndexRecommendationRule matching this lens_type + prescription,
+    or None when no filtering applies (Non-Rx, no category configured on this
+    lens_type, or no prescription supplied/found). Shared by the COLOR step
+    (to pre-filter by availability) and the INDEX step (to narrow + flag the
+    recommended option) so both agree on the same allowed bracket."""
+    category = lens_type.index_recommendation_category
+    if not category or not prescription_id:
+        return None
+    try:
+        prescription = PrescriptionInfo.objects.get(id=prescription_id)
+    except PrescriptionInfo.DoesNotExist:
+        return None
+    return _match_recommendation_rule(category, _combined_power(prescription))
+
+
 def _color_option_dict(color_option):
     return _option_dict(
         id=color_option.id, code=color_option.color_name, name=color_option.color_name,
@@ -238,9 +254,25 @@ class LensWorkflowNextView(APIView):
             function_code=clicked.function_code,
             is_active=True,
         )
-        color_options = LensColorOption.objects.filter(
-            function_path__in=siblings, is_active=True
-        ).order_by("sort_order", "id")
+        color_options = list(
+            LensColorOption.objects.filter(
+                function_path__in=siblings, is_active=True
+            ).order_by("sort_order", "id")
+        )
+
+        rule = _rx_recommendation_rule(clicked.lens_type, prescription_id)
+        if rule is not None:
+            # Only offer colors that are actually available at some index
+            # value within this prescription's bracket — e.g. SVD's
+            # Polarized Green/Brown drop off above 1.61, so they shouldn't
+            # appear as a pickable color for a prescription that only
+            # qualifies for 1.67/1.74.
+            allowed = set(rule.available_index_values)
+            color_options = [
+                co for co in color_options
+                if set(co.available_index_values) & allowed
+            ]
+
         return _step_response("COLOR", [_color_option_dict(co) for co in color_options], path)
 
     def _after_color(self, selected_option_id, path, prescription_id):
@@ -248,42 +280,40 @@ class LensWorkflowNextView(APIView):
             id=selected_option_id, is_active=True)
         # The chosen color's own function_path is the resolved one (this is
         # what used to require a separate Sun Type step to pin down).
-        return self._enter_index_step(color_option.function_path, path, prescription_id)
+        return self._enter_index_step(
+            color_option.function_path, path, prescription_id,
+            color_available_index_values=color_option.available_index_values,
+        )
 
-    def _enter_index_step(self, function_path, path, prescription_id):
+    def _enter_index_step(self, function_path, path, prescription_id, color_available_index_values=None):
         index_options = list(
             LensIndexOption.objects.filter(
                 function_path=function_path, is_active=True
             ).order_by("sort_order", "id")
         )
 
-        rule = None
-        category = function_path.lens_type.index_recommendation_category
-        if category and prescription_id:
-            try:
-                prescription = PrescriptionInfo.objects.get(id=prescription_id)
-            except PrescriptionInfo.DoesNotExist:
-                prescription = None
-            if prescription is not None:
-                rule = _match_recommendation_rule(
-                    category, _combined_power(prescription))
+        rule = _rx_recommendation_rule(function_path.lens_type, prescription_id)
+        allowed = set(rule.available_index_values) if rule is not None else None
+        recommended_value = rule.recommended_index_value if rule is not None else None
 
-        if rule is not None:
-            # Narrow to only the index values this prescription bracket
-            # allows, and flag the recommended one.
+        if color_available_index_values is not None:
+            # Narrow further to whichever index values the chosen color is
+            # actually offered at (e.g. picking Polarized Green means only
+            # 1.56/1.61 remain, even if the prescription bracket also allows
+            # 1.67).
+            color_allowed = set(color_available_index_values)
+            allowed = color_allowed if allowed is None else (allowed & color_allowed)
+
+        if allowed is not None:
             index_options = [
-                io for io in index_options
-                if str(io.index_value) in rule.available_index_values
-            ]
-            option_dicts = [
-                _index_option_dict(
-                    io, is_recommended=str(io.index_value) == rule.recommended_index_value)
-                for io in index_options
-            ]
-        else:
-            # Non-Rx, no category configured, or no prescription supplied —
-            # show everything, nothing flagged as recommended.
-            option_dicts = [_index_option_dict(io) for io in index_options]
+                io for io in index_options if str(io.index_value) in allowed]
+
+        option_dicts = [
+            _index_option_dict(
+                io, is_recommended=(recommended_value is not None
+                                     and str(io.index_value) == recommended_value))
+            for io in index_options
+        ]
 
         return _step_response("INDEX", option_dicts, path)
 

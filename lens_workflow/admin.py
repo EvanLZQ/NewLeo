@@ -73,8 +73,8 @@ class LensIndexOptionAdmin(admin.ModelAdmin):
 
 @admin.register(LensColorOption)
 class LensColorOptionAdmin(admin.ModelAdmin):
-    list_display = ("function_path", "color_name",
-                     "extra_price", "sort_order", "is_active", "updated_at")
+    list_display = ("function_path", "color_name", "extra_price",
+                     "available_index_values", "sort_order", "is_active", "updated_at")
     list_filter = ("is_active", "function_path__lens_type",
                    "function_path__function_code")
     search_fields = ("color_name", "function_path__function_code",
