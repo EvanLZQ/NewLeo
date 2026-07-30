@@ -35,7 +35,7 @@ class LensIndexOptionSerializer(serializers.ModelSerializer):
 class LensColorOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = LensColorOption
-        fields = ["id", "index_option", "color_name",
+        fields = ["id", "function_path", "color_name",
                   "extra_price", "sort_order", "is_active"]
 
 
@@ -64,7 +64,7 @@ class NextStepRequestSerializer(serializers.Serializer):
     }
     """
     current_step_code = serializers.ChoiceField(
-        choices=["LENS_TYPE", "FUNCTION", "SUN_TYPE", "INDEX", "COLOR", "COATING"])
+        choices=["LENS_TYPE", "FUNCTION", "COLOR", "INDEX", "COATING"])
     selected_option_id = serializers.IntegerField()
     selection_path = serializers.ListField(
         child=serializers.IntegerField(),

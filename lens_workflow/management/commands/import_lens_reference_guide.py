@@ -148,7 +148,7 @@ class Command(BaseCommand):
             wb["Index & Prices"], function_paths)
 
         self.stdout.write("Importing Color Compatibility...")
-        self._import_color_options(wb["Color Compatibility"], index_options)
+        self._import_color_options(wb["Color Compatibility"], function_paths)
 
         self.stdout.write("Importing Coatings...")
         self._import_coatings(wb["Coating"])
@@ -248,35 +248,56 @@ class Command(BaseCommand):
 
     # ---------- Sheet 3: Color Compatibility ----------
 
-    def _import_color_options(self, ws, index_options):
+    def _import_color_options(self, ws, function_paths):
+        """
+        A color's extra price doesn't vary by index tier, so this sheet's
+        126 rows (one per index tier per color) collapse onto far fewer
+        (function_path, color_name) combinations via update_or_create. If a
+        color's price actually differs across tiers in the source data,
+        that's a real inconsistency worth surfacing rather than silently
+        picking whichever row happened to be processed last.
+        """
+        seen_prices = {}
         count = 0
-        for sort_idx, row in enumerate(_rows_after_header(ws, "Lens Type"), start=10):
+        for row in _rows_after_header(ws, "Lens Type"):
             (lens_type_name, function_name, sun_type_name,
-             option_label, _index_value, color_name, extra_price) = row
+             _option_label, _index_value, color_name, extra_price) = row
 
             key = (
                 LENS_TYPE_CODES[lens_type_name.strip()],
                 FUNCTION_CODES[function_name.strip()],
                 _sun_type_code(sun_type_name),
             )
-            clean_label = str(option_label or "").strip()
-            index_option = index_options.get((key, clean_label))
-            if index_option is None:
+            function_path = function_paths.get(key)
+            if function_path is None:
                 raise CommandError(
-                    f"Color Compatibility row references unknown index option: "
-                    f"{key} / {clean_label!r}"
+                    f"Color Compatibility row references unknown function path: "
+                    f"{key} / color={color_name!r}"
                 )
 
-            LensColorOption.objects.update_or_create(
-                index_option=index_option,
-                color_name=color_name.strip(),
+            clean_color = color_name.strip()
+            price = Decimal(str(extra_price or 0))
+
+            price_key = (key, clean_color)
+            if price_key in seen_prices and seen_prices[price_key] != price:
+                raise CommandError(
+                    f"Color {clean_color!r} under {key} has inconsistent extra_price "
+                    f"across index tiers ({seen_prices[price_key]} vs {price}) — "
+                    "check the Color Compatibility sheet."
+                )
+            seen_prices[price_key] = price
+
+            _, created = LensColorOption.objects.update_or_create(
+                function_path=function_path,
+                color_name=clean_color,
                 defaults={
-                    "extra_price": Decimal(str(extra_price or 0)),
-                    "sort_order": sort_idx,
+                    "extra_price": price,
+                    "sort_order": len(seen_prices) * 10,
                     "is_active": True,
                 },
             )
-            count += 1
+            if created:
+                count += 1
         return count
 
     # ---------- Sheet 4: Coating ----------

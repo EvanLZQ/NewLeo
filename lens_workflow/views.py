@@ -18,13 +18,10 @@ from Prescription.models import PrescriptionInfo
 STEP_LABELS = {
     "LENS_TYPE": "Lens Type",
     "FUNCTION": "Lens Function",
-    "SUN_TYPE": "Sun Type",
-    "INDEX": "Lens Index",
     "COLOR": "Color",
+    "INDEX": "Lens Index",
     "COATING": "Coating",
 }
-
-SUN_TYPE_LABELS = dict(LensFunctionPath.SunType.choices)
 
 
 def _parse_int_list(raw_value):
@@ -78,20 +75,11 @@ def _lens_type_option(lens_type):
 
 
 def _function_option(function_path):
-    """The Step-2 button for a whole function_code group (may stand in for >1 sun_type row)."""
+    """The Step-2 button for a whole function_code group (may stand in for >1 sun_type sibling)."""
     return _option_dict(
         id=function_path.id, code=function_path.function_code, name=function_path.function_label,
         option_type="FUNCTION", price=function_path.extra_price,
         description=function_path.function_description,
-        metadata={"color_required": function_path.color_required},
-    )
-
-
-def _sun_type_option(function_path):
-    return _option_dict(
-        id=function_path.id, code=function_path.sun_type,
-        name=SUN_TYPE_LABELS.get(function_path.sun_type, function_path.sun_type),
-        option_type="SUN_TYPE", price=Decimal("0.00"),
         metadata={"color_required": function_path.color_required},
     )
 
@@ -172,8 +160,15 @@ class LensWorkflowNextView(APIView):
     Given the option selected while on `current_step_code`, resolve and
     return the next step's options.
 
+    Flow: LENS_TYPE -> FUNCTION -> COLOR (conditional) -> INDEX -> COATING.
+    There's no separate "Sun Type" step: when a function_code has more than
+    one sibling function_path (e.g. SUN's Solid vs Polarized/Mirrored), their
+    colors are merged into one COLOR step — whichever color the customer
+    picks resolves which sibling (and therefore which index price table)
+    applies at the INDEX step that follows.
+
     GET params:
-      - current_step_code: LENS_TYPE / FUNCTION / SUN_TYPE / INDEX / COLOR / COATING
+      - current_step_code: LENS_TYPE / FUNCTION / COLOR / INDEX / COATING
       - selected_option_id: int (the id of the option picked on current_step_code)
       - selection_path: comma-separated ids (optional)
       - prescription_id: int (optional; only used when transitioning into INDEX)
@@ -202,9 +197,8 @@ class LensWorkflowNextView(APIView):
         handler = {
             "LENS_TYPE": self._after_lens_type,
             "FUNCTION": self._after_function,
-            "SUN_TYPE": self._after_sun_type,
-            "INDEX": self._after_index,
             "COLOR": self._after_color,
+            "INDEX": self._after_index,
             "COATING": self._after_coating,
         }[current_step_code]
 
@@ -232,21 +226,29 @@ class LensWorkflowNextView(APIView):
     def _after_function(self, selected_option_id, path, prescription_id):
         clicked = LensFunctionPath.objects.get(
             id=selected_option_id, is_active=True)
-        siblings = list(
-            LensFunctionPath.objects.filter(
-                lens_type=clicked.lens_type,
-                function_code=clicked.function_code,
-                is_active=True,
-            ).order_by("sort_order", "id")
-        )
-        if len(siblings) > 1:
-            return _step_response("SUN_TYPE", [_sun_type_option(fp) for fp in siblings], path)
-        return self._enter_index_step(clicked, path, prescription_id)
 
-    def _after_sun_type(self, selected_option_id, path, prescription_id):
-        resolved = LensFunctionPath.objects.get(
+        if not clicked.color_required:
+            # No siblings possible when color isn't required (only SUN ever
+            # splits into Solid/Polarized-Mirrored siblings) — clicked is
+            # already the one true function_path.
+            return self._enter_index_step(clicked, path, prescription_id)
+
+        siblings = LensFunctionPath.objects.filter(
+            lens_type=clicked.lens_type,
+            function_code=clicked.function_code,
+            is_active=True,
+        )
+        color_options = LensColorOption.objects.filter(
+            function_path__in=siblings, is_active=True
+        ).order_by("sort_order", "id")
+        return _step_response("COLOR", [_color_option_dict(co) for co in color_options], path)
+
+    def _after_color(self, selected_option_id, path, prescription_id):
+        color_option = LensColorOption.objects.select_related("function_path").get(
             id=selected_option_id, is_active=True)
-        return self._enter_index_step(resolved, path, prescription_id)
+        # The chosen color's own function_path is the resolved one (this is
+        # what used to require a separate Sun Type step to pin down).
+        return self._enter_index_step(color_option.function_path, path, prescription_id)
 
     def _enter_index_step(self, function_path, path, prescription_id):
         index_options = list(
@@ -286,17 +288,9 @@ class LensWorkflowNextView(APIView):
         return _step_response("INDEX", option_dicts, path)
 
     def _after_index(self, selected_option_id, path, prescription_id):
-        index_option = LensIndexOption.objects.select_related("function_path").get(
-            id=selected_option_id, is_active=True)
-        if index_option.function_path.color_required:
-            color_options = LensColorOption.objects.filter(
-                index_option=index_option, is_active=True
-            ).order_by("sort_order", "id")
-            return _step_response("COLOR", [_color_option_dict(co) for co in color_options], path)
-        return self._enter_coating_step(path)
-
-    def _after_color(self, selected_option_id, path, prescription_id):
-        LensColorOption.objects.get(id=selected_option_id, is_active=True)
+        LensIndexOption.objects.get(id=selected_option_id, is_active=True)
+        # Color (when needed) already happened before Index now, so Index
+        # always leads straight to Coating.
         return self._enter_coating_step(path)
 
     def _enter_coating_step(self, path):
@@ -318,9 +312,8 @@ def _safe_parse(raw_value):
 
 class LensWorkflowSummaryView(APIView):
     """
-    Optional helper endpoint: given one id per step (in step order:
-    lens_type, function_path, [sun_type reuses function_path], index_option,
-    [color_option], coating), return the resolved objects + total add-on price.
+    Optional helper endpoint: given one id per resolved step, return the
+    resolved objects + total add-on price.
 
     Not currently called by the frontend (kept for parity/debugging).
 

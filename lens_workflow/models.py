@@ -159,10 +159,17 @@ class LensIndexOption(TimeStampedModel):
 
 class LensColorOption(TimeStampedModel):
     """
-    Step 3.1 (conditional): one selectable color for a specific index option.
+    Step 3.1 (conditional): one selectable color, scoped to a function path
+    (not to a specific index tier) — the reference data confirms a color's
+    extra price never varies by index, so a color is picked once and then
+    the index step follows, instead of the other way around. This also lets
+    two sibling function paths (e.g. SUN's Solid vs Polarized/Mirrored) show
+    their colors together in one merged step, with no separate "pick a sun
+    type first" step needed — whichever color the customer picks resolves
+    which sibling (and therefore which index price table) applies next.
     """
-    index_option = models.ForeignKey(
-        LensIndexOption, on_delete=models.CASCADE, related_name="color_options")
+    function_path = models.ForeignKey(
+        LensFunctionPath, on_delete=models.CASCADE, related_name="color_options")
 
     color_name = models.CharField(max_length=100)
     extra_price = models.DecimalField(
@@ -175,19 +182,19 @@ class LensColorOption(TimeStampedModel):
         db_table = "LensColorOption"
         verbose_name = "Lens Color Option"
         verbose_name_plural = "Lens Color Options"
-        ordering = ["index_option__sort_order", "sort_order", "id"]
+        ordering = ["function_path__sort_order", "sort_order", "id"]
         constraints = [
             models.UniqueConstraint(
-                fields=["index_option", "color_name"],
-                name="uq_lens_color_option_index_color",
+                fields=["function_path", "color_name"],
+                name="uq_lens_color_option_function_color",
             ),
         ]
         indexes = [
-            models.Index(fields=["index_option", "is_active", "sort_order"]),
+            models.Index(fields=["function_path", "is_active", "sort_order"]),
         ]
 
     def __str__(self):
-        return f"{self.index_option} / {self.color_name}"
+        return f"{self.function_path} / {self.color_name}"
 
 
 class LensCoating(TimeStampedModel):

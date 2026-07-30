@@ -57,7 +57,7 @@ class LensFunctionPathAdmin(admin.ModelAdmin):
                       "notes", "lens_type__label", "lens_type__code")
     autocomplete_fields = ("lens_type",)
     ordering = ("lens_type__sort_order", "sort_order", "id")
-    inlines = [LensIndexOptionInline]
+    inlines = [LensIndexOptionInline, LensColorOptionInline]
 
 
 @admin.register(LensIndexOption)
@@ -69,17 +69,18 @@ class LensIndexOptionAdmin(admin.ModelAdmin):
                       "function_path__function_code", "function_path__lens_type__label")
     autocomplete_fields = ("function_path",)
     ordering = ("function_path__sort_order", "sort_order", "id")
-    inlines = [LensColorOptionInline]
 
 
 @admin.register(LensColorOption)
 class LensColorOptionAdmin(admin.ModelAdmin):
-    list_display = ("index_option", "color_name",
+    list_display = ("function_path", "color_name",
                      "extra_price", "sort_order", "is_active", "updated_at")
-    list_filter = ("is_active",)
-    search_fields = ("color_name", "index_option__option_label")
-    autocomplete_fields = ("index_option",)
-    ordering = ("index_option__sort_order", "sort_order", "id")
+    list_filter = ("is_active", "function_path__lens_type",
+                   "function_path__function_code")
+    search_fields = ("color_name", "function_path__function_code",
+                      "function_path__lens_type__label")
+    autocomplete_fields = ("function_path",)
+    ordering = ("function_path__sort_order", "sort_order", "id")
 
 
 @admin.register(LensCoating)
