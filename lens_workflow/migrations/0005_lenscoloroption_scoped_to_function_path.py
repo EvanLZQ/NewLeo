@@ -6,10 +6,16 @@
 # events are still pending in the same transaction. Splitting the DELETE
 # into its own migration lets it commit before 0006's ALTER TABLE ops run.
 #
+# CompleteSet.color_option is on_delete=SET_NULL, but that behavior is
+# implemented by Django's ORM (Collector), not as a real "ON DELETE SET
+# NULL" constraint in Postgres — raw SQL bypasses it entirely and just hits
+# the underlying FK constraint (NO ACTION), which blocks the DELETE if any
+# CompleteSet row (e.g. a real order) still references a color option. So
+# this explicitly nulls out those references first, replicating what
+# Django's ORM would have done, before the DELETE.
+#
 # This data is reseeded from scratch by import_lens_reference_guide, not
-# hand-edited data worth preserving. CompleteSet.color_option is SET_NULL
-# on delete, so this doesn't touch any existing CompleteSet/order rows
-# beyond clearing that one FK.
+# hand-edited data worth preserving.
 
 from django.db import migrations
 
@@ -21,6 +27,10 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunSQL(
+            sql='UPDATE "CompleteSet" SET color_option_id = NULL WHERE color_option_id IS NOT NULL;',
+            reverse_sql=migrations.RunSQL.noop,
+        ),
         migrations.RunSQL(
             sql='DELETE FROM "LensColorOption";',
             reverse_sql=migrations.RunSQL.noop,
