@@ -111,17 +111,38 @@ class ShoppingCartSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
+        # Newest addition first — nothing else in this chain orders the
+        # M2M read, so it otherwise falls back to arbitrary DB order.
         rep['eyeglasses_set'] = CompleteSetSerializer(
-            instance.eyeglasses_set.all(), many=True).data
+            instance.eyeglasses_set.order_by('-id'), many=True).data
         return rep
 
     def update(self, instance, validated_data):
         set_data = validated_data.pop('eyeglasses_set', [])
+        request = self.context.get('request')
+        user = getattr(request, 'user', None) if request else None
+
         instance.eyeglasses_set.clear()
         for item in set_data:
             set_id = item.get('id')
-            complete_set_instance = CompleteSet.objects.get(
-                id=set_id)
+            try:
+                complete_set_instance = CompleteSet.objects.get(id=set_id)
+            except CompleteSet.DoesNotExist:
+                continue
+
+            # Only claimable if it's not attached to anyone's order yet, or
+            # it's already attached to one of THIS user's own orders — never
+            # someone else's (paid or otherwise). Silently skipped rather
+            # than erroring the whole request, same as a missing id above.
+            is_unclaimed = complete_set_instance.order_id is None
+            is_own = (
+                user is not None and getattr(user, 'is_authenticated', False)
+                and complete_set_instance.order_id is not None
+                and complete_set_instance.order.customer_id == user.pk
+            )
+            if not (is_unclaimed or is_own):
+                continue
+
             instance.eyeglasses_set.add(complete_set_instance)
 
         # Update other fields

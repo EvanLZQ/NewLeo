@@ -1,8 +1,12 @@
 import uuid
 import datetime
+import logging
+from decimal import Decimal, InvalidOperation
 
+import requests
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 from django.shortcuts import redirect
 from rest_framework.response import Response
 from django.http import JsonResponse
@@ -60,6 +64,111 @@ def generate_order_number():
     today = datetime.datetime.now().strftime('%Y%m%d')
     suffix = uuid.uuid4().hex[:6].upper()
     return f"ELW-{today}-{suffix}"
+
+
+# An UNPAID order left untouched this long is treated as abandoned and
+# eligible for automatic cleanup (see _cancel_orders / Step 0b below).
+PENDING_ORDER_EXPIRY = datetime.timedelta(minutes=30)
+
+
+def _cancel_orders(queryset):
+    """
+    Cancel a queryset of UNPAID OrderInfo rows WITHOUT deleting them: detach
+    their CompleteSet items (order=None, freeing them to be re-added to a
+    cart or a new order) and mark order_status='CANCELED'. The row itself
+    stays — deleting it is what used to make a customer's own "My Orders"
+    list show a real order that 404'd the instant they clicked into it,
+    because some unrelated, later checkout attempt had silently erased it.
+    payment_status stays 'UNPAID' (that part remains true); order_status is
+    what communicates "this attempt is over."
+    """
+    ids = list(queryset.values_list('pk', flat=True))
+    if not ids:
+        return
+    CompleteSet.objects.filter(order_id__in=ids).update(order=None)
+    OrderInfo.objects.filter(pk__in=ids).update(order_status='CANCELED')
+
+
+# ── PayPal server-side verification ─────────────────────────────────────────
+# `paypalrestsdk` (imported above) only speaks PayPal's legacy Payments v1
+# API. The frontend's PayPal JS SDK (PayPalButton.tsx) creates/captures
+# orders via the newer Orders v2 API, which paypalrestsdk doesn't cover — so
+# verification here talks to Orders v2 directly over REST instead of trying
+# to reuse that SDK.
+
+PAYPAL_API_BASE = (
+    'https://api-m.paypal.com' if settings.PAYPAL_MODE == 'live'
+    else 'https://api-m.sandbox.paypal.com'
+)
+
+
+def _get_paypal_access_token():
+    resp = requests.post(
+        f'{PAYPAL_API_BASE}/v1/oauth2/token',
+        auth=(settings.PAYPAL_CLIENT_ID, settings.PAYPAL_CLIENT_SECRET),
+        data={'grant_type': 'client_credentials'},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()['access_token']
+
+
+def _fetch_paypal_order(paypal_order_id):
+    """
+    Fetch an order directly from PayPal's own servers — the only source of
+    truth for whether a payment actually happened, since the browser (and
+    therefore anything it POSTs to us) can't be trusted. Returns the parsed
+    JSON response, or None if the lookup fails for any reason (network
+    error, bad credentials, PayPal outage, unknown order id, ...).
+    """
+    try:
+        token = _get_paypal_access_token()
+        resp = requests.get(
+            f'{PAYPAL_API_BASE}/v2/checkout/orders/{paypal_order_id}',
+            headers={'Authorization': f'Bearer {token}'},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        logging.getLogger(__name__).exception(
+            'Failed to verify PayPal order %s', paypal_order_id)
+        return None
+
+
+def _verify_and_extract_capture(paypal_order_id, expected_minimum_total):
+    """
+    Independently confirm a PayPal order actually completed and paid at
+    least `expected_minimum_total` (our server-computed sub_total +
+    shipping). Returns (capture_id, captured_amount, payer_email) on
+    success, or (None, None, error_message) on failure.
+
+    NOTE: tax is currently computed client-side only and never sent to or
+    stored by the backend (see order_service.py / PaymentForm.tsx), so this
+    checks "captured >= our base total" rather than an exact match — it
+    closes the "pay nothing / pay an arbitrary low amount" hole, but can't
+    yet verify the tax-inclusive figure precisely. That needs tax to become
+    a server-computed, server-stored value first.
+    """
+    paypal_order = _fetch_paypal_order(paypal_order_id)
+    if paypal_order is None:
+        return None, None, 'Could not verify payment with PayPal'
+
+    if paypal_order.get('status') != 'COMPLETED':
+        return None, None, 'PayPal payment not completed'
+
+    try:
+        capture = paypal_order['purchase_units'][0]['payments']['captures'][0]
+        captured_amount = Decimal(capture['amount']['value'])
+        capture_id = capture['id']
+    except (KeyError, IndexError, InvalidOperation, TypeError):
+        return None, None, 'Unexpected PayPal response shape'
+
+    if captured_amount < expected_minimum_total:
+        return None, None, 'Captured amount is less than the order total'
+
+    payer_email = (paypal_order.get('payer') or {}).get('email_address', '')
+    return capture_id, captured_amount, payer_email
 
 
 # ── CompleteSet CRUD ─────────────────────────────────────────────────────────
@@ -271,6 +380,15 @@ def createPendingOrder(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # Every requested item must actually belong to this customer — otherwise
+    # Step 0a below (which cancels whatever UNPAID order currently holds a
+    # requested item) could be pointed at a stranger's in-progress checkout.
+    if not all(_user_owns_complete_set(request.user, cs_id) for cs_id in complete_set_ids):
+        return Response(
+            {'error': 'One or more complete sets do not belong to you'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     with transaction.atomic():
         # ── Step 0a: item-based cleanup (runs BEFORE validation) ─────────────
         # Cancel any UNPAID orders that currently own the requested items,
@@ -278,40 +396,71 @@ def createPendingOrder(request):
         #   • Orders created before customer= FK was added  (customer=NULL)
         #   • Frontend cancel failures  (network error, page refresh, tab close)
         # ALL CompleteSet rows on those orders are freed — not just the requested
-        # ones — so the order is left in a consistent state before deletion.
-        # Materialise PKs first — Django forbids .delete() on a .distinct() queryset.
-        stuck_order_ids = list(
+        # ones — so the order is left in a consistent state.
+        _cancel_orders(
             OrderInfo.objects.filter(
                 completeset__id__in=complete_set_ids,
                 payment_status='UNPAID',
-            ).distinct().values_list('pk', flat=True)
+            ).exclude(order_status='CANCELED').distinct()
         )
-        if stuck_order_ids:
-            CompleteSet.objects.filter(order_id__in=stuck_order_ids).update(order=None)
-            OrderInfo.objects.filter(pk__in=stuck_order_ids).delete()
 
-        # ── Step 0b: user-based cleanup ─────────────────────────────────────────
-        # Cancel any remaining stale UNPAID orders for this authenticated user
-        # that don't own these specific items (e.g. orders from another device).
-        stale = OrderInfo.objects.filter(
-            customer=request.user,
-            payment_status='UNPAID',
+        # ── Step 0b: age-based expiry ─────────────────────────────────────────
+        # Cancel this customer's OTHER unpaid orders, but only ones that have
+        # actually gone stale (no payment for PENDING_ORDER_EXPIRY) — not every
+        # unrelated pending order just because they're checking out again.
+        # Wiping out everything unconditionally on every checkout attempt is
+        # what produced ghost 404s: a customer could still be looking at (or
+        # about to click into) an order that a separate, later checkout
+        # attempt had already erased.
+        expiry_cutoff = timezone.now() - PENDING_ORDER_EXPIRY
+        _cancel_orders(
+            OrderInfo.objects.filter(
+                customer=request.user,
+                payment_status='UNPAID',
+                created_at__lt=expiry_cutoff,
+            ).exclude(order_status='CANCELED')
         )
-        if stale.exists():
-            CompleteSet.objects.filter(order__in=stale).update(order=None)
-            stale.delete()
 
         # ── Validate (after cleanup so freed items now pass) ────────────────────
-        valid_sets = CompleteSet.objects.filter(
-            id__in=complete_set_ids,
-            order=None,
-            saved_for_later=False,
+        # select_for_update() locks these specific rows for the rest of this
+        # transaction: a second, overlapping createPendingOrder call for any
+        # of the same items has to wait here until we commit, then re-reads
+        # their now-current state — closing the race where two concurrent
+        # requests could otherwise both pass this check before either one
+        # actually claimed the items, leaving one of them with an OrderInfo
+        # row that has a total but no real items attached.
+        locked_sets = list(
+            CompleteSet.objects.select_for_update().filter(id__in=complete_set_ids)
         )
-        if valid_sets.count() != len(complete_set_ids):
+        valid_sets = [
+            cs for cs in locked_sets if cs.order_id is None and not cs.saved_for_later
+        ]
+        if len(valid_sets) != len(complete_set_ids):
             return Response(
                 {'error': 'One or more complete sets are invalid or already attached to an order'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # ── Address snapshot ─────────────────────────────────────────────────
+        # Clone the customer's saved address into a dedicated row for this
+        # order rather than pointing at the live one — editing or deleting a
+        # saved address later must not change what a past order says it
+        # shipped to.
+        from General.models import Address
+        try:
+            source_address = Address.objects.get(pk=address_id, customer=request.user)
+        except Address.DoesNotExist:
+            return Response({'error': 'Invalid address_id'}, status=status.HTTP_400_BAD_REQUEST)
+        order_address = Address.objects.create(
+            customer=request.user,
+            full_name=source_address.full_name,
+            phone=source_address.phone,
+            address=source_address.address,
+            city=source_address.city,
+            province_state=source_address.province_state,
+            country=source_address.country,
+            post_code=source_address.post_code,
+        )
 
         # ── Step 1: create the OrderInfo shell ─────────────────────────────────
         try:
@@ -322,7 +471,7 @@ def createPendingOrder(request):
                 order_status='PROCESSING',
                 payment_status='UNPAID',
                 payment_type='paypal',
-                address_id=address_id,
+                address=order_address,
                 shipping_company=shipping_method,
                 comment='',
                 refound_status='',
@@ -371,24 +520,23 @@ def confirmPayment(request):
     Record a completed PayPal payment and mark the order as PAID.
 
     Request body:
-        order_id               – int    our internal OrderInfo PK
-        paypal_transaction_id  – str    PayPal capture / transaction ID
-        payer_email            – str    PayPal payer e-mail
-        transaction_amount     – str    amount actually charged (decimal string)
-        payment_response       – dict   full PayPal capture response (stored for audit)
+        order_id         – int    our internal OrderInfo PK
+        paypal_order_id  – str    PayPal order ID (from actions.order.capture()'s
+                                   `details.id`) — looked up directly against
+                                   PayPal's own servers below, never trusted
+                                   as-is.
 
     Response (200):
         { success: true, order_number }
     """
-    data                  = request.data
-    order_id              = data.get('order_id')
-    paypal_transaction_id = data.get('paypal_transaction_id', '')
-    payer_email           = data.get('payer_email', '')
-    transaction_amount    = data.get('transaction_amount', '0')
-    payment_response      = data.get('payment_response', {})
+    data              = request.data
+    order_id          = data.get('order_id')
+    paypal_order_id   = data.get('paypal_order_id', '')
 
     if not order_id:
         return Response({'error': 'order_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+    if not paypal_order_id:
+        return Response({'error': 'paypal_order_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
     with transaction.atomic():
         try:
@@ -400,15 +548,29 @@ def confirmPayment(request):
         if order.payment_status == 'PAID':
             return Response({'error': 'Order is already paid'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create the payment record
+        # A given PayPal payment can only ever settle one of our orders —
+        # otherwise the same legitimate capture could be replayed against
+        # multiple OrderInfo rows.
+        if OrderPayment.objects.filter(gateway_transaction_id=paypal_order_id).exists():
+            return Response({'error': 'This PayPal payment has already been used'},
+                             status=status.HTTP_400_BAD_REQUEST)
+
+        capture_id, captured_amount, result = _verify_and_extract_capture(
+            paypal_order_id, order.total_amount)
+        if capture_id is None:
+            return Response({'error': result}, status=status.HTTP_400_BAD_REQUEST)
+        payer_email = result
+
+        # Create the payment record — everything here comes from PayPal's own
+        # response (fetched server-side above), not from client input.
         OrderPayment.objects.create(
-            transaction_id=paypal_transaction_id,
+            transaction_id=capture_id,
             order=order,
             payment_gateway='paypal',
-            transaction_amount=transaction_amount,
+            transaction_amount=str(captured_amount),
             payer_email=payer_email,
-            gateway_transaction_id=paypal_transaction_id,
-            payment_response=payment_response,
+            gateway_transaction_id=paypal_order_id,
+            payment_response=data.get('payment_response', {}),
             transaction_status='completed',
         )
 
@@ -450,8 +612,9 @@ def cancelPendingOrder(request, order_id):
     Cancel a pending (UNPAID) order created by createPendingOrder.
 
     Unlinks the attached CompleteSet objects (so they return to the cart) and
-    deletes the OrderInfo record.  Used when the user goes back from the Payment
-    step to avoid accumulating stale UNPAID orders.
+    marks the OrderInfo as CANCELED rather than deleting it — it stays visible
+    in the customer's order history. Used when the user goes back from the
+    Payment step.
     """
     try:
         order = OrderInfo.objects.get(
@@ -459,9 +622,7 @@ def cancelPendingOrder(request, order_id):
     except OrderInfo.DoesNotExist:
         return Response({'error': 'Pending order not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    # Return items to the cart (order FK → None) before deleting the order
-    CompleteSet.objects.filter(order=order).update(order=None)
-    order.delete()
+    _cancel_orders(OrderInfo.objects.filter(pk=order.pk))
 
     return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -529,7 +690,11 @@ def guestCart(request):
 
     if action == 'add':
         cs_id = request.data.get('complete_set_id')
-        if cs_id:
+        # Only unattached items are claimable — same rule as the
+        # authenticated path (ShoppingCartSerializer.update), just without
+        # an "already my own order" exception since guests have no identity
+        # beyond this session.
+        if cs_id and CompleteSet.objects.filter(id=cs_id, order__isnull=True).exists():
             cart.eyeglasses_set.add(cs_id)
     elif action == 'remove':
         cs_id = request.data.get('complete_set_id')
@@ -577,30 +742,40 @@ def createPendingOrderGuest(request):
             return Response({'error': f'{field} is required in address_data'},
                             status=status.HTTP_400_BAD_REQUEST)
 
+    if not all(_caller_owns_complete_set(request, cs_id) for cs_id in complete_set_ids):
+        return Response(
+            {'error': 'One or more complete sets do not belong to you'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     with transaction.atomic():
         # Step 0a: item-based cleanup — same as authenticated
-        stuck_order_ids = list(
+        _cancel_orders(
             OrderInfo.objects.filter(
                 completeset__id__in=complete_set_ids,
                 payment_status='UNPAID',
-            ).distinct().values_list('pk', flat=True)
+            ).exclude(order_status='CANCELED').distinct()
         )
-        if stuck_order_ids:
-            CompleteSet.objects.filter(order_id__in=stuck_order_ids).update(order=None)
-            OrderInfo.objects.filter(pk__in=stuck_order_ids).delete()
 
         # Step 0b: session-based cleanup — cancel previous guest pending order
+        # (already scoped to this one session-tracked order, not a blanket
+        # sweep, so no age check needed here like the authenticated path).
         prev_order_id = request.session.get('guest_pending_order_id')
         if prev_order_id:
-            stale = OrderInfo.objects.filter(pk=prev_order_id, payment_status='UNPAID')
-            if stale.exists():
-                CompleteSet.objects.filter(order__in=stale).update(order=None)
-                stale.delete()
+            _cancel_orders(
+                OrderInfo.objects.filter(
+                    pk=prev_order_id, payment_status='UNPAID',
+                ).exclude(order_status='CANCELED')
+            )
 
-        # Validate
-        valid_sets = CompleteSet.objects.filter(
-            id__in=complete_set_ids, order=None, saved_for_later=False)
-        if valid_sets.count() != len(complete_set_ids):
+        # Validate — locked, same reasoning as createPendingOrder above.
+        locked_sets = list(
+            CompleteSet.objects.select_for_update().filter(id__in=complete_set_ids)
+        )
+        valid_sets = [
+            cs for cs in locked_sets if cs.order_id is None and not cs.saved_for_later
+        ]
+        if len(valid_sets) != len(complete_set_ids):
             return Response(
                 {'error': 'One or more complete sets are invalid or already attached to an order'},
                 status=status.HTTP_400_BAD_REQUEST)
@@ -674,17 +849,17 @@ def createPendingOrderGuest(request):
 def confirmPaymentGuest(request):
     """
     Record a completed PayPal payment for a guest order and mark it PAID.
-    Ownership validated via session (guest_pending_order_id).
+    Ownership validated via session (guest_pending_order_id); the payment
+    itself is validated against PayPal's own servers (see confirmPayment).
     """
-    data                  = request.data
-    order_id              = data.get('order_id')
-    paypal_transaction_id = data.get('paypal_transaction_id', '')
-    payer_email           = data.get('payer_email', '')
-    transaction_amount    = data.get('transaction_amount', '0')
-    payment_response      = data.get('payment_response', {})
+    data             = request.data
+    order_id         = data.get('order_id')
+    paypal_order_id  = data.get('paypal_order_id', '')
 
     if not order_id:
         return Response({'error': 'order_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+    if not paypal_order_id:
+        return Response({'error': 'paypal_order_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
     # Session-based ownership check
     session_order_id = request.session.get('guest_pending_order_id')
@@ -701,14 +876,24 @@ def confirmPaymentGuest(request):
         if order.payment_status == 'PAID':
             return Response({'error': 'Order is already paid'}, status=status.HTTP_400_BAD_REQUEST)
 
+        if OrderPayment.objects.filter(gateway_transaction_id=paypal_order_id).exists():
+            return Response({'error': 'This PayPal payment has already been used'},
+                             status=status.HTTP_400_BAD_REQUEST)
+
+        capture_id, captured_amount, result = _verify_and_extract_capture(
+            paypal_order_id, order.total_amount)
+        if capture_id is None:
+            return Response({'error': result}, status=status.HTTP_400_BAD_REQUEST)
+        payer_email = result
+
         OrderPayment.objects.create(
-            transaction_id=paypal_transaction_id,
+            transaction_id=capture_id,
             order=order,
             payment_gateway='paypal',
-            transaction_amount=transaction_amount,
+            transaction_amount=str(captured_amount),
             payer_email=payer_email,
-            gateway_transaction_id=paypal_transaction_id,
-            payment_response=payment_response,
+            gateway_transaction_id=paypal_order_id,
+            payment_response=data.get('payment_response', {}),
             transaction_status='completed',
         )
 
@@ -777,8 +962,7 @@ def cancelPendingOrderGuest(request, order_id):
     except OrderInfo.DoesNotExist:
         return Response({'error': 'Pending order not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    CompleteSet.objects.filter(order=order).update(order=None)
-    order.delete()
+    _cancel_orders(OrderInfo.objects.filter(pk=order.pk))
     request.session.pop('guest_pending_order_id', None)
 
     return Response(status=status.HTTP_204_NO_CONTENT)

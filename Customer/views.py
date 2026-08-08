@@ -68,7 +68,11 @@ def is_authenticated(request):
 
 
 @api_view(['GET'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
 def getShoppingCart(request, cart_id):
+    if not request.user.shopping_cart_id or cart_id != request.user.shopping_cart_id:
+        return Response({'error': 'Shopping cart not found'}, status=status.HTTP_404_NOT_FOUND)
     shopping_cart = ShoppingCart.objects.get(id=cart_id)
     serializer = ShoppingCartSerializer(shopping_cart)
     return Response(serializer.data)
@@ -86,15 +90,12 @@ def getUserShoppingCart(request, cart_id):
         shopping_cart = ShoppingCart.objects.create()
         CustomerInfo.objects.filter(pk=user.pk).update(shopping_cart=shopping_cart)
 
-    if cart_id and cart_id != shopping_cart.id:
-        # Get the local (guest) shopping cart, or return a 404 if not found.
-        # Skip when the local cart IS the user's own cart (nothing to merge).
-        local_cart = get_object_or_404(ShoppingCart, id=cart_id)
+    # cart_id (URL param) is NOT trusted for merging — it's just a client-side
+    # cache-consistency hint ("is this still my cart?"), not proof of
+    # ownership of whatever cart that id happens to point to. The only cart
+    # ever merged in is the one tied to *this request's own session* below.
 
-        # Merge the local shopping cart into the user's cart
-        shopping_cart.merge_with(local_cart)
-
-    # Also merge guest session cart if present
+    # Merge guest session cart if present
     guest_cart_id = request.session.get("guest_cart_id")
     if guest_cart_id and guest_cart_id != shopping_cart.id:
         try:
@@ -109,23 +110,33 @@ def getUserShoppingCart(request, cart_id):
 
 
 @api_view(['POST'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
 def createShoppingCart(request):
-    serializer = ShoppingCartSerializer(data=request.data)
+    if request.user.shopping_cart_id:
+        # Already has one — behave like a fetch rather than minting a second,
+        # orphaned cart the user's shopping_cart FK will never point to.
+        serializer = ShoppingCartSerializer(request.user.shopping_cart)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    serializer = ShoppingCartSerializer(data=request.data, context={'request': request})
     if serializer.is_valid():
-        serializer.save()
+        cart = serializer.save()
+        CustomerInfo.objects.filter(pk=request.user.pk).update(shopping_cart=cart)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['PATCH'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
 def updateShoppingCart(request, cart_id):
-    try:
-        shopping_cart = ShoppingCart.objects.get(id=cart_id)
-    except ShoppingCart.DoesNotExist:
+    if not request.user.shopping_cart_id or cart_id != request.user.shopping_cart_id:
         return Response({'error': 'Shopping cart not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    shopping_cart = ShoppingCart.objects.get(id=cart_id)
     serializer = ShoppingCartSerializer(
-        instance=shopping_cart, data=request.data, partial=True)
+        instance=shopping_cart, data=request.data, partial=True, context={'request': request})
 
     if serializer.is_valid():
         serializer.save()

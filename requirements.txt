@@ -15,5 +15,6 @@ gunicorn
 Pillow
 django-tinymce
 paypalrestsdk
+requests
 django-anymail[mailgun]
 openpyxl
