@@ -4,6 +4,41 @@ from django.db.models import Sum
 from django.apps import apps
 
 
+def get_complete_set_line_items(complete_set):
+    """
+    Backend-authoritative {component, label, price} rows for every priced
+    lens feature attached to this CompleteSet — frame excluded (shown
+    separately everywhere this is used, since it isn't a lens_workflow FK).
+    Shared by Order/views.py's build_price_check and
+    Order/serializer.py's CompleteSetSerializer.price_breakdown (cart/order
+    itemization). Lives here (not in views.py) so serializer.py can import
+    it without a circular import — views.py already imports from serializer.py.
+    """
+    items = []
+    for component, option_obj, price_field, label_field in [
+        ('function_path',   complete_set.function_path,   'extra_price', 'function_label'),
+        ('tint_type',       complete_set.tint_type,        'extra_price', 'function_label'),
+        ('index_option',    complete_set.index_option,     'price',       'option_label'),
+        ('color_option',    complete_set.color_option,     'extra_price', 'color_name'),
+        ('reader_strength', complete_set.reader_strength,  'price',       'label'),
+    ]:
+        if option_obj is None:
+            continue
+        items.append({
+            'component': component,
+            'label':     getattr(option_obj, label_field),
+            'price':     float(getattr(option_obj, price_field)),
+        })
+    if complete_set.pk:
+        for coating in complete_set.coatings.all():
+            items.append({
+                'component': f'coating_{coating.id}',
+                'label':     coating.label,
+                'price':     float(coating.price),
+            })
+    return items
+
+
 class OrderService:
     @staticmethod
     def is_coupon_applicable(order):

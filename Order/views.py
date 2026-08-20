@@ -19,7 +19,7 @@ import paypalrestsdk
 from Leoptique.authentication import AccessTokenAuthentication
 from .models import *
 from .serializer import CompleteSetSerializer, OrderSerializer, CompleteSetObjectSerializer
-from .service.order_service import OrderService
+from .service.order_service import OrderService, get_complete_set_line_items
 
 paypalrestsdk.configure({
     "mode": settings.PAYPAL_MODE,
@@ -231,37 +231,23 @@ def build_price_check(request_data, instance):
     })
 
     # ── Lens options (skip null FKs — e.g. color_option is null when the
-    #    selected function path doesn't require a color step) ──────────────
-    for component, option_obj, price_field, label_field in [
-        ('function_path',   instance.function_path,   'extra_price', 'function_label'),
-        ('tint_type',       instance.tint_type,        'extra_price', 'function_label'),
-        ('index_option',    instance.index_option,     'price',       'option_label'),
-        ('color_option',    instance.color_option,     'extra_price', 'color_name'),
-        ('reader_strength', instance.reader_strength,  'price',       'label'),
-    ]:
-        if option_obj is None:
-            continue
-        backend_p  = float(getattr(option_obj, price_field))
-        frontend_p = float(snapshot.get(component) or 0)
+    #    selected function path doesn't require a color step) and coatings
+    #    (many-to-many, one breakdown entry per attached coating). Coating
+    #    frontend prices come from frontend_price_snapshot['coatings'],
+    #    expected as {coating_id: price}; everything else defaults to 0
+    #    when missing from the snapshot (shows full backend price as delta).
+    coating_snapshot = snapshot.get('coatings') or {}
+    for item in get_complete_set_line_items(instance):
+        component = item['component']
+        backend_p = item['price']
+        if component.startswith('coating_'):
+            coating_id = component.split('_', 1)[1]
+            frontend_p = float(coating_snapshot.get(coating_id) or 0)
+        else:
+            frontend_p = float(snapshot.get(component) or 0)
         breakdown.append({
             'component':      component,
-            'label':          getattr(option_obj, label_field),
-            'frontend_price': frontend_p,
-            'backend_price':  backend_p,
-            'changed':        abs(backend_p - frontend_p) > 0.005,
-        })
-
-    # ── Coatings — many-to-many now (stacked add-ons), one breakdown entry
-    #    per attached coating. frontend_price_snapshot['coatings'], if sent,
-    #    is expected as {coating_id: price}; anything missing defaults to 0
-    #    same as every other component above.
-    coating_snapshot = snapshot.get('coatings') or {}
-    for coating in instance.coatings.all():
-        backend_p  = float(coating.price)
-        frontend_p = float(coating_snapshot.get(str(coating.id)) or 0)
-        breakdown.append({
-            'component':      f'coating_{coating.id}',
-            'label':          coating.label,
+            'label':          item['label'],
             'frontend_price': frontend_p,
             'backend_price':  backend_p,
             'changed':        abs(backend_p - frontend_p) > 0.005,

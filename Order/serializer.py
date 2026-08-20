@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import *
+from .service.order_service import get_complete_set_line_items
 from lens_workflow.models import (
     LensType,
     LensFunctionPath,
@@ -75,6 +76,9 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         rep['index_option']  = obj.index_option.option_label if obj.index_option else None
         rep['color_option']  = obj.color_option.color_name if obj.color_option else None
         rep['coatings']      = [c.label for c in obj.coatings.all()]
+        # Per-lens-feature prices for cart/order itemization (frame excluded —
+        # rep['frame'] above already carries its own price).
+        rep['price_breakdown'] = get_complete_set_line_items(obj)
         return rep
 
     # ── create ───────────────────────────────────────────────────────────────

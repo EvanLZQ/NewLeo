@@ -65,7 +65,11 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
     carousel_img = serializers.SerializerMethodField()
     detail_img = serializers.SerializerMethodField()
     color_img_url = serializers.SerializerMethodField()
+    product_name = serializers.SerializerMethodField()
     productPromotion = ProductPromotionSerializer(many=True)
+
+    def get_product_name(self, obj):
+        return obj.product.name if obj.product else ''
 
     def get_carousel_img(self, obj):
         # Uses prefetched productImage relation — no extra DB queries
@@ -116,6 +120,7 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
                   'color_base_name',
                   'color_display_name',
                   'description',
+                  'product_name',
                   'productPromotion']
 
 
