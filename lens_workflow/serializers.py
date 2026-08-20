@@ -55,17 +55,38 @@ class NextStepRequestSerializer(serializers.Serializer):
     INDEX step (to compute the recommended/available index bracket) — sent
     on every call from FUNCTION onward, ignored elsewhere.
 
-    Example:
+    COATING is the one step that's multi-select — it uses
+    selected_option_ids (a list, possibly empty) instead of
+    selected_option_id. Every other step uses the singular field and it's
+    required for them (enforced in validate() below, since a plain
+    IntegerField can't be conditionally required per-step on its own).
+
+    Example (single-select step):
     {
       "current_step_code": "FUNCTION",
       "selected_option_id": 12,
       "selection_path": [3, 12],
       "prescription_id": 7
     }
+
+    Example (COATING):
+    {
+      "current_step_code": "COATING",
+      "selected_option_ids": [21, 23],
+      "selection_path": [3, 12, 15, 18],
+      "prescription_id": 7
+    }
     """
     current_step_code = serializers.ChoiceField(
-        choices=["LENS_TYPE", "FUNCTION", "COLOR", "INDEX", "COATING"])
-    selected_option_id = serializers.IntegerField()
+        choices=["LENS_TYPE", "FUNCTION", "TINT_TYPE", "COLOR", "INDEX",
+                 "COATING", "READER_STRENGTH"])
+    selected_option_id = serializers.IntegerField(required=False, allow_null=True)
+    selected_option_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True,
+        default=list,
+    )
     selection_path = serializers.ListField(
         child=serializers.IntegerField(),
         required=False,
@@ -73,3 +94,9 @@ class NextStepRequestSerializer(serializers.Serializer):
         default=list,
     )
     prescription_id = serializers.IntegerField(required=False, allow_null=True)
+
+    def validate(self, data):
+        if data.get("current_step_code") != "COATING" and data.get("selected_option_id") is None:
+            raise serializers.ValidationError(
+                {"selected_option_id": "This field is required for this step."})
+        return data
