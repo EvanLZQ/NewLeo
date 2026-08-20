@@ -199,12 +199,18 @@ def _reader_strength_option(strength):
     )
 
 
-def _step_response(step_code, option_dicts, selection_path, is_complete=False):
+def _step_response(step_code, option_dicts, selection_path, is_complete=False,
+                    step_index=None, total_steps=None):
     return Response({
         "current_step": None if is_complete else _step_dict(step_code),
         "options": [] if is_complete else option_dicts,
         "selection_path": selection_path,
         "is_complete": is_complete,
+        # Progress-indicator hints — null until the path is determined (see
+        # NextStepRequestSerializer's docstring). Omitted entirely when
+        # is_complete, since there's no next step left to show progress for.
+        "step_index": None if is_complete else step_index,
+        "total_steps": None if is_complete else total_steps,
     }, status=status.HTTP_200_OK)
 
 
@@ -257,6 +263,9 @@ class LensWorkflowNextView(APIView):
                             valid).
       - selection_path: comma-separated ids (optional)
       - prescription_id: int (optional; only used when transitioning into INDEX)
+      - current_step_index / total_steps: int (optional; progress-indicator
+        state echoed back from the previous response — see
+        NextStepRequestSerializer's docstring)
     """
 
     def get(self, request):
@@ -266,6 +275,8 @@ class LensWorkflowNextView(APIView):
             "selected_option_ids": _safe_parse(request.query_params.get("selected_option_ids", "")),
             "selection_path": _safe_parse(request.query_params.get("selection_path", "")),
             "prescription_id": request.query_params.get("prescription_id") or None,
+            "current_step_index": request.query_params.get("current_step_index") or None,
+            "total_steps": request.query_params.get("total_steps") or None,
         })
         if not serializer.is_valid():
             return Response({"detail": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
@@ -274,6 +285,8 @@ class LensWorkflowNextView(APIView):
         current_step_code = data["current_step_code"]
         selection_path = data["selection_path"]
         prescription_id = data.get("prescription_id")
+        current_step_index = data.get("current_step_index")
+        total_steps = data.get("total_steps")
 
         if current_step_code == "COATING":
             selected_ids = data.get("selected_option_ids") or []
@@ -297,14 +310,16 @@ class LensWorkflowNextView(APIView):
         }[current_step_code]
 
         try:
-            return handler(selected_option_id, updated_path, prescription_id)
+            return handler(selected_option_id, updated_path, prescription_id,
+                            current_step_index, total_steps)
         except DOES_NOT_EXIST_ERRORS:
             return Response(
                 {"detail": f"Selected option id={selected_option_id} not found for step {current_step_code}."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-    def _after_lens_type(self, selected_option_id, path, prescription_id):
+    def _after_lens_type(self, selected_option_id, path, prescription_id,
+                          current_step_index, total_steps):
         lens_type = LensType.objects.get(id=selected_option_id, is_active=True)
 
         if lens_type.is_reader:
@@ -318,49 +333,71 @@ class LensWorkflowNextView(APIView):
             .order_by("function_code", "sort_order", "id")
             .distinct("function_code")
         )
-        return _step_response("FUNCTION", [_function_option(fp) for fp in function_paths], path)
+        # total_steps stays null here — it depends on which Function gets
+        # picked next (Sun's path is longer than Classic's) and only
+        # becomes knowable once that choice is made — see _after_function.
+        return _step_response(
+            "FUNCTION", [_function_option(fp) for fp in function_paths], path,
+            step_index=1, total_steps=None)
 
     def _enter_reader_strength_step(self, path):
         strengths = LensReaderStrength.objects.filter(
             is_active=True).order_by("sort_order", "id")
+        # Reader's path never branches further — total_steps is knowable
+        # immediately, unlike the main Function-first path above.
         return _step_response(
-            "READER_STRENGTH", [_reader_strength_option(s) for s in strengths], path)
+            "READER_STRENGTH", [_reader_strength_option(s) for s in strengths], path,
+            step_index=1, total_steps=1)
 
-    def _after_reader_strength(self, selected_option_id, path, prescription_id):
+    def _after_reader_strength(self, selected_option_id, path, prescription_id,
+                                current_step_index, total_steps):
         LensReaderStrength.objects.get(id=selected_option_id, is_active=True)
         # No Function/Tint/Color/Material/Coating choice for a readymade
         # reader — straight to complete.
         return _step_response("READER_STRENGTH", [], path, is_complete=True)
 
-    def _after_function(self, selected_option_id, path, prescription_id):
+    def _after_function(self, selected_option_id, path, prescription_id,
+                         current_step_index, total_steps):
         clicked = LensFunctionPath.objects.get(
             id=selected_option_id, is_active=True)
 
+        # This is the one point where total_steps becomes knowable — the
+        # chosen Function fully determines how many steps remain.
         if clicked.function_code == LensFunctionPath.FunctionCode.SUN:
-            return self._enter_tint_type_step(clicked, path)
+            # FUNCTION -> TINT_TYPE -> COLOR -> INDEX -> COATING
+            return self._enter_tint_type_step(clicked, path, step_index=2, total_steps=5)
 
         if not clicked.color_required:
-            return self._enter_index_step(clicked, path, prescription_id)
+            # FUNCTION -> INDEX -> COATING
+            return self._enter_index_step(
+                clicked, path, prescription_id, step_index=2, total_steps=3)
 
         # Photochromic (or any future color_required, non-Sun function):
         # colors scoped directly to this one function_path — Sun is the
         # only function_code with siblings, disambiguated by Tint Type.
-        return self._enter_color_step(clicked, path, prescription_id)
+        # FUNCTION -> COLOR -> INDEX -> COATING
+        return self._enter_color_step(
+            clicked, path, prescription_id, step_index=2, total_steps=4)
 
-    def _enter_tint_type_step(self, clicked_sun_function_path, path):
+    def _enter_tint_type_step(self, clicked_sun_function_path, path, step_index, total_steps):
         siblings = LensFunctionPath.objects.filter(
             lens_type=clicked_sun_function_path.lens_type,
             function_code=LensFunctionPath.FunctionCode.SUN,
             is_active=True,
         ).exclude(sun_type="").order_by("sort_order", "id")
-        return _step_response("TINT_TYPE", [_tint_type_option(fp) for fp in siblings], path)
+        return _step_response(
+            "TINT_TYPE", [_tint_type_option(fp) for fp in siblings], path,
+            step_index=step_index, total_steps=total_steps)
 
-    def _after_tint_type(self, selected_option_id, path, prescription_id):
+    def _after_tint_type(self, selected_option_id, path, prescription_id,
+                          current_step_index, total_steps):
         clicked = LensFunctionPath.objects.get(
             id=selected_option_id, is_active=True)
-        return self._enter_color_step(clicked, path, prescription_id)
+        return self._enter_color_step(
+            clicked, path, prescription_id,
+            step_index=current_step_index + 1, total_steps=total_steps)
 
-    def _enter_color_step(self, function_path, path, prescription_id):
+    def _enter_color_step(self, function_path, path, prescription_id, step_index, total_steps):
         color_options = list(
             LensColorOption.objects.filter(
                 function_path=function_path, is_active=True
@@ -380,17 +417,23 @@ class LensWorkflowNextView(APIView):
                 if set(co.available_index_values) & allowed
             ]
 
-        return _step_response("COLOR", [_color_option_dict(co) for co in color_options], path)
+        return _step_response(
+            "COLOR", [_color_option_dict(co) for co in color_options], path,
+            step_index=step_index, total_steps=total_steps)
 
-    def _after_color(self, selected_option_id, path, prescription_id):
+    def _after_color(self, selected_option_id, path, prescription_id,
+                      current_step_index, total_steps):
         color_option = LensColorOption.objects.select_related("function_path").get(
             id=selected_option_id, is_active=True)
         return self._enter_index_step(
             color_option.function_path, path, prescription_id,
             color_available_index_values=color_option.available_index_values,
+            step_index=current_step_index + 1, total_steps=total_steps,
         )
 
-    def _enter_index_step(self, function_path, path, prescription_id, color_available_index_values=None):
+    def _enter_index_step(self, function_path, path, prescription_id,
+                           color_available_index_values=None,
+                           step_index=None, total_steps=None):
         # Index/Material is scoped to Lens Type, not Function Path — the
         # same list and prices apply no matter which Function got picked.
         index_options = list(
@@ -422,15 +465,18 @@ class LensWorkflowNextView(APIView):
             for io in index_options
         ]
 
-        return _step_response("INDEX", option_dicts, path)
+        return _step_response(
+            "INDEX", option_dicts, path, step_index=step_index, total_steps=total_steps)
 
-    def _after_index(self, selected_option_id, path, prescription_id):
+    def _after_index(self, selected_option_id, path, prescription_id,
+                      current_step_index, total_steps):
         LensIndexOption.objects.get(id=selected_option_id, is_active=True)
         # Color (when needed) already happened before Index now, so Index
         # always leads straight to Coating.
-        return self._enter_coating_step(path)
+        return self._enter_coating_step(
+            path, step_index=current_step_index + 1, total_steps=total_steps)
 
-    def _enter_coating_step(self, path):
+    def _enter_coating_step(self, path, step_index=None, total_steps=None):
         # Every active coating is returned — both the always-included ones
         # (Anti-scratch/Anti-glare/UV-protection) and the pickable add-ons.
         # metadata.is_included tells the frontend which is which; the
@@ -439,7 +485,9 @@ class LensWorkflowNextView(APIView):
         # rejection if one is submitted as if it were a selection.
         coatings = LensCoating.objects.filter(
             is_active=True).order_by("sort_order", "id")
-        return _step_response("COATING", [_coating_option_dict(c) for c in coatings], path)
+        return _step_response(
+            "COATING", [_coating_option_dict(c) for c in coatings], path,
+            step_index=step_index, total_steps=total_steps)
 
     def _after_coating(self, selected_ids, path):
         selected_ids = list(dict.fromkeys(selected_ids))  # de-dupe, keep order

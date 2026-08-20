@@ -89,6 +89,52 @@ def _cancel_orders(queryset):
     OrderInfo.objects.filter(pk__in=ids).update(order_status='CANCELED')
 
 
+# ── Coupons ──────────────────────────────────────────────────────────────────
+
+def _resolve_coupon(code, customer):
+    """
+    Look up and validate a coupon code. `customer` is the CustomerInfo
+    instance for an authenticated request, or None for a guest.
+    Returns (coupon, error_response) — exactly one of the two is non-None.
+    """
+    from General.models import Coupon
+    code = (code or '').strip()
+    if not code:
+        return None, Response({'error': 'Coupon code is required.'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        coupon = Coupon.objects.get(code__iexact=code, online=True)
+    except Coupon.DoesNotExist:
+        return None, Response({'error': 'Invalid or inactive coupon code.'}, status=status.HTTP_404_NOT_FOUND)
+    if coupon.expire_date and coupon.expire_date < timezone.now().date():
+        return None, Response({'error': 'This coupon has expired.'}, status=status.HTTP_400_BAD_REQUEST)
+    if coupon.valid_customer.exists():
+        if not customer or not coupon.valid_customer.filter(id=customer.id).exists():
+            return None, Response(
+                {'error': 'This coupon is not valid for your account.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+    return coupon, None
+
+
+def _preview_coupon_discount(coupon, customer, complete_sets):
+    """
+    Computes the discount `coupon` would apply against `complete_sets`,
+    without creating or touching any real OrderInfo row — used for the
+    real-time "Apply Coupon" check before checkout even starts. Reuses the
+    exact same per-item OrderService methods that createPendingOrder /
+    createPendingOrderGuest call for real at order-creation time (against an
+    unsaved OrderInfo shell — those methods only ever read order.coupon_used
+    / order.customer, never write), so this preview can't drift from the
+    number actually applied later.
+    """
+    shell_order = OrderInfo(customer=customer, coupon_used=coupon)
+    total_discount = Decimal('0')
+    for cs in complete_sets:
+        total_discount += Decimal(str(OrderService.calculate_frame_discount(shell_order, cs)))
+        total_discount += Decimal(str(OrderService.calculate_lens_discount(shell_order, cs)))
+    return total_discount
+
+
 # ── PayPal server-side verification ─────────────────────────────────────────
 # `paypalrestsdk` (imported above) only speaks PayPal's legacy Payments v1
 # API. The frontend's PayPal JS SDK (PayPalButton.tsx) creates/captures
@@ -139,16 +185,14 @@ def _fetch_paypal_order(paypal_order_id):
 def _verify_and_extract_capture(paypal_order_id, expected_minimum_total):
     """
     Independently confirm a PayPal order actually completed and paid at
-    least `expected_minimum_total` (our server-computed sub_total +
-    shipping). Returns (capture_id, captured_amount, payer_email) on
-    success, or (None, None, error_message) on failure.
+    least `expected_minimum_total` (our server-computed order.total_amount
+    — sub_total + shipping, the full price since no tax is charged). Returns
+    (capture_id, captured_amount, payer_email) on success, or
+    (None, None, error_message) on failure.
 
-    NOTE: tax is currently computed client-side only and never sent to or
-    stored by the backend (see order_service.py / PaymentForm.tsx), so this
-    checks "captured >= our base total" rather than an exact match — it
-    closes the "pay nothing / pay an arbitrary low amount" hole, but can't
-    yet verify the tax-inclusive figure precisely. That needs tax to become
-    a server-computed, server-stored value first.
+    Checks "captured >= our total" rather than an exact match, so a customer
+    who somehow overpays isn't rejected — this only closes the "pay nothing /
+    pay an arbitrary low amount" hole.
     """
     paypal_order = _fetch_paypal_order(paypal_order_id)
     if paypal_order is None:
@@ -353,6 +397,50 @@ def getCompleteSetLoader(request, set_id):
 
 @api_view(['POST'])
 @authentication_classes(AUTH_CLASSES)
+@permission_classes([AllowAny])
+def validateCoupon(request):
+    """
+    Real-time coupon-code check for the Checkout page's "Apply Coupon" box.
+    No order needs to exist yet — works for both authenticated and guest
+    checkout. Returns the discount this coupon would currently apply
+    against the given cart items (see _preview_coupon_discount).
+
+    Request body:
+        code              — str
+        complete_set_ids  — list[int]  (the customer's current free cart items)
+
+    Response (200): { code, description, discount_amount }
+    Response (400/403/404): { error }
+    """
+    code = request.data.get('code')
+    complete_set_ids = request.data.get('complete_set_ids') or []
+
+    is_authenticated = bool(request.user and request.user.is_authenticated)
+    customer = request.user if is_authenticated else None
+
+    coupon, error = _resolve_coupon(code, customer)
+    if error:
+        return error
+
+    if not all(_caller_owns_complete_set(request, cs_id) for cs_id in complete_set_ids):
+        return Response(
+            {'error': 'One or more complete sets do not belong to you'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    complete_sets = list(CompleteSet.objects.filter(
+        id__in=complete_set_ids, saved_for_later=False, order__isnull=True))
+    discount = _preview_coupon_discount(coupon, customer, complete_sets)
+
+    return Response({
+        'code': coupon.code,
+        'description': coupon.description or '',
+        'discount_amount': str(discount),
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@authentication_classes(AUTH_CLASSES)
 @permission_classes([IsAuthenticated])
 def createPendingOrder(request):
     """
@@ -364,9 +452,15 @@ def createPendingOrder(request):
         shipping_method   – str         e.g. "Primary express" / "Xpresspost" / "UPS"
         country           – str         e.g. "United States"  (used for shipping calc)
         email             – str         customer e-mail for the order record
+        coupon_code       – str         optional — validated for real here (see
+                                         _resolve_coupon); an invalid/expired code
+                                         fails the whole request rather than silently
+                                         being dropped, so the total shown at Payment
+                                         never surprises the customer either way.
 
     Response (201):
-        { order_id, order_number, sub_total, shipping_cost, total_before_tax }
+        { order_id, order_number, sub_total, shipping_cost, total_amount,
+          coupon_code, discount_amount }
     """
     data             = request.data
     complete_set_ids = data.get('complete_set_ids', [])
@@ -374,6 +468,7 @@ def createPendingOrder(request):
     shipping_method  = data.get('shipping_method', '')
     country          = data.get('country', '')
     email            = data.get('email', '') or ''
+    coupon_code      = data.get('coupon_code')
     # Always prefer the authenticated user's e-mail over whatever the client sends.
     email = getattr(request.user, 'email', None) or getattr(request.user, 'username', None) or email
 
@@ -391,6 +486,12 @@ def createPendingOrder(request):
             {'error': 'One or more complete sets do not belong to you'},
             status=status.HTTP_403_FORBIDDEN,
         )
+
+    coupon = None
+    if coupon_code:
+        coupon, error = _resolve_coupon(coupon_code, request.user)
+        if error:
+            return error
 
     with transaction.atomic():
         # ── Step 0a: item-based cleanup (runs BEFORE validation) ─────────────
@@ -476,6 +577,7 @@ def createPendingOrder(request):
                 payment_type='paypal',
                 address=order_address,
                 shipping_company=shipping_method,
+                coupon_used=coupon,
                 comment='',
                 refound_status='',
                 refound_amount=0,
@@ -491,10 +593,16 @@ def createPendingOrder(request):
         CompleteSet.objects.filter(id__in=complete_set_ids).update(order=order)
 
         # ── Step 3: calculate totals ───────────────────────────────────────────
+        # calculate_sub_total already applies the frame/lens coupon discount
+        # per item (via is_coupon_applicable, reading order.coupon_used set
+        # above); calculate_shipping_discount is a no-op when coupon_used is
+        # None, so it's safe to call unconditionally.
         order.sub_total     = OrderService.calculate_sub_total(order)
         order.shipping_cost = OrderService.calculate_shipping_cost(
             country, float(order.sub_total), shipping_method,
         )
+        shipping_discount   = OrderService.calculate_shipping_discount(order, order.shipping_cost)
+        order.shipping_cost = max(Decimal('0'), order.shipping_cost - shipping_discount)
         order.total_amount  = order.sub_total + order.shipping_cost
 
         OrderInfo.objects.filter(pk=order.pk).update(
@@ -503,13 +611,23 @@ def createPendingOrder(request):
             total_amount=order.total_amount,
         )
 
+        # Informational only — order.sub_total above already has the frame/lens
+        # discount baked in; this is just for the frontend to show "you saved $X".
+        discount_amount = Decimal('0')
+        if coupon:
+            discount_amount = _preview_coupon_discount(
+                coupon, request.user, list(CompleteSet.objects.filter(order=order)),
+            ) + shipping_discount
+
     return Response(
         {
             'order_id':         order.pk,
             'order_number':     order.order_number,
             'sub_total':        str(order.sub_total),
             'shipping_cost':    str(order.shipping_cost),
-            'total_before_tax': str(order.total_amount),
+            'total_amount':     str(order.total_amount),
+            'coupon_code':      coupon.code if coupon else None,
+            'discount_amount':  str(discount_amount),
         },
         status=status.HTTP_201_CREATED,
     )
@@ -732,6 +850,7 @@ def createPendingOrderGuest(request):
     address_data     = data.get('address_data', {})
     shipping_method  = data.get('shipping_method', '')
     country          = data.get('country', '')
+    coupon_code      = data.get('coupon_code')
 
     if not email:
         return Response({'error': 'Email is required for guest checkout'},
@@ -750,6 +869,14 @@ def createPendingOrderGuest(request):
             {'error': 'One or more complete sets do not belong to you'},
             status=status.HTTP_403_FORBIDDEN,
         )
+
+    coupon = None
+    if coupon_code:
+        # customer=None — a coupon scoped to specific customers is correctly
+        # rejected for guest checkout by _resolve_coupon.
+        coupon, error = _resolve_coupon(coupon_code, None)
+        if error:
+            return error
 
     with transaction.atomic():
         # Step 0a: item-based cleanup — same as authenticated
@@ -806,6 +933,7 @@ def createPendingOrderGuest(request):
                 payment_type='paypal',
                 address=addr,
                 shipping_company=shipping_method,
+                coupon_used=coupon,
                 comment='',
                 refound_status='',
                 refound_amount=0,
@@ -820,10 +948,13 @@ def createPendingOrderGuest(request):
         # Link complete sets
         CompleteSet.objects.filter(id__in=complete_set_ids).update(order=order)
 
-        # Calculate totals
+        # Calculate totals — see createPendingOrder above for why calling
+        # calculate_shipping_discount unconditionally is safe.
         order.sub_total = OrderService.calculate_sub_total(order)
         order.shipping_cost = OrderService.calculate_shipping_cost(
             country, float(order.sub_total), shipping_method)
+        shipping_discount = OrderService.calculate_shipping_discount(order, order.shipping_cost)
+        order.shipping_cost = max(Decimal('0'), order.shipping_cost - shipping_discount)
         order.total_amount = order.sub_total + order.shipping_cost
 
         OrderInfo.objects.filter(pk=order.pk).update(
@@ -831,6 +962,12 @@ def createPendingOrderGuest(request):
             shipping_cost=order.shipping_cost,
             total_amount=order.total_amount,
         )
+
+        discount_amount = Decimal('0')
+        if coupon:
+            discount_amount = _preview_coupon_discount(
+                coupon, None, list(CompleteSet.objects.filter(order=order)),
+            ) + shipping_discount
 
     # Track in session for ownership
     request.session['guest_pending_order_id'] = order.pk
@@ -840,7 +977,9 @@ def createPendingOrderGuest(request):
         'order_number':     order.order_number,
         'sub_total':        str(order.sub_total),
         'shipping_cost':    str(order.shipping_cost),
-        'total_before_tax': str(order.total_amount),
+        'total_amount':     str(order.total_amount),
+        'coupon_code':      coupon.code if coupon else None,
+        'discount_amount':  str(discount_amount),
     }, status=status.HTTP_201_CREATED)
 
 

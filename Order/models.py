@@ -5,7 +5,7 @@ from Order.service.order_service import OrderService
 
 # Create your models here.
 
-__all__ = ['OrderInfo', 'OrderTax',
+__all__ = ['OrderInfo',
            'OrderImage', 'OrderUpdates', 'CompleteSet', 'OrderPayment']
 
 
@@ -66,24 +66,6 @@ class OrderInfo(models.Model):
         db_table = 'OrderInfo'
         verbose_name = 'Order'
         verbose_name_plural = 'Orders'
-
-
-class OrderTax(models.Model):
-    order = models.ForeignKey(
-        'Order.OrderInfo', on_delete=models.CASCADE)
-    tax_number = models.CharField(max_length=100)
-    total_amount = models.DecimalField(max_digits=5, decimal_places=2)
-    gst = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    hst = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    qst = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    pst = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'OrderTax'
-        verbose_name = 'Order Tax'
-        verbose_name_plural = 'Order Tax'
 
 
 class OrderImage(models.Model):

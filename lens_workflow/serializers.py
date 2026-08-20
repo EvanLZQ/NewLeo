@@ -55,6 +55,14 @@ class NextStepRequestSerializer(serializers.Serializer):
     INDEX step (to compute the recommended/available index bracket) — sent
     on every call from FUNCTION onward, ignored elsewhere.
 
+    current_step_index / total_steps: for the progress indicator. The
+    frontend echoes back whatever it received in the PREVIOUS response's
+    step_index/total_steps (both start null while on LENS_TYPE/FUNCTION,
+    since the path length depends on which Function gets picked — not
+    knowable until then). Once total_steps becomes non-null (the response
+    to submitting FUNCTION), every step after just increments step_index by
+    1 and passes total_steps straight through — see views.py.
+
     COATING is the one step that's multi-select — it uses
     selected_option_ids (a list, possibly empty) instead of
     selected_option_id. Every other step uses the singular field and it's
@@ -94,6 +102,8 @@ class NextStepRequestSerializer(serializers.Serializer):
         default=list,
     )
     prescription_id = serializers.IntegerField(required=False, allow_null=True)
+    current_step_index = serializers.IntegerField(required=False, allow_null=True)
+    total_steps = serializers.IntegerField(required=False, allow_null=True)
 
     def validate(self, data):
         if data.get("current_step_code") != "COATING" and data.get("selected_option_id") is None:

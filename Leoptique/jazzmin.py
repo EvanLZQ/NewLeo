@@ -117,7 +117,6 @@ JAZZMIN_SETTINGS = {
         "General.Address": "fas fa-address-book",
         "Order.OrderInfo": "fas fa-file-invoice-dollar",
         "Order.OrderUpdates": "fas fa-pen",
-        "Order.OrderTax": "fas fa-receipt",
         "Order.OrderImage": "fas fa-camera",
         "Order.CompleteSet": "fas fa-check-square",
         "Prescription.PrescriptionInfo": "fas fa-user-md",

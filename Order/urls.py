@@ -15,6 +15,7 @@ urlpatterns = [
     path('updatecompleteset/<int:set_id>',
          views.updateCompleteSet, name='update_target_set'),
     # Payment flow
+    path('validate_coupon', views.validateCoupon, name='validate_coupon'),
     path('create_pending', views.createPendingOrder, name='create_pending_order'),
     path('confirm_payment', views.confirmPayment, name='confirm_payment'),
     path('cancel_pending/<int:order_id>', views.cancelPendingOrder, name='cancel_pending_order'),
