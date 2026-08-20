@@ -210,6 +210,15 @@ class CompleteSet(models.Model):
         on_delete=models.SET_NULL, null=True, blank=True,
         related_name='complete_sets',
     )
+    tint_type = models.ForeignKey(
+        'lens_workflow.LensFunctionPath',
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='complete_sets_as_tint',
+        help_text="Set only when function_path is the Sun function: the specific "
+                  "tint-type LensFunctionPath (Solid/Gradient/Mirrored/Polarized) the "
+                  "customer picked. Its extra_price stacks on top of function_path's own "
+                  "(the Sun base price) — both are added into sub_total independently.",
+    )
     index_option = models.ForeignKey(
         'lens_workflow.LensIndexOption',
         on_delete=models.SET_NULL, null=True, blank=True,

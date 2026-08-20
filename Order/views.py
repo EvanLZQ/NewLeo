@@ -233,9 +233,11 @@ def build_price_check(request_data, instance):
     # ── Lens options (skip null FKs — e.g. color_option is null when the
     #    selected function path doesn't require a color step) ──────────────
     for component, option_obj, price_field, label_field in [
-        ('function_path', instance.function_path, 'extra_price', 'function_label'),
-        ('index_option',  instance.index_option,  'price',       'option_label'),
-        ('color_option',  instance.color_option,   'extra_price', 'color_name'),
+        ('function_path',   instance.function_path,   'extra_price', 'function_label'),
+        ('tint_type',       instance.tint_type,        'extra_price', 'function_label'),
+        ('index_option',    instance.index_option,     'price',       'option_label'),
+        ('color_option',    instance.color_option,     'extra_price', 'color_name'),
+        ('reader_strength', instance.reader_strength,  'price',       'label'),
     ]:
         if option_obj is None:
             continue

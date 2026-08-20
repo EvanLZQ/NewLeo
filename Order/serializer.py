@@ -27,6 +27,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
     # (from the lens_workflow API responses), so these are plain FK ids.
     lens_type     = serializers.PrimaryKeyRelatedField(queryset=LensType.objects.all(), required=False, allow_null=True)
     function_path = serializers.PrimaryKeyRelatedField(queryset=LensFunctionPath.objects.all(), required=False, allow_null=True)
+    tint_type     = serializers.PrimaryKeyRelatedField(queryset=LensFunctionPath.objects.all(), required=False, allow_null=True)
     index_option  = serializers.PrimaryKeyRelatedField(queryset=LensIndexOption.objects.all(), required=False, allow_null=True)
     color_option  = serializers.PrimaryKeyRelatedField(queryset=LensColorOption.objects.all(), required=False, allow_null=True)
     coatings      = serializers.PrimaryKeyRelatedField(queryset=LensCoating.objects.all(), required=False, many=True)
@@ -45,6 +46,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             'frame',
             'lens_type',
             'function_path',
+            'tint_type',
             'index_option',
             'color_option',
             'coatings',
@@ -69,6 +71,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         # PrimaryKeyRelatedField declarations above.
         rep['lens_type']     = obj.lens_type.label if obj.lens_type else None
         rep['function_path'] = obj.function_path.function_label if obj.function_path else None
+        rep['tint_type']     = obj.tint_type.function_label if obj.tint_type else None
         rep['index_option']  = obj.index_option.option_label if obj.index_option else None
         rep['color_option']  = obj.color_option.color_name if obj.color_option else None
         rep['coatings']      = [c.label for c in obj.coatings.all()]
@@ -93,6 +96,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             frame=frame_obj,
             lens_type=validated_data.get('lens_type'),
             function_path=validated_data.get('function_path'),
+            tint_type=validated_data.get('tint_type'),
             index_option=validated_data.get('index_option'),
             color_option=validated_data.get('color_option'),
             density=validated_data.get('density'),
@@ -112,7 +116,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         instance.sub_total       = validated_data.get('sub_total',       instance.sub_total)
         instance.saved_for_later = validated_data.get('saved_for_later', instance.saved_for_later)
 
-        for field in ('lens_type', 'function_path', 'index_option', 'color_option', 'density'):
+        for field in ('lens_type', 'function_path', 'tint_type', 'index_option', 'color_option', 'density'):
             if field in validated_data:
                 setattr(instance, field, validated_data.get(field))
         if 'frame' in validated_data:
@@ -190,6 +194,7 @@ class OrderSerializer(serializers.ModelSerializer):
 class CompleteSetObjectSerializer(serializers.ModelSerializer):
     lens_type     = LensTypeSerializer(allow_null=True)
     function_path = LensFunctionPathSerializer(allow_null=True)
+    tint_type     = LensFunctionPathSerializer(allow_null=True)
     index_option  = LensIndexOptionSerializer(allow_null=True)
     color_option  = LensColorOptionSerializer(allow_null=True)
     coatings      = LensCoatingSerializer(many=True)
@@ -204,6 +209,7 @@ class CompleteSetObjectSerializer(serializers.ModelSerializer):
             'frame',
             'lens_type',
             'function_path',
+            'tint_type',
             'index_option',
             'color_option',
             'coatings',

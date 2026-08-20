@@ -31,7 +31,8 @@ def send_order_confirmation(order) -> None:
     # coatings is now many-to-many — select_related only covers FK/O2O, so
     # it moved to a separate prefetch_related() call.
     complete_sets = order.completeset_set.select_related(
-        'frame', 'lens_type', 'function_path', 'index_option', 'color_option', 'prescription'
+        'frame', 'lens_type', 'function_path', 'tint_type', 'index_option',
+        'color_option', 'reader_strength', 'prescription'
     ).prefetch_related('coatings').all()
 
     context = {

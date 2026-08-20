@@ -142,6 +142,8 @@ class OrderService:
             total_price += complete_set.frame.price
         if complete_set.function_path:
             total_price += complete_set.function_path.extra_price
+        if complete_set.tint_type:
+            total_price += complete_set.tint_type.extra_price
         if complete_set.index_option:
             total_price += complete_set.index_option.price
         if complete_set.color_option:
