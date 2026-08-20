@@ -236,7 +236,6 @@ def build_price_check(request_data, instance):
         ('function_path', instance.function_path, 'extra_price', 'function_label'),
         ('index_option',  instance.index_option,  'price',       'option_label'),
         ('color_option',  instance.color_option,   'extra_price', 'color_name'),
-        ('coating',       instance.coating,        'price',      'label'),
     ]:
         if option_obj is None:
             continue
@@ -245,6 +244,22 @@ def build_price_check(request_data, instance):
         breakdown.append({
             'component':      component,
             'label':          getattr(option_obj, label_field),
+            'frontend_price': frontend_p,
+            'backend_price':  backend_p,
+            'changed':        abs(backend_p - frontend_p) > 0.005,
+        })
+
+    # ── Coatings — many-to-many now (stacked add-ons), one breakdown entry
+    #    per attached coating. frontend_price_snapshot['coatings'], if sent,
+    #    is expected as {coating_id: price}; anything missing defaults to 0
+    #    same as every other component above.
+    coating_snapshot = snapshot.get('coatings') or {}
+    for coating in instance.coatings.all():
+        backend_p  = float(coating.price)
+        frontend_p = float(coating_snapshot.get(str(coating.id)) or 0)
+        breakdown.append({
+            'component':      f'coating_{coating.id}',
+            'label':          coating.label,
             'frontend_price': frontend_p,
             'backend_price':  backend_p,
             'changed':        abs(backend_p - frontend_p) > 0.005,

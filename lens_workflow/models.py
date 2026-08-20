@@ -7,6 +7,7 @@ __all__ = [
     "LensColorOption",
     "LensCoating",
     "LensIndexRecommendationRule",
+    "LensReaderStrength",
 ]
 
 
@@ -37,7 +38,15 @@ class LensType(TimeStampedModel):
     description = models.TextField(blank=True)
     is_prescription_required = models.BooleanField(
         default=True,
-        help_text="False for NON-PRESCRIPTION — frontend uses this to skip the Prescription step.",
+        help_text="False for NON-PRESCRIPTION and READER — frontend uses this to skip the Prescription step.",
+    )
+    is_reader = models.BooleanField(
+        default=False,
+        help_text="True only for the readymade-readers Lens Type. Routes to a dedicated "
+                  "Reader Strength step instead of Prescription, and skips Function/Tint/"
+                  "Color/Material/Coating entirely — straight to the review/complete step. "
+                  "This is a structural routing flag, not a price/tier — unlike everything "
+                  "else in this app it's meant to stay a fixed code branch, not admin data.",
     )
 
     class IndexRecommendationCategory(models.TextChoices):
@@ -67,20 +76,27 @@ class LensType(TimeStampedModel):
 
 class LensFunctionPath(TimeStampedModel):
     """
-    Step 2 (+ 2.1): one selectable (Lens Type, Function[, Sun Type]) combination.
+    Step 2 (+ 2.1): one selectable (Lens Type, Function[, Tint Type]) combination.
 
-    Sun Type is a sub-classifier that only exists when function_code == SUN,
-    and only for some Lens Types (e.g. Bifocal has a single undifferentiated
-    SUN row with sun_type == "").
+    Tint Type (the sun_type field) is a sub-classifier that only exists when
+    function_code == SUN, and only for some Lens Types (e.g. Bifocal doesn't
+    offer Sun at all). It's a priced tier in its own right — its extra_price
+    stacks on top of the SUN row's own extra_price, it does not replace it.
+
+    LIGHT_ADJUSTING was renamed to PHOTOCHROMIC — same real product ("light-
+    responsive" lenses), the mind map's naming just won out.
     """
     class FunctionCode(models.TextChoices):
         CLEAR = "CLEAR", "Clear"
+        BLUE_LIGHT_FILTERING = "BLUE_LIGHT_FILTERING", "Blue Light Filtering"
+        PHOTOCHROMIC = "PHOTOCHROMIC", "Light-responsive / Photochromic"
         SUN = "SUN", "Sun"
-        LIGHT_ADJUSTING = "LIGHT_ADJUSTING", "Light Adjusting"
 
     class SunType(models.TextChoices):
         SOLID = "SOLID", "Solid"
-        POLARIZED_MIRRORED = "POLARIZED_MIRRORED", "Polarized / Mirrored"
+        GRADIENT = "GRADIENT", "Gradient"
+        MIRRORED = "MIRRORED", "Mirrored"
+        POLARIZED = "POLARIZED", "Polarized"
 
     lens_type = models.ForeignKey(
         LensType, on_delete=models.CASCADE, related_name="function_paths")
@@ -91,7 +107,11 @@ class LensFunctionPath(TimeStampedModel):
     function_description = models.TextField(blank=True)
 
     sun_type = models.CharField(
-        max_length=30, choices=SunType.choices, blank=True, default="")
+        max_length=30, choices=SunType.choices, blank=True, default="",
+        help_text="Tint type — only set when function_code == SUN. Field name kept as "
+                  "sun_type for continuity with existing code; conceptually this is the "
+                  "workflow's 'Tint Type' step.",
+    )
 
     color_required = models.BooleanField(default=False)
 
@@ -127,13 +147,21 @@ class LensFunctionPath(TimeStampedModel):
 
 class LensIndexOption(TimeStampedModel):
     """
-    Step 3: one selectable index/tier option within a function path.
+    Step 3 (Lens Material): one selectable index/tier option.
 
-    Price already reflects the (Lens Type, Function, Sun Type) context via
-    the function_path FK — no combination math needed elsewhere.
+    Scoped to LensType, not LensFunctionPath — the reference data confirms
+    the same index list and prices apply no matter which Function was
+    chosen within a Lens Type (Classic/Blue-light-filtering/Photochromic/Sun
+    all lead into the identical Material step). Function's own extra_price
+    stacks on top of whichever index gets picked here; they're priced
+    independently, not as a combined matrix.
+
+    Reader doesn't get an interactive Material step, but still gets exactly
+    one LensIndexOption row (its Lens Type just has a single active row) —
+    no separate "reader index" model needed, this falls out naturally.
     """
-    function_path = models.ForeignKey(
-        LensFunctionPath, on_delete=models.CASCADE, related_name="index_options")
+    lens_type = models.ForeignKey(
+        LensType, on_delete=models.CASCADE, related_name="index_options")
 
     tier = models.CharField(max_length=50)
     option_label = models.CharField(max_length=150)
@@ -148,13 +176,19 @@ class LensIndexOption(TimeStampedModel):
         db_table = "LensIndexOption"
         verbose_name = "Lens Index Option"
         verbose_name_plural = "Lens Index Options"
-        ordering = ["function_path__sort_order", "sort_order", "id"]
+        ordering = ["lens_type__sort_order", "sort_order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["lens_type", "index_value"],
+                name="uq_lens_index_option_type_value",
+            ),
+        ]
         indexes = [
-            models.Index(fields=["function_path", "is_active", "sort_order"]),
+            models.Index(fields=["lens_type", "is_active", "sort_order"]),
         ]
 
     def __str__(self):
-        return f"{self.function_path} / {self.option_label}"
+        return f"{self.lens_type.code} / {self.option_label}"
 
 
 class LensColorOption(TimeStampedModel):
@@ -212,20 +246,44 @@ class LensColorOption(TimeStampedModel):
 
 class LensCoating(TimeStampedModel):
     """
-    Step 4: global coating options, not scoped to Lens Type. Single-select.
+    Step 4 (Coatings): global coating options, not scoped to Lens Type.
+    Multi-select with one exception.
+
+    - Anti-scratch / Anti-glare / UV-protection: is_included=True, always
+      bundled free with every lens, not a pickable option — shown on the
+      Coating step as informational "already included" text.
+    - Blue-light-filtering: optional add-on, freely combines with either of
+      the pair below (or neither).
+    - Oleophobic / Hydrophobic: optional add-ons, but mutually exclusive —
+      Hydrophobic already includes Oleophobic's benefit. Both share
+      exclusive_group="OLEO_HYDRO"; the workflow API rejects submitting
+      more than one coating from the same non-empty exclusive_group.
+
+    Replaces the old No-AR/Standard-AR/Premium-AR tiered single-select
+    model entirely — that pricing tier concept doesn't appear anywhere in
+    the mind map's coating step.
     """
     class Code(models.TextChoices):
-        NO_AR = "NO_AR", "No AR Coating"
-        STANDARD_AR = "STANDARD_AR", "Standard AR Coating"
-        PREMIUM_AR = "PREMIUM_AR", "Premium AR Coating"
+        ANTI_SCRATCH = "ANTI_SCRATCH", "Anti-scratch"
+        ANTI_GLARE = "ANTI_GLARE", "Anti-glare"
+        UV_PROTECTION = "UV_PROTECTION", "UV Protection"
         BLUE_LIGHT_FILTERING = "BLUE_LIGHT_FILTERING", "Blue Light Filtering"
-        HYDRO = "HYDRO", "Hydrophobic"
-        OLEO = "OLEO", "Oleophobic"
+        OLEOPHOBIC = "OLEOPHOBIC", "Oleophobic"
+        HYDROPHOBIC = "HYDROPHOBIC", "Hydrophobic"
 
     code = models.CharField(max_length=50, unique=True, choices=Code.choices)
     label = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     price = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    is_included = models.BooleanField(
+        default=False,
+        help_text="Always bundled free with every lens — shown as included, not offered as a choice.",
+    )
+    exclusive_group = models.CharField(
+        max_length=50, blank=True, default="",
+        help_text="Coatings sharing a non-empty group are mutually exclusive — "
+                  "at most one from the group can be selected together.",
+    )
     is_recommended = models.BooleanField(default=False)
 
     sort_order = models.PositiveIntegerField(default=0)
@@ -243,15 +301,46 @@ class LensCoating(TimeStampedModel):
         return self.label
 
 
+class LensReaderStrength(TimeStampedModel):
+    """
+    The only choice a readymade-Reader order makes (see LensType.is_reader).
+    No Function/Tint/Color/Material/Coating step follows — strength is
+    picked, then straight to review/checkout.
+    """
+    strength_value = models.DecimalField(
+        max_digits=4, decimal_places=2, unique=True,
+        help_text='e.g. 1.25 for "+1.25"',
+    )
+    label = models.CharField(max_length=20, help_text='Display label, e.g. "+1.25"')
+    price = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "LensReaderStrength"
+        verbose_name = "Lens Reader Strength"
+        verbose_name_plural = "Lens Reader Strengths"
+        ordering = ["sort_order", "id"]
+
+    def __str__(self):
+        return self.label
+
+
 class LensIndexRecommendationRule(TimeStampedModel):
     """
-    Maps a combined-power bracket (|sphere|+|cylinder|, worse eye) to which
-    index values are selectable and which one is recommended, for the Index
-    step's recommend-first / expand-to-see-all UI.
+    Maps a combined-power bracket to which index values are selectable and
+    which one is recommended, for the Index step's recommend-first /
+    expand-to-see-all UI.
 
-    Source: 镜片折射率推荐规则.xlsx. "1.60" in that sheet maps to the real
-    product index value "1.61", and "1.71" maps to "1.74" — confirmed with
-    the business owner, since only 1.61/1.74 are ever sold as real products.
+    Two different combined-power formulas apply depending on prescription
+    sign (see Order/views.py or wherever _combined_power lives once that
+    branch is implemented):
+      - Nearsighted (sphere < 0): |sphere| + |cylinder|
+      - Farsighted  (sphere >= 0): sphere + cylinder / 2
+    Source: the "折射率算法" sheet in Eyelovewear Pricing.xlsx. Bracket
+    thresholds/values here are admin-editable data; the formula choice
+    above is not — it's a real code branch.
     """
     class Category(models.TextChoices):
         SINGLE_VISION = "SINGLE_VISION", "Single Vision"

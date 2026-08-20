@@ -54,7 +54,7 @@
                   {% if item.function_path %}<span><strong>Function:</strong> {{ item.function_path.function_label }}</span><br />{% endif %}
                   {% if item.color_option %}<span><strong>Lens Color:</strong> {{ item.color_option.color_name }}</span><br />{% endif %}
                   {% if item.index_option %}<span><strong>Index:</strong> {{ item.index_option.option_label }}</span><br />{% endif %}
-                  {% if item.coating %}<span><strong>Coating:</strong> {{ item.coating.label }}</span><br />{% endif %}
+                  {% if item.coatings.all %}<span><strong>Coating:</strong> {% for coating in item.coatings.all %}{{ coating.label }}{% if not forloop.last %}, {% endif %}{% endfor %}</span><br />{% endif %}
                   {% if item.prescription %}<span><strong>Prescription:</strong> {{ item.prescription.nickname }}</span>{% endif %}
                 </td>
               </tr>

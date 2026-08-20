@@ -29,6 +29,12 @@ class PrescriptionInfo(models.Model):
         max_digits=5, decimal_places=2, blank=True, default=0)
     base_r = models.DecimalField(
         max_digits=5, decimal_places=2, blank=True, default=0)
+    photo = models.ImageField(
+        upload_to='prescriptions/', null=True, blank=True,
+        help_text="Reserved for the deferred 'upload a photo' prescription flow — "
+                  "no upload UI or processing wired up yet. Not shipping this round; "
+                  "kept here so adding the real feature later doesn't need a schema change.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

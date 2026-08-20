@@ -1,9 +1,9 @@
 import logging
 
-from django.db.models.signals import pre_save, post_save
+from django.db.models.signals import pre_save, post_save, m2m_changed
 from django.dispatch import receiver
 
-from .models import OrderInfo
+from .models import OrderInfo, CompleteSet
 
 logger = logging.getLogger(__name__)
 
@@ -54,3 +54,20 @@ def order_updated_handler(sender, instance, created, **kwargs):
         logger.exception(
             'Failed to send status update email for order %s', instance.order_number
         )
+
+
+@receiver(m2m_changed, sender=CompleteSet.coatings.through)
+def recalculate_subtotal_on_coatings_change(sender, instance, action, **kwargs):
+    """
+    CompleteSet.save() can't read self.coatings.all() during its own
+    pre-INSERT save (no pk yet), so it under-counts sub_total by however
+    much the coatings add up to until they're actually attached — which can
+    only happen after the row exists anyway. This re-derives sub_total for
+    real once coatings.set()/add()/remove()/clear() actually runs.
+    """
+    if action not in ('post_add', 'post_remove', 'post_clear'):
+        return
+    from Order.service.order_service import OrderService
+    new_total = OrderService.calculate_complete_set_sub_total(instance)
+    if instance.sub_total != new_total:
+        CompleteSet.objects.filter(pk=instance.pk).update(sub_total=new_total)

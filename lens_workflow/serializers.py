@@ -28,7 +28,7 @@ class LensFunctionPathSerializer(serializers.ModelSerializer):
 class LensIndexOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = LensIndexOption
-        fields = ["id", "function_path", "tier", "option_label",
+        fields = ["id", "lens_type", "tier", "option_label",
                   "index_value", "price", "sort_order", "is_active"]
 
 

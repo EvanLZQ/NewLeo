@@ -28,9 +28,11 @@ def send_order_confirmation(order) -> None:
         logger.warning('send_order_confirmation: order %s has no email — skipped.', order.order_number)
         return
 
+    # coatings is now many-to-many — select_related only covers FK/O2O, so
+    # it moved to a separate prefetch_related() call.
     complete_sets = order.completeset_set.select_related(
-        'frame', 'lens_type', 'function_path', 'index_option', 'color_option', 'coating', 'prescription'
-    ).all()
+        'frame', 'lens_type', 'function_path', 'index_option', 'color_option', 'prescription'
+    ).prefetch_related('coatings').all()
 
     context = {
         'order': order,

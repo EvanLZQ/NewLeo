@@ -7,6 +7,7 @@ from .models import (
     LensColorOption,
     LensCoating,
     LensIndexRecommendationRule,
+    LensReaderStrength,
 )
 
 
@@ -39,13 +40,15 @@ class LensColorOptionInline(admin.TabularInline):
 
 @admin.register(LensType)
 class LensTypeAdmin(admin.ModelAdmin):
-    list_display = ("label", "code", "is_prescription_required",
+    list_display = ("label", "code", "is_prescription_required", "is_reader",
                      "index_recommendation_category", "sort_order", "is_active", "updated_at")
-    list_filter = ("is_prescription_required",
+    list_filter = ("is_prescription_required", "is_reader",
                    "index_recommendation_category", "is_active")
     search_fields = ("label", "code", "description")
     ordering = ("sort_order", "id")
-    inlines = [LensFunctionPathInline]
+    # Index is scoped per Lens Type now (not per Function Path), so its
+    # inline moved here alongside Function Path.
+    inlines = [LensFunctionPathInline, LensIndexOptionInline]
 
 
 @admin.register(LensFunctionPath)
@@ -57,18 +60,17 @@ class LensFunctionPathAdmin(admin.ModelAdmin):
                       "notes", "lens_type__label", "lens_type__code")
     autocomplete_fields = ("lens_type",)
     ordering = ("lens_type__sort_order", "sort_order", "id")
-    inlines = [LensIndexOptionInline, LensColorOptionInline]
+    inlines = [LensColorOptionInline]
 
 
 @admin.register(LensIndexOption)
 class LensIndexOptionAdmin(admin.ModelAdmin):
-    list_display = ("function_path", "tier", "option_label",
+    list_display = ("lens_type", "tier", "option_label",
                      "index_value", "price", "sort_order", "is_active", "updated_at")
-    list_filter = ("tier", "is_active", "function_path__lens_type")
-    search_fields = ("option_label", "notes",
-                      "function_path__function_code", "function_path__lens_type__label")
-    autocomplete_fields = ("function_path",)
-    ordering = ("function_path__sort_order", "sort_order", "id")
+    list_filter = ("tier", "is_active", "lens_type")
+    search_fields = ("option_label", "notes", "lens_type__label", "lens_type__code")
+    autocomplete_fields = ("lens_type",)
+    ordering = ("lens_type__sort_order", "sort_order", "id")
 
 
 @admin.register(LensColorOption)
@@ -85,10 +87,16 @@ class LensColorOptionAdmin(admin.ModelAdmin):
 
 @admin.register(LensCoating)
 class LensCoatingAdmin(admin.ModelAdmin):
-    list_display = ("label", "code", "price", "is_recommended",
-                     "sort_order", "is_active", "updated_at")
-    list_filter = ("is_recommended", "is_active")
+    list_display = ("label", "code", "price", "is_included", "exclusive_group",
+                     "is_recommended", "sort_order", "is_active", "updated_at")
+    list_filter = ("is_included", "is_recommended", "is_active", "exclusive_group")
     search_fields = ("label", "code", "description")
+    ordering = ("sort_order", "id")
+
+
+@admin.register(LensReaderStrength)
+class LensReaderStrengthAdmin(admin.ModelAdmin):
+    list_display = ("label", "strength_value", "price", "sort_order", "is_active", "updated_at")
     ordering = ("sort_order", "id")
 
 

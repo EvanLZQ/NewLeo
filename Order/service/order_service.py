@@ -146,7 +146,15 @@ class OrderService:
             total_price += complete_set.index_option.price
         if complete_set.color_option:
             total_price += complete_set.color_option.extra_price
-        if complete_set.coating:
-            total_price += complete_set.coating.price
+        if complete_set.reader_strength:
+            total_price += complete_set.reader_strength.price
+        # coatings is a ManyToMany — only queryable once this instance has a
+        # pk. During the very first save() (pre-INSERT), self.pk is still
+        # None, so this contributes 0 for that one call; the m2m_changed
+        # signal in Order/signals.py recalculates for real once coatings
+        # are actually attached (which can only happen post-save anyway).
+        if complete_set.pk:
+            for coating in complete_set.coatings.all():
+                total_price += coating.price
         # density is now a plain CharField — no add_on_price contribution
         return total_price

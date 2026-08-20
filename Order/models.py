@@ -220,10 +220,20 @@ class CompleteSet(models.Model):
         on_delete=models.SET_NULL, null=True, blank=True,
         related_name='complete_sets',
     )
-    coating = models.ForeignKey(
+    coatings = models.ManyToManyField(
         'lens_workflow.LensCoating',
+        blank=True,
+        related_name='complete_sets',
+        help_text="At most one of any coatings sharing a non-empty exclusive_group "
+                  "(e.g. Oleophobic/Hydrophobic) — enforced in lens_workflow's views, "
+                  "not at the database level.",
+    )
+    reader_strength = models.ForeignKey(
+        'lens_workflow.LensReaderStrength',
         on_delete=models.SET_NULL, null=True, blank=True,
         related_name='complete_sets',
+        help_text="Set only for LensType.is_reader orders — the one choice a readymade "
+                  "reader makes.",
     )
     density = models.CharField(max_length=50, blank=True, null=True)
     prescription = models.ForeignKey(

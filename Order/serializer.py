@@ -29,7 +29,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
     function_path = serializers.PrimaryKeyRelatedField(queryset=LensFunctionPath.objects.all(), required=False, allow_null=True)
     index_option  = serializers.PrimaryKeyRelatedField(queryset=LensIndexOption.objects.all(), required=False, allow_null=True)
     color_option  = serializers.PrimaryKeyRelatedField(queryset=LensColorOption.objects.all(), required=False, allow_null=True)
-    coating       = serializers.PrimaryKeyRelatedField(queryset=LensCoating.objects.all(), required=False, allow_null=True)
+    coatings      = serializers.PrimaryKeyRelatedField(queryset=LensCoating.objects.all(), required=False, many=True)
     frame    = serializers.SerializerMethodField()
     # density is now a plain CharField on the model — no source traversal needed
     density  = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
@@ -47,7 +47,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             'function_path',
             'index_option',
             'color_option',
-            'coating',
+            'coatings',
             'density',
             'prescription',
             'sub_color',
@@ -71,7 +71,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         rep['function_path'] = obj.function_path.function_label if obj.function_path else None
         rep['index_option']  = obj.index_option.option_label if obj.index_option else None
         rep['color_option']  = obj.color_option.color_name if obj.color_option else None
-        rep['coating']       = obj.coating.label if obj.coating else None
+        rep['coatings']      = [c.label for c in obj.coatings.all()]
         return rep
 
     # ── create ───────────────────────────────────────────────────────────────
@@ -85,19 +85,25 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         rx_data = request.data.get('prescription')
         rx_obj  = PrescriptionInfo.objects.get(id=rx_data['id']) if rx_data else None
 
-        return CompleteSet.objects.create(
+        # coatings is many-to-many — can't be passed into .create()'s
+        # kwargs, needs .set() after the row exists.
+        coatings = validated_data.get('coatings')
+
+        instance = CompleteSet.objects.create(
             frame=frame_obj,
             lens_type=validated_data.get('lens_type'),
             function_path=validated_data.get('function_path'),
             index_option=validated_data.get('index_option'),
             color_option=validated_data.get('color_option'),
-            coating=validated_data.get('coating'),
             density=validated_data.get('density'),
             prescription=rx_obj,
             sub_color=validated_data.get('sub_color'),
             saved_for_later=validated_data.get('saved_for_later', False),
             sub_total=validated_data.get('sub_total', 0),
         )
+        if coatings:
+            instance.coatings.set(coatings)
+        return instance
 
     # ── update ───────────────────────────────────────────────────────────────
 
@@ -106,7 +112,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         instance.sub_total       = validated_data.get('sub_total',       instance.sub_total)
         instance.saved_for_later = validated_data.get('saved_for_later', instance.saved_for_later)
 
-        for field in ('lens_type', 'function_path', 'index_option', 'color_option', 'coating', 'density'):
+        for field in ('lens_type', 'function_path', 'index_option', 'color_option', 'density'):
             if field in validated_data:
                 setattr(instance, field, validated_data.get(field))
         if 'frame' in validated_data:
@@ -131,6 +137,14 @@ class CompleteSetSerializer(serializers.ModelSerializer):
                         {'prescription': f'Prescription id {rx_id} not found'})
 
         instance.save()
+
+        # coatings is many-to-many — .set() after save() (not in the plain
+        # setattr loop above; direct assignment to an M2M is disallowed).
+        # The m2m_changed signal in Order/signals.py recalculates sub_total
+        # for real once this runs.
+        if 'coatings' in validated_data:
+            instance.coatings.set(validated_data.get('coatings'))
+
         return instance
 
 
@@ -178,7 +192,7 @@ class CompleteSetObjectSerializer(serializers.ModelSerializer):
     function_path = LensFunctionPathSerializer(allow_null=True)
     index_option  = LensIndexOptionSerializer(allow_null=True)
     color_option  = LensColorOptionSerializer(allow_null=True)
-    coating       = LensCoatingSerializer(allow_null=True)
+    coatings      = LensCoatingSerializer(many=True)
     frame    = serializers.SerializerMethodField()
     density  = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
     prescription = PrescriptionSerializer(allow_null=True)
@@ -192,7 +206,7 @@ class CompleteSetObjectSerializer(serializers.ModelSerializer):
             'function_path',
             'index_option',
             'color_option',
-            'coating',
+            'coatings',
             'density',
             'sub_color',
             'sub_total',
