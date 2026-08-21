@@ -11,7 +11,11 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('lens_workflow', '0009_shopping_flow_rebuild_schema'),
-        ('Order', '0019_orderinfo_field_drift_catchup'),
+        # 0019_orderinfo_field_drift_catchup was deleted — it duplicated
+        # order_number/order_status/payment_status changes production already
+        # had via 0017_alter_orderinfo_order_number_and_more (recovered into
+        # this repo alongside the 0018 merge — see that migration's comment).
+        ('Order', '0018_completeset_coatings_reader_strength'),
     ]
 
     operations = [

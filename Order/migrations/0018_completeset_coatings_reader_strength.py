@@ -30,7 +30,12 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('lens_workflow', '0009_shopping_flow_rebuild_schema'),
-        ('Order', '0017_completeset_new_lens_reference_fields'),
+        # Depends on the merge, not directly on 0017_completeset_new_lens_reference_fields
+        # — production already applied a sibling 0017 (order_number/order_status/
+        # payment_status drift, recovered as 0017_alter_orderinfo_order_number_and_more)
+        # and merged the two via 0018_merge_20260729_2347. Building on top of the
+        # merge keeps this chain compatible with what's actually on the server.
+        ('Order', '0018_merge_20260729_2347'),
     ]
 
     operations = [
