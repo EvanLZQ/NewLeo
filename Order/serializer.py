@@ -14,6 +14,7 @@ from lens_workflow.serializers import (
     LensIndexOptionSerializer,
     LensColorOptionSerializer,
     LensCoatingSerializer,
+    LensReaderStrengthSerializer,
 )
 from Product.serializer import ProductInstanceSerializer
 from Product.models import ProductInstance
@@ -220,6 +221,7 @@ class CompleteSetObjectSerializer(serializers.ModelSerializer):
     index_option  = LensIndexOptionSerializer(allow_null=True)
     color_option  = LensColorOptionSerializer(allow_null=True)
     coatings      = LensCoatingSerializer(many=True)
+    reader_strength = LensReaderStrengthSerializer(allow_null=True)
     frame    = serializers.SerializerMethodField()
     density  = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
     prescription = PrescriptionSerializer(allow_null=True)
@@ -235,6 +237,7 @@ class CompleteSetObjectSerializer(serializers.ModelSerializer):
             'index_option',
             'color_option',
             'coatings',
+            'reader_strength',
             'density',
             'sub_color',
             'sub_total',

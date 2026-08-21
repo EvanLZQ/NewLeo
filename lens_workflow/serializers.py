@@ -6,6 +6,7 @@ from .models import (
     LensIndexOption,
     LensColorOption,
     LensCoating,
+    LensReaderStrength,
 )
 
 
@@ -44,6 +45,12 @@ class LensCoatingSerializer(serializers.ModelSerializer):
         model = LensCoating
         fields = ["id", "code", "label", "description",
                   "price", "is_recommended", "sort_order", "is_active"]
+
+
+class LensReaderStrengthSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LensReaderStrength
+        fields = ["id", "strength_value", "label", "price"]
 
 
 class NextStepRequestSerializer(serializers.Serializer):
