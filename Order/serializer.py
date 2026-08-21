@@ -111,6 +111,18 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         )
         if coatings:
             instance.coatings.set(coatings)
+            # CompleteSet.save() recomputes sub_total unconditionally, but on
+            # this first save() (pre-INSERT) coatings can't be queried yet —
+            # see calculate_complete_set_sub_total's `if complete_set.pk:`
+            # guard — so the row is first written with a coatings-less total.
+            # The m2m_changed signal (Order/signals.py) corrects it in the
+            # DB right after .set() above, but that's a separate queryset
+            # .update() call — it never touches this in-memory `instance`,
+            # which is what to_representation() below (and build_price_check
+            # in views.py) actually reads. Without this, the API response —
+            # and the customer's charged total — silently excludes every
+            # coating on create.
+            instance.refresh_from_db()
         return instance
 
     # ── update ───────────────────────────────────────────────────────────────
@@ -149,9 +161,15 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         # coatings is many-to-many — .set() after save() (not in the plain
         # setattr loop above; direct assignment to an M2M is disallowed).
         # The m2m_changed signal in Order/signals.py recalculates sub_total
-        # for real once this runs.
+        # for real once this runs — but only in the DB, via a separate
+        # queryset .update() call that never touches this in-memory
+        # `instance`. refresh_from_db() pulls that corrected total back in,
+        # same reasoning as create() above — otherwise the response (and
+        # build_price_check in views.py) would report the pre-coatings-change
+        # total instead of what actually got saved.
         if 'coatings' in validated_data:
             instance.coatings.set(validated_data.get('coatings'))
+            instance.refresh_from_db()
 
         return instance
 
