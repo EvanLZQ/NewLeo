@@ -80,6 +80,13 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         # Per-lens-feature prices for cart/order itemization (frame excluded —
         # rep['frame'] above already carries its own price).
         rep['price_breakdown'] = get_complete_set_line_items(obj)
+        # lens_type above is relabelled to a display string, so the frontend
+        # can't infer prescription-requirement from it — expose the real flag
+        # separately (cart page uses this to skip the "confirm your
+        # prescription" prompt for non-Rx lens types like readymade readers).
+        rep['is_prescription_required'] = (
+            obj.lens_type.is_prescription_required if obj.lens_type else None
+        )
         return rep
 
     # ── create ───────────────────────────────────────────────────────────────
