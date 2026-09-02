@@ -178,9 +178,17 @@ class LensIndexOption(TimeStampedModel):
         verbose_name_plural = "Lens Index Options"
         ordering = ["lens_type__sort_order", "sort_order", "id"]
         constraints = [
+            # tier joins the key (not just lens_type + index_value) so a
+            # single refractive index can have more than one priced variant
+            # under the same Lens Type — e.g. SVD's plain "1.61 Popular" vs
+            # "1.61 Driving" (same index, different product/coating), added
+            # for the new pricing sheet. They deliberately share
+            # index_value so anything filtering by index (color
+            # availability, the recommendation engine) treats them
+            # identically — only tier/option_label/price tell them apart.
             models.UniqueConstraint(
-                fields=["lens_type", "index_value"],
-                name="uq_lens_index_option_type_value",
+                fields=["lens_type", "index_value", "tier"],
+                name="uq_lens_index_option_type_value_tier",
             ),
         ]
         indexes = [
@@ -334,19 +342,34 @@ class LensIndexRecommendationRule(TimeStampedModel):
     expand-to-see-all UI.
 
     Two different combined-power formulas apply depending on prescription
-    sign (see Order/views.py or wherever _combined_power lives once that
-    branch is implemented):
+    sign (see lens_workflow/views.py's _combined_power):
       - Nearsighted (sphere < 0): |sphere| + |cylinder|
       - Farsighted  (sphere >= 0): sphere + cylinder / 2
     Source: the "折射率算法" sheet in Eyelovewear Pricing.xlsx. Bracket
     thresholds/values here are admin-editable data; the formula choice
     above is not — it's a real code branch.
+
+    direction lets a (category, bracket) combo be sign-specific — Single
+    Vision has real farsighted-specific bracket data from the pricing
+    sheet, so it gets separate NEARSIGHTED/FARSIGHTED rows. Bifocal/
+    Progressive has no farsighted-specific data in any source, so its rows
+    stay direction="" (blank = matches either sign) — see
+    _match_recommendation_rule's fallback for how blank rows are used.
     """
     class Category(models.TextChoices):
         SINGLE_VISION = "SINGLE_VISION", "Single Vision"
         BIFOCAL_PROGRESSIVE = "BIFOCAL_PROGRESSIVE", "Bifocal / Progressive"
 
+    class Direction(models.TextChoices):
+        NEARSIGHTED = "NEARSIGHTED", "Nearsighted"
+        FARSIGHTED = "FARSIGHTED", "Farsighted"
+
     category = models.CharField(max_length=30, choices=Category.choices)
+    direction = models.CharField(
+        max_length=20, choices=Direction.choices, blank=True, default="",
+        help_text="Blank = applies to both directions (used where no direction-specific "
+                  "bracket data exists). Set when this bracket only applies to one sign.",
+    )
     max_combined_power = models.DecimalField(
         max_digits=5, decimal_places=2, null=True, blank=True,
         help_text="Upper bound in diopters for |sphere|+|cylinder| (worse eye). "

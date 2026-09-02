@@ -26,11 +26,12 @@ Known assumptions worth a business review (not mechanical/low-stakes):
   2. Index recommendation brackets are hand-derived from the "折射率算法"
      sheet's descriptive, overlapping power ranges (with worked examples
      and astigmatism caveats) into the clean non-overlapping cutoffs this
-     app's bracket model expects. The sheet gives a SEPARATE, coarser
-     bracket set for farsighted prescriptions (max index ever suggested is
-     1.67, never 1.74) — this model only supports one bracket table per
-     category, so farsighted prescriptions currently reuse the nearsighted
-     brackets. Flagged as a known gap, not silently guessed away.
+     app's bracket model expects. Single Vision now has a real,
+     direction-specific farsighted bracket set from the same sheet (see
+     FARSIGHTED_SINGLE_VISION_BRACKETS below — confirmed with the business
+     owner, no longer a guess). Bifocal/Progressive still has no
+     farsighted-specific source data anywhere, so it keeps reusing its one
+     bracket table for both signs (LensIndexRecommendationRule.direction="").
   3. Index 1.59 (the new polycarbonate safety lens) is included in the same
      availability bracket as 1.60/1.61 but never set as the *recommended*
      value — it reads as a lifestyle/safety choice (impact resistance for
@@ -39,6 +40,22 @@ Known assumptions worth a business review (not mechanical/low-stakes):
      different index."
   4. Reader Strength and the Reader Index both default to Free — no price
      was given for either in any source.
+
+Eyelovewear Pricing(1).xlsx (v2, confirmed with the business owner — see
+the "镜片购买流程改造方案" plan doc for the full comparison):
+  - Every price already in this file matched the v2 sheet exactly except
+    two brand-new SVD-only index tiers (see INDEX_TIERS_SVD): "1.61
+    Driving" (same $19.95 as plain 1.61 — a distinct product/coating at
+    the same refractive index, not a price change) and "1.71" ($59.95,
+    between 1.67 and 1.74). Both SVD-only — the sheet's Reading and
+    Progressive tables don't list either row.
+  - v2 also drops Polarized from Reading's Sun tints entirely (every
+    index row reads N/A) — TINT_PRICING["READING"] reflects that; see
+    _seed_function_paths for how a None tint price deactivates any
+    existing row instead of just skipping it.
+  - v2's "EBD" column (a second price next to almost every Function/Tint
+    cell) is a competitor's reference pricing, not Eyelovewear's own — not
+    modeled here at all, confirmed not needed.
 """
 from decimal import Decimal
 
@@ -102,11 +119,13 @@ FUNCTION_PRICING = {
 }
 
 # Tint type pricing — Solid/Gradient/Mirrored/Polarized, per Lens Type.
-# Only Lens Types offering Sun need an entry.
+# Only Lens Types offering Sun need an entry. A None price means that tint
+# isn't offered for this Lens Type at all — e.g. Reading's Polarized,
+# dropped in pricing sheet v2 (every index row reads N/A there).
 TINT_PRICING = {
     #                solid      gradient    mirrored    polarized
     "SVD":          (D("9.95"),  D("12.95"), D("29.95"), D("39.95")),
-    "READING":      (D("9.95"),  D("12.95"), D("29.95"), D("39.95")),
+    "READING":      (D("9.95"),  D("12.95"), D("29.95"), None),
     "NON_RX":       (D("9.95"),  D("12.95"), D("29.95"), D("39.95")),
     "PROGRESSIVE":  (D("0"),     D("9.95"),  D("29.95"), D("49.95")),
 }
@@ -127,8 +146,25 @@ INDEX_TIERS_FULL = [
 ]
 INDEX_TIERS_NARROW = [row for row in INDEX_TIERS_FULL if row[0] in ("1.50", "1.56", "1.61", "1.67")]
 
+# SVD-only, pricing sheet v2 — two extra tiers, confirmed not offered for
+# any other Lens Type (Reading/Progressive's tables in the sheet don't list
+# either row). "1.61 Driving" shares its index_value with plain "1.61
+# Popular" on purpose — same refractive index, different product/coating —
+# distinguished by tier, not by index_value (see LensIndexOption's
+# uq_lens_index_option_type_value_tier constraint).
+INDEX_TIERS_SVD = [
+    ("1.50", D("4.95"),  "Basic",    "Basic - 1.50 Index"),
+    ("1.56", D("6.95"),  "Standard", "Standard - 1.56 Index"),
+    ("1.59", D("19.95"), "Safety",   "Safety - 1.59 Index (Polycarbonate)"),
+    ("1.61", D("19.95"), "Popular",  "Popular - 1.61 Index"),
+    ("1.61", D("19.95"), "Driving",  "Driving - 1.61 Index"),
+    ("1.67", D("39.95"), "Advanced", "Advanced - 1.67 Index"),
+    ("1.71", D("59.95"), "Elite",    "Elite - 1.71 Index"),
+    ("1.74", D("79.95"), "Premium",  "Premium - 1.74 Index"),
+]
+
 INDEX_TIERS_BY_LENS_TYPE = {
-    "SVD": INDEX_TIERS_FULL,
+    "SVD": INDEX_TIERS_SVD,
     "READING": INDEX_TIERS_FULL,
     "NON_RX": INDEX_TIERS_FULL,
     "PROGRESSIVE": INDEX_TIERS_NARROW,
@@ -172,9 +208,16 @@ COATINGS = [
      "clearer vision, especially driving after dark.", D("0"), True, "", False),
     ("UV_PROTECTION", "UV Protection",
      "Blocks harmful UVA and UVB sunlight from reaching your eyes.", D("0"), True, "", False),
+    # is_recommended reset False -> True previously had no visible effect
+    # anywhere (the Coating step doesn't special-case it today) — now it
+    # also controls whether this coating gets auto-added to the
+    # Recommended Complete Lens bundle (lens_workflow/views.py
+    # LensWorkflowRecommendView). Confirmed with the business owner: don't
+    # proactively upsell a paid coating there at launch; flip this in the
+    # admin later to change that, no code change needed.
     ("BLUE_LIGHT_FILTERING", "Blue Light Filtering",
      "Filters some of the blue light from phone and computer screens.",
-     D("9.95"), False, "", True),
+     D("9.95"), False, "", False),
     ("OLEOPHOBIC", "Oleophobic",
      "Repels oil and fingerprints — smudges wipe off more easily.",
      D("4.95"), False, "OLEO_HYDRO", False),
@@ -192,7 +235,7 @@ READER_STRENGTHS = [D(f"{n/100:.2f}") for n in range(25, 301, 25)]
 # ─────────────────────────────────────────────────────────────────────────
 # Index recommendation brackets — see assumptions #2/#3 above.
 # ─────────────────────────────────────────────────────────────────────────
-SINGLE_VISION_BRACKETS = [
+SINGLE_VISION_NEARSIGHTED_BRACKETS = [
     # max_combined_power, available_index_values, recommended
     (D("2.00"), ["1.50", "1.56"], "1.50"),
     (D("4.00"), ["1.50", "1.56", "1.59", "1.61"], "1.56"),
@@ -200,6 +243,19 @@ SINGLE_VISION_BRACKETS = [
     (D("8.00"), ["1.61", "1.67", "1.74"], "1.67"),
     (None,      ["1.67", "1.74"], "1.74"),
 ]
+
+# Farsighted-specific — the "折射率算法" sheet gives a separate, coarser
+# table for farsighted prescriptions (max index it ever suggests is 1.67 —
+# 1.59/1.71/1.74 never come up). Confirmed real data, not a guess.
+SINGLE_VISION_FARSIGHTED_BRACKETS = [
+    (D("2.00"), ["1.50", "1.56"], "1.50"),
+    (D("4.00"), ["1.50", "1.56", "1.61"], "1.56"),
+    (None,      ["1.56", "1.61", "1.67"], "1.67"),
+]
+
+# No farsighted-specific source data exists for Bifocal/Progressive
+# anywhere — direction stays "" (applies to either sign) on these, unlike
+# Single Vision above.
 BIFOCAL_PROGRESSIVE_BRACKETS = [
     (D("3.00"), ["1.50", "1.56"], "1.50"),
     (D("5.00"), ["1.50", "1.56", "1.61"], "1.56"),
@@ -302,8 +358,17 @@ class Command(BaseCommand):
                  "Blocks harsh reflected glare from roads and water."),
             ]
             for sort_idx, (tint_code, tint_label, price, desc) in enumerate(tint_defs, start=41):
+                lookup = dict(lens_type=lens_type, function_code=LensFunctionPath.FunctionCode.SUN,
+                              sun_type=tint_code)
+                if price is None:
+                    # Not offered for this Lens Type (e.g. Reading + Polarized,
+                    # dropped in pricing sheet v2) — deactivate any row a prior
+                    # seed run left behind instead of silently leaving it live.
+                    LensFunctionPath.objects.filter(**lookup).update(is_active=False)
+                    continue
+
                 fp, _ = LensFunctionPath.objects.update_or_create(
-                    lens_type=lens_type, function_code=LensFunctionPath.FunctionCode.SUN, sun_type=tint_code,
+                    **lookup,
                     defaults=dict(function_label=tint_label, function_description=desc,
                                   color_required=True, extra_price=price, sort_order=sort_idx, is_active=True),
                 )
@@ -318,16 +383,20 @@ class Command(BaseCommand):
         for lt_code, tiers in INDEX_TIERS_BY_LENS_TYPE.items():
             lens_type = lens_types[lt_code]
             for sort_idx, (index_value, price, tier, label) in enumerate(tiers, start=10):
+                # tier is part of the lookup key (not just a default) — see
+                # INDEX_TIERS_SVD's "1.61 Driving" sharing index_value with
+                # "1.61 Popular"; without tier here the second row would
+                # overwrite the first instead of creating a sibling.
                 LensIndexOption.objects.update_or_create(
-                    lens_type=lens_type, index_value=Decimal(index_value),
-                    defaults=dict(tier=tier, option_label=label, price=price,
+                    lens_type=lens_type, index_value=Decimal(index_value), tier=tier,
+                    defaults=dict(option_label=label, price=price,
                                   sort_order=sort_idx * 10, is_active=True),
                 )
 
         # Reader gets exactly one fixed, free index — no interactive Material step.
         LensIndexOption.objects.update_or_create(
-            lens_type=lens_types["READER"], index_value=Decimal("1.50"),
-            defaults=dict(tier="Reader", option_label="Reader Index", price=D("0"),
+            lens_type=lens_types["READER"], index_value=Decimal("1.50"), tier="Reader",
+            defaults=dict(option_label="Reader Index", price=D("0"),
                           sort_order=10, is_active=True),
         )
 
@@ -364,11 +433,14 @@ class Command(BaseCommand):
         restriction. NOT an empty list — an empty list would mean
         'available at zero index values' to the workflow API, the
         opposite of what's intended here."""
-        return [
+        # dict.fromkeys dedupes while keeping order — SVD now has two rows
+        # sharing index_value "1.61" (Popular/Driving), which would
+        # otherwise appear twice in this list for no reason.
+        return list(dict.fromkeys(
             str(v) for v in
             LensIndexOption.objects.filter(lens_type=lens_type, is_active=True)
             .values_list("index_value", flat=True)
-        ] or [row[0] for row in INDEX_TIERS_BY_LENS_TYPE.get(lens_type.code, [])]
+        )) or [row[0] for row in INDEX_TIERS_BY_LENS_TYPE.get(lens_type.code, [])]
 
     # ---------- Coatings ----------
 
@@ -397,13 +469,30 @@ class Command(BaseCommand):
 
     def _seed_recommendation_rules(self):
         self.stdout.write("Seeding Index Recommendation Rules...")
-        for category, brackets in [
-            (LensIndexRecommendationRule.Category.SINGLE_VISION, SINGLE_VISION_BRACKETS),
-            (LensIndexRecommendationRule.Category.BIFOCAL_PROGRESSIVE, BIFOCAL_PROGRESSIVE_BRACKETS),
+        Direction = LensIndexRecommendationRule.Direction
+
+        # Pre-migration, every Single Vision rule had direction="" (the
+        # field didn't exist). Now that Single Vision has real
+        # direction-specific data, those blank rows are dead — nothing
+        # matches them any more (see _match_recommendation_rule: a
+        # direction-specific query always finds rows below for this
+        # category, so it never falls through to blank ones). Clear them
+        # instead of leaving unreachable rows sitting in the admin.
+        LensIndexRecommendationRule.objects.filter(
+            category=LensIndexRecommendationRule.Category.SINGLE_VISION, direction="",
+        ).delete()
+
+        for category, direction, brackets in [
+            (LensIndexRecommendationRule.Category.SINGLE_VISION, Direction.NEARSIGHTED,
+             SINGLE_VISION_NEARSIGHTED_BRACKETS),
+            (LensIndexRecommendationRule.Category.SINGLE_VISION, Direction.FARSIGHTED,
+             SINGLE_VISION_FARSIGHTED_BRACKETS),
+            (LensIndexRecommendationRule.Category.BIFOCAL_PROGRESSIVE, "",
+             BIFOCAL_PROGRESSIVE_BRACKETS),
         ]:
             for sort_idx, (max_power, available, recommended) in enumerate(brackets, start=10):
                 LensIndexRecommendationRule.objects.update_or_create(
-                    category=category, sort_order=sort_idx,
+                    category=category, direction=direction, sort_order=sort_idx,
                     defaults=dict(max_combined_power=max_power,
                                   available_index_values=available,
                                   recommended_index_value=recommended),

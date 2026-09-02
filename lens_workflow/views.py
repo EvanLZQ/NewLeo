@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -127,7 +128,10 @@ def _index_option_dict(index_option, is_recommended=False):
 def _combined_power(prescription):
     """
     Combined power per eye, worse (larger-magnitude) eye wins — matches the
-    bracket thresholds in LensIndexRecommendationRule.
+    bracket thresholds in LensIndexRecommendationRule. Returns
+    (combined_power, direction) — direction is whichever eye's formula
+    produced the winning value, so the caller can pick a direction-specific
+    bracket set (see LensIndexRecommendationRule.direction).
 
     Two different formulas apply depending on that eye's own prescription
     sign (source: the "折射率算法" sheet in Eyelovewear Pricing.xlsx):
@@ -137,20 +141,38 @@ def _combined_power(prescription):
     of one nearsighted eye and one farsighted eye.
     """
     def per_eye(sphere, cylinder):
-        sphere = sphere or 0
-        cylinder = cylinder or 0
+        # `or 0` (the previous form) turns an exact Decimal("0") into a
+        # plain int 0, since Decimal("0") is falsy — then `0 / 2` true-
+        # divides two plain ints into a float, and Decimal + float raises
+        # TypeError in the farsighted branch below. None-checks keep both
+        # values Decimal so the arithmetic stays Decimal throughout — hits
+        # on any farsighted prescription with exactly zero astigmatism,
+        # which is common, not an edge case.
+        sphere = sphere if sphere is not None else Decimal("0")
+        cylinder = cylinder if cylinder is not None else Decimal("0")
         if sphere < 0:
-            return abs(sphere) + abs(cylinder)
-        return sphere + cylinder / 2
+            return abs(sphere) + abs(cylinder), LensIndexRecommendationRule.Direction.NEARSIGHTED
+        return sphere + cylinder / 2, LensIndexRecommendationRule.Direction.FARSIGHTED
 
-    left = per_eye(prescription.sphere_l, prescription.cylinder_l)
-    right = per_eye(prescription.sphere_r, prescription.cylinder_r)
-    return max(left, right)
+    left_power, left_dir = per_eye(prescription.sphere_l, prescription.cylinder_l)
+    right_power, right_dir = per_eye(prescription.sphere_r, prescription.cylinder_r)
+    if right_power > left_power:
+        return right_power, right_dir
+    return left_power, left_dir
 
 
-def _match_recommendation_rule(category, combined_power):
+def _match_recommendation_rule(category, combined_power, direction):
+    """Direction-specific rules take priority; if this category has none
+    for the given direction, fall back to its direction="" rows (which
+    apply to either sign — see the model docstring). This is per-category:
+    Single Vision has direction-specific rows for both signs, so it never
+    falls back; Bifocal/Progressive has none, so it always falls back to
+    its blank rows regardless of sign."""
     rules = LensIndexRecommendationRule.objects.filter(
-        category=category).order_by("sort_order")
+        category=category, direction=direction).order_by("sort_order")
+    if not rules.exists():
+        rules = LensIndexRecommendationRule.objects.filter(
+            category=category, direction="").order_by("sort_order")
     for rule in rules:
         if rule.max_combined_power is None or combined_power <= rule.max_combined_power:
             return rule
@@ -170,7 +192,8 @@ def _rx_recommendation_rule(lens_type, prescription_id):
         prescription = PrescriptionInfo.objects.get(id=prescription_id)
     except PrescriptionInfo.DoesNotExist:
         return None
-    return _match_recommendation_rule(category, _combined_power(prescription))
+    combined_power, direction = _combined_power(prescription)
+    return _match_recommendation_rule(category, combined_power, direction)
 
 
 def _color_option_dict(color_option):
@@ -586,4 +609,118 @@ class LensWorkflowSummaryView(APIView):
             "selected_options": selected,
             "total_add_on_price": str(total),
             "missing_option_ids": [],
+        }, status=status.HTTP_200_OK)
+
+
+class LensWorkflowRecommendView(APIView):
+    """
+    "Recommended Complete Lens" — one pre-configured bundle for the given
+    Lens Type (+ prescription, when it needs one), shown right after
+    Prescription so the customer can Add to Cart in one click, or
+    "Customize my lens" into the normal Function..Coating flow instead.
+
+    Deliberately reuses existing engines rather than adding new ones:
+      - Function is always CLASSIC (clear, $0 extra) — the plainest,
+        cheapest baseline. No is_recommended concept exists for Function
+        paths; hardcoding Classic was confirmed with the business owner
+        rather than adding a field for a choice that's always the same.
+      - Index reuses the same LensIndexRecommendationRule engine the INDEX
+        step already runs on.
+      - Coatings are the always-included three (Anti-scratch/Anti-glare/
+        UV) plus any *optional* coating explicitly flagged
+        LensCoating.is_recommended=True — same field the Coating step
+        already uses to highlight a suggestion, reused rather than adding
+        a second flag (see the plan doc's B.2 for why). Nothing is
+        recommended there by default at launch — confirmed with the
+        business owner not to proactively upsell a paid coating; flip the
+        flag in the admin to change that later, no code change needed.
+
+    GET params:
+      - lens_type_id: int, required
+      - prescription_id: int, required only when the Lens Type needs one
+        (is_prescription_required=True) — Reader and Non-Rx have no power
+        to recommend from and should skip this screen on the frontend
+        entirely rather than call this endpoint.
+
+    Response (available=False whenever no sensible recommendation exists —
+    the frontend's job is to fall straight into Customize in that case,
+    not to show a broken/empty recommendation screen):
+      {
+        "available": true,
+        "lens_type": {...option dict...},
+        "function": {...option dict...},
+        "index": {...option dict...},
+        "coatings": [...option dicts...],
+        "reason": "human-readable one-liner",
+        "total_add_on_price": "24.90"
+      }
+    """
+
+    def get(self, request):
+        try:
+            lens_type_id = int(request.query_params.get("lens_type_id"))
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "lens_type_id is required and must be an integer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            lens_type = LensType.objects.get(id=lens_type_id, is_active=True)
+        except LensType.DoesNotExist:
+            return Response({"detail": "Lens Type not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if lens_type.is_reader or not lens_type.is_prescription_required:
+            # No power to recommend from (Reader has no Function/Index/
+            # Coating steps at all; Non-Rx has no index_recommendation_category
+            # configured) — nothing to build a bundle from.
+            return Response({"available": False,
+                              "detail": "No recommendation for this Lens Type."})
+
+        prescription_id = request.query_params.get("prescription_id")
+        rule = _rx_recommendation_rule(lens_type, prescription_id)
+        if rule is None:
+            return Response({"available": False,
+                              "detail": "No matching recommendation rule for this prescription."})
+
+        try:
+            function_path = LensFunctionPath.objects.get(
+                lens_type=lens_type, function_code=LensFunctionPath.FunctionCode.CLEAR,
+                sun_type="", is_active=True)
+        except LensFunctionPath.DoesNotExist:
+            return Response({"available": False,
+                              "detail": "This Lens Type has no Classic function configured."})
+
+        # Multiple LensIndexOption rows can share an index_value now (e.g.
+        # SVD's "1.61 Popular" vs "1.61 Driving") — order_by(sort_order)
+        # picks the plain/standard variant first, never a specialty one,
+        # for an automated one-click bundle.
+        index_option = (
+            LensIndexOption.objects.filter(
+                lens_type=lens_type, index_value=Decimal(rule.recommended_index_value),
+                is_active=True,
+            ).order_by("sort_order", "id").first()
+        )
+        if index_option is None:
+            return Response({"available": False,
+                              "detail": "Recommended index value has no matching option."})
+
+        coatings = list(
+            LensCoating.objects.filter(is_active=True)
+            .filter(Q(is_included=True) | Q(is_recommended=True))
+            .order_by("sort_order", "id")
+        )
+
+        total = function_path.extra_price + index_option.price + sum(
+            (c.price for c in coatings), Decimal("0.00"))
+
+        return Response({
+            "available": True,
+            "lens_type": _lens_type_option(lens_type),
+            "function": _function_option(function_path),
+            "index": _index_option_dict(index_option, is_recommended=True),
+            "coatings": [_coating_option_dict(c) for c in coatings],
+            "reason": f"Based on your prescription, we recommend the "
+                      f"{index_option.index_value} index.",
+            "total_add_on_price": str(total),
         }, status=status.HTTP_200_OK)
