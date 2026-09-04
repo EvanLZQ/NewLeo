@@ -39,6 +39,11 @@ class OrderInfo(models.Model):
     tracking_number = models.CharField(max_length=50, blank=True)
     shipping_cost = models.DecimalField(
         max_digits=5, decimal_places=2, blank=True)
+    # US-only import/customs surcharge — 15% of sub_total, $9 minimum (see
+    # OrderService.calculate_customs_fee). max_digits=6 (not 5, like
+    # shipping_cost) because 15% of a large sub_total can exceed $999.99.
+    customs_fee = models.DecimalField(
+        max_digits=6, decimal_places=2, default=0, blank=True)
     discount = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     accessory_total = models.DecimalField(
         max_digits=5, decimal_places=2, default=0)

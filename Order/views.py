@@ -603,11 +603,13 @@ def createPendingOrder(request):
         )
         shipping_discount   = OrderService.calculate_shipping_discount(order, order.shipping_cost)
         order.shipping_cost = max(Decimal('0'), order.shipping_cost - shipping_discount)
-        order.total_amount  = order.sub_total + order.shipping_cost
+        order.customs_fee   = OrderService.calculate_customs_fee(country, order.sub_total)
+        order.total_amount  = order.sub_total + order.shipping_cost + order.customs_fee
 
         OrderInfo.objects.filter(pk=order.pk).update(
             sub_total=order.sub_total,
             shipping_cost=order.shipping_cost,
+            customs_fee=order.customs_fee,
             total_amount=order.total_amount,
         )
 
@@ -625,6 +627,7 @@ def createPendingOrder(request):
             'order_number':     order.order_number,
             'sub_total':        str(order.sub_total),
             'shipping_cost':    str(order.shipping_cost),
+            'customs_fee':      str(order.customs_fee),
             'total_amount':     str(order.total_amount),
             'coupon_code':      coupon.code if coupon else None,
             'discount_amount':  str(discount_amount),
@@ -955,11 +958,13 @@ def createPendingOrderGuest(request):
             country, float(order.sub_total), shipping_method)
         shipping_discount = OrderService.calculate_shipping_discount(order, order.shipping_cost)
         order.shipping_cost = max(Decimal('0'), order.shipping_cost - shipping_discount)
-        order.total_amount = order.sub_total + order.shipping_cost
+        order.customs_fee = OrderService.calculate_customs_fee(country, order.sub_total)
+        order.total_amount = order.sub_total + order.shipping_cost + order.customs_fee
 
         OrderInfo.objects.filter(pk=order.pk).update(
             sub_total=order.sub_total,
             shipping_cost=order.shipping_cost,
+            customs_fee=order.customs_fee,
             total_amount=order.total_amount,
         )
 
@@ -977,6 +982,7 @@ def createPendingOrderGuest(request):
         'order_number':     order.order_number,
         'sub_total':        str(order.sub_total),
         'shipping_cost':    str(order.shipping_cost),
+        'customs_fee':      str(order.customs_fee),
         'total_amount':     str(order.total_amount),
         'coupon_code':      coupon.code if coupon else None,
         'discount_amount':  str(discount_amount),

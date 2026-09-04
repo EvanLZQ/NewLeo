@@ -141,6 +141,18 @@ class OrderService:
             return xpresspost if shipping_method == "Xpresspost" else ups
 
     @staticmethod
+    def calculate_customs_fee(country, sub_total):
+        # US-only import/customs surcharge: 15% of sub_total, $9 minimum.
+        # Confirmed with the business owner — based on sub_total, same base
+        # calculate_shipping_cost uses (pre-discount; discount is applied
+        # separately, on top of the combined total — see update_order_totals
+        # and the equivalent inline logic in Order/views.py's
+        # createPendingOrder/createPendingOrderGuest).
+        if country != "United States":
+            return Decimal('0')
+        return max(sub_total * Decimal('0.15'), Decimal('9'))
+
+    @staticmethod
     def calculate_shipping_discount(order, shipping_cost):
         if order.coupon_used:
             if order.coupon_used.shipping_discount_type == 'Percentage':
@@ -154,7 +166,7 @@ class OrderService:
         # Calculate sub_total
         order.sub_total = OrderService.calculate_sub_total(order)
 
-        # Calculate shipping cost if address is provided
+        # Calculate shipping cost (and customs fee) if address is provided
         if order.address:
             country = order.address.country
             # Assuming shipping_company is used to store the shipping method
@@ -164,11 +176,14 @@ class OrderService:
             shipping_discount = OrderService.calculate_shipping_discount(
                 order, shipping_cost)
             order.shipping_cost = max(0, shipping_cost - shipping_discount)
+            order.customs_fee = OrderService.calculate_customs_fee(
+                country, order.sub_total)
         else:
             order.shipping_cost = 0
+            order.customs_fee = 0
 
         # Calculate total_amount
-        order.total_amount = order.sub_total + order.shipping_cost
+        order.total_amount = order.sub_total + order.shipping_cost + order.customs_fee
 
     @staticmethod
     def calculate_complete_set_sub_total(complete_set):
