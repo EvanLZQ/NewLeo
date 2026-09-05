@@ -86,19 +86,19 @@ LENS_TYPES = [
      "Reading eyeglasses are plus-power single-vision lenses. They help you focus on "
      "close-up things like books and phones, but they will blur your distance vision.",
      True, False, LensType.IndexRecommendationCategory.SINGLE_VISION),
+    ("BIFOCAL", "Bifocals",
+     "Bifocals have a visible line. Top part for distance, small bottom segment just "
+     "for reading. They don't work well for computer screen distance.",
+     True, False, LensType.IndexRecommendationCategory.BIFOCAL_PROGRESSIVE),
+    ("PROGRESSIVE", "Progressives",
+     "Progressives have no line. Power changes gradually: top for far, middle for "
+     "computer, bottom for reading. Most people need a few days to get used to them.",
+     True, False, LensType.IndexRecommendationCategory.BIFOCAL_PROGRESSIVE),
     ("NON_RX", "Non-prescription",
      "Non-prescription means these glasses are not made from your personal eye "
      "prescription. They can be zero-degree fashion glasses or over-the-counter "
      "reading glasses. They won't correct your specific vision needs.",
      False, False, ""),
-    ("PROGRESSIVE", "Progressives",
-     "Progressives have no line. Power changes gradually: top for far, middle for "
-     "computer, bottom for reading. Most people need a few days to get used to them.",
-     True, False, LensType.IndexRecommendationCategory.BIFOCAL_PROGRESSIVE),
-    ("BIFOCAL", "Bifocals",
-     "Bifocals have a visible line. Top part for distance, small bottom segment just "
-     "for reading. They don't work well for computer screen distance.",
-     True, False, LensType.IndexRecommendationCategory.BIFOCAL_PROGRESSIVE),
     ("READER", "Reader",
      "Readymade reading glasses — pick a strength, no prescription needed.",
      False, True, ""),

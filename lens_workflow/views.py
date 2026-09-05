@@ -19,7 +19,7 @@ from Prescription.models import PrescriptionInfo
 
 STEP_LABELS = {
     "LENS_TYPE": "Lens Type",
-    "FUNCTION": "Lens Function",
+    "FUNCTION": "Lens Material",
     "TINT_TYPE": "Tint Type",
     "COLOR": "Color",
     "INDEX": "Lens Index",
