@@ -111,7 +111,7 @@ def _ensure_unique_slug(base_slug: str) -> str:
 
 
 def _normalize_image_type(value: Any) -> str:
-    """把 Excel 的 Carousel/Detail 等值规范为模型 choices: 'carousel'/'detail'。"""  # 与 ProductImage.image_type 对齐
+    """把 Excel 的 Carousel/Detail/Mask 等值规范为模型 choices: 'carousel'/'detail'/'mask'。"""  # 与 ProductImage.image_type 对齐
 
     if value is None:  # 空值默认 carousel
         return "carousel"  # 默认轮播
@@ -120,8 +120,10 @@ def _normalize_image_type(value: Any) -> str:
         return "carousel"  # 返回
     if s in {"detail", "details", "det"}:  # 常见写法
         return "detail"  # 返回
+    if s in {"mask", "masks"}:  # 镜片蒙版图，用于前端实时上色
+        return "mask"  # 返回
     #  如果 Excel 写了不认识的值，宁可报错让 Admin 修正（避免脏数据）
-    raise ValidationError(f"未知的 image_type：{value}（期望 Carousel/Detail）")
+    raise ValidationError(f"未知的 image_type：{value}（期望 Carousel/Detail/Mask）")
 
 
 def _split_csv_cell(value: Any) -> List[str]:

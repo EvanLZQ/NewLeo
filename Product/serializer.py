@@ -64,6 +64,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
 class ProductInstanceSerializer(serializers.ModelSerializer):
     carousel_img = serializers.SerializerMethodField()
     detail_img = serializers.SerializerMethodField()
+    mask_img = serializers.SerializerMethodField()
     color_img_url = serializers.SerializerMethodField()
     product_name = serializers.SerializerMethodField()
     productPromotion = ProductPromotionSerializer(many=True)
@@ -85,6 +86,23 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
             for img in obj.productImage.all()
             if img.image_type == 'detail' and img.image
         ]
+
+    def get_mask_img(self, obj):
+        # Single lens-tint overlay image (not a list, unlike carousel/detail)
+        # aligned to carousel_img[0] — used for the real-time lens-color
+        # preview. Deliberately tolerant of bad data: multiple mask rows
+        # just means "use the first one" (sorted by id, so it's whichever
+        # was uploaded first, not upload order in the request), and zero
+        # mask rows returns None so the frontend can skip the overlay
+        # entirely instead of crashing on a missing image.
+        masks = sorted(
+            (img for img in obj.productImage.all()
+             if img.image_type == 'mask' and img.image),
+            key=lambda img: img.id,
+        )
+        if not masks:
+            return None
+        return f'{settings.MEDIA_BASE_URL}{masks[0].image.url}'
 
     def get_color_img_url(self, obj):
         img_url = obj.color_img.color_img.url if obj.color_img else ''
@@ -116,6 +134,7 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
                   'price',
                   'carousel_img',
                   'detail_img',
+                  'mask_img',
                   'color_img_url',
                   'color_base_name',
                   'color_display_name',

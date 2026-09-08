@@ -200,6 +200,12 @@ def _color_option_dict(color_option):
     return _option_dict(
         id=color_option.id, code=color_option.color_name, name=color_option.color_name,
         option_type="COLOR", price=color_option.extra_price,
+        metadata={
+            "swatch_hex": color_option.swatch_hex,
+            "density": float(color_option.swatch_density),
+            "family": color_option.swatch_family,
+            "base_color": color_option.base_color,
+        },
     )
 
 

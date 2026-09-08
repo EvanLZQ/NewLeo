@@ -138,8 +138,9 @@ class ProductImage(models.Model):
         'Product.ProductInstance', on_delete=models.CASCADE, related_name='productImage')
     image = models.ImageField(upload_to='product_images/')
     alt = models.CharField(max_length=100)
-    image_type = models.CharField(max_length=20, choices=[(
-        'carousel', 'Carousel'), ('detail', 'Detail')], default='carousel')
+    image_type = models.CharField(max_length=20, choices=[
+        ('carousel', 'Carousel'), ('detail', 'Detail'), ('mask', 'Mask'),
+    ], default='carousel')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -218,6 +218,12 @@ class LensColorOption(TimeStampedModel):
     prescription's allowed index bracket, and the following Index step can
     be narrowed to whichever index values the chosen color still supports.
     """
+    class Family(models.TextChoices):
+        SOLID = "solid", "Solid"
+        POLARIZED = "polarized", "Polarized"
+        MIRRORED = "mirrored", "Mirrored"
+        PHOTOCHROMIC = "photochromic", "Photochromic"
+
     function_path = models.ForeignKey(
         LensFunctionPath, on_delete=models.CASCADE, related_name="color_options")
 
@@ -228,6 +234,33 @@ class LensColorOption(TimeStampedModel):
         default=list,
         help_text='Index values this color is offered at, e.g. ["1.56", "1.61"]. '
                   "Populated from the Color Compatibility sheet's per-row Index column.",
+    )
+
+    # ── Swatch rendering (Color step's option-list dot) ─────────────────────
+    # Admin-editable so a color can be recolored/retuned without a deploy —
+    # see lens_workflow/views.py _color_option_dict, which passes these
+    # straight through as option.metadata for the frontend's getSwatchStyle.
+    swatch_hex = models.CharField(
+        max_length=7, blank=True,
+        help_text="Hex color for the option-list swatch dot, e.g. '#6B4226'. "
+                  "Blank falls back to a plain gray placeholder dot.",
+    )
+    swatch_density = models.DecimalField(
+        max_digits=3, decimal_places=2, default=1,
+        help_text="Swatch opacity, 0.00-1.00 — e.g. 0.50 for a '50%' tint vs "
+                  "0.80 for '80%' of the same base color, so two densities of "
+                  "the same hue render as visibly different dots.",
+    )
+    swatch_family = models.CharField(
+        max_length=20, choices=Family.choices, default=Family.SOLID,
+        help_text="Swatch visual treatment: flat tint, polarized banding, "
+                  "mirrored shine gradient, or photochromic clear-to-tint gradient.",
+    )
+    base_color = models.CharField(
+        max_length=40, blank=True,
+        help_text="Color family name without density/type prefix, e.g. 'Gray' "
+                  "for both '50% Gray' and '80% Gray' — lets the frontend group "
+                  "same-hue options together if needed. Optional.",
     )
 
     sort_order = models.PositiveIntegerField(default=0)

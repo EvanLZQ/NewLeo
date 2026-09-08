@@ -195,6 +195,48 @@ TINT_COLORS = {
     "POLARIZED": ["Polarized Green", "Polarized Gray", "Polarized Brown"],
 }
 
+# Swatch rendering per color_name — feeds LensColorOption.swatch_hex/
+# swatch_density/swatch_family/base_color, which _color_option_dict passes
+# through as option.metadata for the frontend's getSwatchStyle (see
+# lensWorkFlow.d.ts's LensWorkflowOptionMetadata comment — this was the
+# missing half of an already-built frontend swatch renderer).
+# Keyed by the exact color_name string above, so "50% Gray" and "80% Gray"
+# share the same base hex but different density — the whole point being
+# that two densities of one hue render as visibly different dots without
+# needing two different colors.
+COLOR_SWATCH_INFO = {
+    # SOLID — density parsed from the literal "NN%" prefix
+    "50% Gray":  ("#808080", "0.50", LensColorOption.Family.SOLID, "Gray"),
+    "50% Brown": ("#6B4226", "0.50", LensColorOption.Family.SOLID, "Brown"),
+    "50% Green": ("#2E6B4F", "0.50", LensColorOption.Family.SOLID, "Green"),
+    "50% Blue":  ("#3B5BA5", "0.50", LensColorOption.Family.SOLID, "Blue"),
+    "80% Gray":  ("#808080", "0.80", LensColorOption.Family.SOLID, "Gray"),
+    "80% Brown": ("#6B4226", "0.80", LensColorOption.Family.SOLID, "Brown"),
+    "80% Green": ("#2E6B4F", "0.80", LensColorOption.Family.SOLID, "Green"),
+    "80% Blue":  ("#3B5BA5", "0.80", LensColorOption.Family.SOLID, "Blue"),
+    # GRADIENT — no dedicated gradient swatch treatment in the frontend yet,
+    # so these render as a flat "solid" dot at full density.
+    "Gradient Brown":  ("#6B4226", "1.00", LensColorOption.Family.SOLID, "Brown"),
+    "Gradient Green":  ("#2E6B4F", "1.00", LensColorOption.Family.SOLID, "Green"),
+    "Gradient Gray":   ("#808080", "1.00", LensColorOption.Family.SOLID, "Gray"),
+    "Gradient Purple": ("#6B4FA0", "1.00", LensColorOption.Family.SOLID, "Purple"),
+    "Gradient Blue":   ("#3B5BA5", "1.00", LensColorOption.Family.SOLID, "Blue"),
+    # MIRRORED — metallic shine gradient treatment
+    "Mirrored Silver": ("#C0C0C0", "1.00", LensColorOption.Family.MIRRORED, "Silver"),
+    "Mirrored Blue":   ("#3B5BA5", "1.00", LensColorOption.Family.MIRRORED, "Blue"),
+    # POLARIZED — horizontal-banding treatment
+    "Polarized Green": ("#2E6B4F", "1.00", LensColorOption.Family.POLARIZED, "Green"),
+    "Polarized Gray":  ("#808080", "1.00", LensColorOption.Family.POLARIZED, "Gray"),
+    "Polarized Brown": ("#6B4226", "1.00", LensColorOption.Family.POLARIZED, "Brown"),
+    # PHOTOCHROMIC — clear-to-tint gradient treatment ("Grey", not "Gray" —
+    # matches PHOTOCHROMIC_COLORS's own spelling)
+    "Grey":   ("#808080", "1.00", LensColorOption.Family.PHOTOCHROMIC, "Grey"),
+    "Brown":  ("#6B4226", "1.00", LensColorOption.Family.PHOTOCHROMIC, "Brown"),
+    "Pink":   ("#D98CA8", "1.00", LensColorOption.Family.PHOTOCHROMIC, "Pink"),
+    "Purple": ("#6B4FA0", "1.00", LensColorOption.Family.PHOTOCHROMIC, "Purple"),
+    "Blue":   ("#3B5BA5", "1.00", LensColorOption.Family.PHOTOCHROMIC, "Blue"),
+}
+
 # ─────────────────────────────────────────────────────────────────────────
 # Coatings — universal, not scoped to Lens Type.
 # ─────────────────────────────────────────────────────────────────────────
@@ -411,7 +453,8 @@ class Command(BaseCommand):
                 LensColorOption.objects.update_or_create(
                     function_path=fp, color_name=color_name,
                     defaults=dict(extra_price=D("0"), available_index_values=available,
-                                  sort_order=sort_idx * 10, is_active=True),
+                                  sort_order=sort_idx * 10, is_active=True,
+                                  **self._swatch_defaults(color_name)),
                 )
 
         for lt_code in TINT_PRICING:
@@ -424,8 +467,22 @@ class Command(BaseCommand):
                     LensColorOption.objects.update_or_create(
                         function_path=fp, color_name=color_name,
                         defaults=dict(extra_price=D("0"), available_index_values=available,
-                                      sort_order=sort_idx * 10, is_active=True),
+                                      sort_order=sort_idx * 10, is_active=True,
+                                      **self._swatch_defaults(color_name)),
                     )
+
+    def _swatch_defaults(self, color_name):
+        """swatch_hex/density/family/base_color for one color_name, from
+        COLOR_SWATCH_INFO — falls back to a blank hex (plain gray placeholder
+        dot, today's behavior) for any color_name not in the table, so a
+        future new color doesn't silently crash the seed."""
+        info = COLOR_SWATCH_INFO.get(color_name)
+        if not info:
+            return dict(swatch_hex="", swatch_density=D("1.00"),
+                        swatch_family=LensColorOption.Family.SOLID, base_color="")
+        hex_value, density, family, base_color = info
+        return dict(swatch_hex=hex_value, swatch_density=D(density),
+                    swatch_family=family, base_color=base_color)
 
     def _index_values_for(self, lens_type):
         """All active index_value strings for this Lens Type — used as

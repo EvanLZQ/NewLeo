@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils.html import format_html
 
 from .models import (
     LensType,
@@ -32,7 +33,8 @@ class LensIndexOptionInline(admin.TabularInline):
 class LensColorOptionInline(admin.TabularInline):
     model = LensColorOption
     extra = 0
-    fields = ("color_name", "extra_price", "sort_order", "is_active")
+    fields = ("color_name", "extra_price", "swatch_hex", "swatch_density",
+              "swatch_family", "sort_order", "is_active")
     ordering = ("sort_order", "id")
 
 
@@ -75,14 +77,26 @@ class LensIndexOptionAdmin(admin.ModelAdmin):
 
 @admin.register(LensColorOption)
 class LensColorOptionAdmin(admin.ModelAdmin):
-    list_display = ("function_path", "color_name", "extra_price",
+    list_display = ("function_path", "color_name", "swatch_preview", "swatch_hex",
+                     "swatch_density", "swatch_family", "extra_price",
                      "available_index_values", "sort_order", "is_active", "updated_at")
-    list_filter = ("is_active", "function_path__lens_type",
+    list_filter = ("is_active", "swatch_family", "function_path__lens_type",
                    "function_path__function_code")
     search_fields = ("color_name", "function_path__function_code",
                       "function_path__lens_type__label")
     autocomplete_fields = ("function_path",)
     ordering = ("function_path__sort_order", "sort_order", "id")
+
+    @admin.display(description="Swatch")
+    def swatch_preview(self, obj):
+        if not obj.swatch_hex:
+            return "—"
+        return format_html(
+            '<span style="display:inline-block;width:18px;height:18px;'
+            'border-radius:50%;border:1px solid #ccc;background:{};'
+            'opacity:{};"></span>',
+            obj.swatch_hex, obj.swatch_density,
+        )
 
 
 @admin.register(LensCoating)
