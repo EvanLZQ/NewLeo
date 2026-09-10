@@ -3,6 +3,21 @@ from decimal import Decimal
 from django.db.models import Sum
 from django.apps import apps
 
+# Flat surcharge for a prescription with Prism correction — matches the
+# "Add Prism $27" text shown on the prescription form itself
+# (PrescriptionForm.tsx). Not a lens_workflow-priced option (Prism lives on
+# the Prescription, not on any CompleteSet FK), so it isn't in the loop
+# below — added explicitly wherever line items/sub_total are built instead.
+PRISM_SURCHARGE = Decimal("27.00")
+
+
+def has_prism(complete_set):
+    """True when this CompleteSet's attached prescription has Prism values set."""
+    return bool(
+        complete_set.prescription_id
+        and complete_set.prescription.prism.exists()
+    )
+
 
 def get_complete_set_line_items(complete_set):
     """
@@ -36,6 +51,12 @@ def get_complete_set_line_items(complete_set):
                 'label':     coating.label,
                 'price':     float(coating.price),
             })
+    if has_prism(complete_set):
+        items.append({
+            'component': 'prism',
+            'label':     'Prism',
+            'price':     float(PRISM_SURCHARGE),
+        })
     return items
 
 
@@ -209,4 +230,6 @@ class OrderService:
             for coating in complete_set.coatings.all():
                 total_price += coating.price
         # density is now a plain CharField — no add_on_price contribution
+        if has_prism(complete_set):
+            total_price += PRISM_SURCHARGE
         return total_price

@@ -44,18 +44,39 @@ class PrescriptionInfo(models.Model):
 
 
 class PrescriptionPrism(models.Model):
+    """
+    At most one row per prescription in practice — the form always writes
+    (or replaces) a single combined row covering whichever of horizontal/
+    vertical the customer actually filled in; the FK isn't unique=True only
+    because nothing enforces that at the DB level, not because multiple
+    rows are a meaningful state. See Prescription/serializer.py's
+    PrescriptionSerializer._sync_prism (delete-then-recreate on every save).
+
+    All 8 fields are optional: a customer may set only horizontal, only
+    vertical, or (rarely) both. Direction is a plain string ("Up"/"Down" for
+    vertical, "In"/"Out" for horizontal — see PrescriptionForm.tsx's
+    verticalBaseOpts/horizontalBaseOpts), not a number — this was a
+    DecimalField before, which couldn't have stored the real values that
+    were ever actually collected client-side.
+    """
     prescription = models.ForeignKey(
         'Prescription.PrescriptionInfo', on_delete=models.CASCADE, related_name='prism')
-    horizontal_value_l = models.DecimalField(max_digits=5, decimal_places=2)
-    horizontal_direction_l = models.DecimalField(
-        max_digits=5, decimal_places=2)
-    horizontal_value_r = models.DecimalField(max_digits=5, decimal_places=2)
-    horizontal_direction_r = models.DecimalField(
-        max_digits=5, decimal_places=2)
-    vertical_value_l = models.DecimalField(max_digits=5, decimal_places=2)
-    vertical_direction_l = models.DecimalField(max_digits=5, decimal_places=2)
-    vertical_value_r = models.DecimalField(max_digits=5, decimal_places=2)
-    vertical_direction_r = models.DecimalField(max_digits=5, decimal_places=2)
+    horizontal_value_l = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True)
+    horizontal_direction_l = models.CharField(
+        max_length=10, null=True, blank=True)
+    horizontal_value_r = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True)
+    horizontal_direction_r = models.CharField(
+        max_length=10, null=True, blank=True)
+    vertical_value_l = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True)
+    vertical_direction_l = models.CharField(
+        max_length=10, null=True, blank=True)
+    vertical_value_r = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True)
+    vertical_direction_r = models.CharField(
+        max_length=10, null=True, blank=True)
 
     class Meta:
         verbose_name = 'Prism'

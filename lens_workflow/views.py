@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-from django.db.models import Q
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,8 +17,8 @@ from .serializers import NextStepRequestSerializer
 from Prescription.models import PrescriptionInfo
 
 STEP_LABELS = {
-    "LENS_TYPE": "Lens Type",
-    "FUNCTION": "Lens Material",
+    "LENS_TYPE": "Usage/Prescription Type",
+    "FUNCTION": "Lens Type/Lens Color",
     "TINT_TYPE": "Tint Type",
     "COLOR": "Color",
     "INDEX": "Lens Index",
@@ -617,116 +616,3 @@ class LensWorkflowSummaryView(APIView):
             "missing_option_ids": [],
         }, status=status.HTTP_200_OK)
 
-
-class LensWorkflowRecommendView(APIView):
-    """
-    "Recommended Complete Lens" — one pre-configured bundle for the given
-    Lens Type (+ prescription, when it needs one), shown right after
-    Prescription so the customer can Add to Cart in one click, or
-    "Customize my lens" into the normal Function..Coating flow instead.
-
-    Deliberately reuses existing engines rather than adding new ones:
-      - Function is always CLASSIC (clear, $0 extra) — the plainest,
-        cheapest baseline. No is_recommended concept exists for Function
-        paths; hardcoding Classic was confirmed with the business owner
-        rather than adding a field for a choice that's always the same.
-      - Index reuses the same LensIndexRecommendationRule engine the INDEX
-        step already runs on.
-      - Coatings are the always-included three (Anti-scratch/Anti-glare/
-        UV) plus any *optional* coating explicitly flagged
-        LensCoating.is_recommended=True — same field the Coating step
-        already uses to highlight a suggestion, reused rather than adding
-        a second flag (see the plan doc's B.2 for why). Nothing is
-        recommended there by default at launch — confirmed with the
-        business owner not to proactively upsell a paid coating; flip the
-        flag in the admin to change that later, no code change needed.
-
-    GET params:
-      - lens_type_id: int, required
-      - prescription_id: int, required only when the Lens Type needs one
-        (is_prescription_required=True) — Reader and Non-Rx have no power
-        to recommend from and should skip this screen on the frontend
-        entirely rather than call this endpoint.
-
-    Response (available=False whenever no sensible recommendation exists —
-    the frontend's job is to fall straight into Customize in that case,
-    not to show a broken/empty recommendation screen):
-      {
-        "available": true,
-        "lens_type": {...option dict...},
-        "function": {...option dict...},
-        "index": {...option dict...},
-        "coatings": [...option dicts...],
-        "reason": "human-readable one-liner",
-        "total_add_on_price": "24.90"
-      }
-    """
-
-    def get(self, request):
-        try:
-            lens_type_id = int(request.query_params.get("lens_type_id"))
-        except (TypeError, ValueError):
-            return Response(
-                {"detail": "lens_type_id is required and must be an integer."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            lens_type = LensType.objects.get(id=lens_type_id, is_active=True)
-        except LensType.DoesNotExist:
-            return Response({"detail": "Lens Type not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        if lens_type.is_reader or not lens_type.is_prescription_required:
-            # No power to recommend from (Reader has no Function/Index/
-            # Coating steps at all; Non-Rx has no index_recommendation_category
-            # configured) — nothing to build a bundle from.
-            return Response({"available": False,
-                              "detail": "No recommendation for this Lens Type."})
-
-        prescription_id = request.query_params.get("prescription_id")
-        rule = _rx_recommendation_rule(lens_type, prescription_id)
-        if rule is None:
-            return Response({"available": False,
-                              "detail": "No matching recommendation rule for this prescription."})
-
-        try:
-            function_path = LensFunctionPath.objects.get(
-                lens_type=lens_type, function_code=LensFunctionPath.FunctionCode.CLEAR,
-                sun_type="", is_active=True)
-        except LensFunctionPath.DoesNotExist:
-            return Response({"available": False,
-                              "detail": "This Lens Type has no Classic function configured."})
-
-        # Multiple LensIndexOption rows can share an index_value now (e.g.
-        # SVD's "1.61 Popular" vs "1.61 Driving") — order_by(sort_order)
-        # picks the plain/standard variant first, never a specialty one,
-        # for an automated one-click bundle.
-        index_option = (
-            LensIndexOption.objects.filter(
-                lens_type=lens_type, index_value=Decimal(rule.recommended_index_value),
-                is_active=True,
-            ).order_by("sort_order", "id").first()
-        )
-        if index_option is None:
-            return Response({"available": False,
-                              "detail": "Recommended index value has no matching option."})
-
-        coatings = list(
-            LensCoating.objects.filter(is_active=True)
-            .filter(Q(is_included=True) | Q(is_recommended=True))
-            .order_by("sort_order", "id")
-        )
-
-        total = function_path.extra_price + index_option.price + sum(
-            (c.price for c in coatings), Decimal("0.00"))
-
-        return Response({
-            "available": True,
-            "lens_type": _lens_type_option(lens_type),
-            "function": _function_option(function_path),
-            "index": _index_option_dict(index_option, is_recommended=True),
-            "coatings": [_coating_option_dict(c) for c in coatings],
-            "reason": f"Based on your prescription, we recommend the "
-                      f"{index_option.index_value} index.",
-            "total_add_on_price": str(total),
-        }, status=status.HTTP_200_OK)
