@@ -67,10 +67,15 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
     mask_img = serializers.SerializerMethodField()
     color_img_url = serializers.SerializerMethodField()
     product_name = serializers.SerializerMethodField()
+    model_number = serializers.SerializerMethodField()
     productPromotion = ProductPromotionSerializer(many=True)
 
     def get_product_name(self, obj):
         return obj.product.name if obj.product else ''
+
+    def get_model_number(self, obj):
+        # Needed to build the /products/:model/:sku link (e.g. from the cart).
+        return obj.product.model_number if obj.product else ''
 
     def get_carousel_img(self, obj):
         # Uses prefetched productImage relation — no extra DB queries
@@ -140,6 +145,7 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
                   'color_display_name',
                   'description',
                   'product_name',
+                  'model_number',
                   'productPromotion']
 
 

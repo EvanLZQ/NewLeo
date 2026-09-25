@@ -17,13 +17,17 @@ from .serializers import NextStepRequestSerializer
 from Prescription.models import PrescriptionInfo
 
 STEP_LABELS = {
-    "LENS_TYPE": "Usage/Prescription Type",
+    "LENS_TYPE": "What kind of glasses are you looking for today?",
     "FUNCTION": "Lens Type/Lens Color",
     "TINT_TYPE": "Tint Type",
     "COLOR": "Color",
     "INDEX": "Lens Index",
     "COATING": "Coating",
     "READER_STRENGTH": "Reader Strength",
+}
+
+STEP_DESCRIPTIONS = {
+    "LENS_TYPE": "Frame selected. Now customize your lenses for this frame.",
 }
 
 DOES_NOT_EXIST_ERRORS = (
@@ -60,7 +64,7 @@ def _step_dict(code):
         "id": 0,
         "code": code,
         "label": STEP_LABELS[code],
-        "description": "",
+        "description": STEP_DESCRIPTIONS.get(code, ""),
         "sort_order": 0,
         "is_active": True,
     }
