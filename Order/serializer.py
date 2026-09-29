@@ -7,6 +7,7 @@ from lens_workflow.models import (
     LensIndexOption,
     LensColorOption,
     LensCoating,
+    LensReaderStrength,
 )
 from lens_workflow.serializers import (
     LensTypeSerializer,
@@ -33,6 +34,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
     index_option  = serializers.PrimaryKeyRelatedField(queryset=LensIndexOption.objects.all(), required=False, allow_null=True)
     color_option  = serializers.PrimaryKeyRelatedField(queryset=LensColorOption.objects.all(), required=False, allow_null=True)
     coatings      = serializers.PrimaryKeyRelatedField(queryset=LensCoating.objects.all(), required=False, many=True)
+    reader_strength = serializers.PrimaryKeyRelatedField(queryset=LensReaderStrength.objects.all(), required=False, allow_null=True)
     frame    = serializers.SerializerMethodField()
     # density is now a plain CharField on the model — no source traversal needed
     density  = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
@@ -52,6 +54,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             'index_option',
             'color_option',
             'coatings',
+            'reader_strength',
             'density',
             'prescription',
             'sub_color',
@@ -77,6 +80,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         rep['index_option']  = obj.index_option.option_label if obj.index_option else None
         rep['color_option']  = obj.color_option.color_name if obj.color_option else None
         rep['coatings']      = [c.label for c in obj.coatings.all()]
+        rep['reader_strength'] = obj.reader_strength.label if obj.reader_strength else None
         # Per-lens-feature prices for cart/order itemization (frame excluded —
         # rep['frame'] above already carries its own price).
         rep['price_breakdown'] = get_complete_set_line_items(obj)
@@ -111,6 +115,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             tint_type=validated_data.get('tint_type'),
             index_option=validated_data.get('index_option'),
             color_option=validated_data.get('color_option'),
+            reader_strength=validated_data.get('reader_strength'),
             density=validated_data.get('density'),
             prescription=rx_obj,
             sub_color=validated_data.get('sub_color'),
@@ -140,7 +145,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         instance.sub_total       = validated_data.get('sub_total',       instance.sub_total)
         instance.saved_for_later = validated_data.get('saved_for_later', instance.saved_for_later)
 
-        for field in ('lens_type', 'function_path', 'tint_type', 'index_option', 'color_option', 'density'):
+        for field in ('lens_type', 'function_path', 'tint_type', 'index_option', 'color_option', 'reader_strength', 'density'):
             if field in validated_data:
                 setattr(instance, field, validated_data.get(field))
         if 'frame' in validated_data:

@@ -10,4 +10,6 @@ urlpatterns = [
          views.getTargetBlogBrief, name='target_blog_brief'),
     path('categories', views.getBlogsInEachCategory,
          name='blogs_in_each_category'),
+    path('preview', views.saveBlogPreview, name='save_blog_preview'),
+    path('preview/<uuid:token>', views.getBlogPreview, name='get_blog_preview'),
 ]

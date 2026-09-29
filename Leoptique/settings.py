@@ -240,20 +240,52 @@ TINYMCE_DEFAULT_CONFIG = {
     'custom_undo_redo_levels': 100,
     'selector': 'textarea',
     "menubar": "file edit view insert format tools table help",
-    'plugins': 'link image preview codesample contextmenu table code lists fullscreen',
-    'toolbar1': 'undo redo | backcolor casechange permanentpen formatpainter removeformat formatselect fontselect fontsizeselect',
-    'toolbar2': 'bold italic underline blockquote | alignleft aligncenter alignright alignjustify '
-               '| bullist numlist | outdent indent | table | link image | codesample | preview code | tiny_mce_wiris_formulaEditor tiny_mce_wiris_formulaEditorChemistry',
-    'contextmenu': 'formats | link image',
-    'block_formats': 'Paragraph=p; Header 1=h1; Header 2=h2',
-    'fontsize_formats': "8pt 10pt 12pt 14pt 16pt 18pt",
-    'content_style': "body { font-family: Arial; background: white; color: black; font-size: 12pt}",
+    # django-tinymce self-hosts the open-source (GPL) TinyMCE build — no
+    # Tiny Cloud API key is configured anywhere in this project (checked:
+    # no TINYMCE_JS_URL override). The previous config's 'casechange',
+    # 'permanentpen', 'formatpainter' toolbar buttons and the
+    # 'tiny_mce_wiris_formulaEditor*' formula buttons are all Tiny Cloud
+    # *premium* plugins that were never actually loaded in that build —
+    # they rendered as dead/no-op buttons. 'contextmenu' as a plugin name
+    # is also gone (folded into core since TinyMCE 5; only the top-level
+    # `contextmenu` key below is still meaningful). Replaced with the
+    # community plugins actually bundled and working, expanded toward a
+    # genuinely full-featured editor: block quote/heading levels, media
+    # embeds, tables, special characters, emoji, word count, search &
+    # replace, and a real fullscreen/preview/help set.
+    'plugins': (
+        'advlist autolink lists link image charmap anchor preview '
+        'searchreplace visualblocks code fullscreen insertdatetime media '
+        'table codesample help wordcount emoticons nonbreaking quickbars'
+    ),
+    'toolbar1': 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough forecolor backcolor removeformat',
+    'toolbar2': 'alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | blockquote link image media table charmap emoticons | codesample code preview fullscreen help',
+    'contextmenu': 'link image table',
+    'quickbars_selection_toolbar': 'bold italic underline | forecolor | quicklink blockquote',
+    'quickbars_insert_toolbar': 'image media table',
+    'block_formats': (
+        'Paragraph=p; Heading 1=h1; Heading 2=h2; Heading 3=h3; '
+        'Heading 4=h4; Quote=blockquote; Preformatted=pre'
+    ),
+    'fontsize_formats': "10pt 12pt 14pt 16pt 18pt 24pt 32pt",
+    # Roughly matches the live site's article typography (Ubuntu, 16px
+    # body — see UserSite src/index.css's t-body) so what's typed here
+    # reads close to how it'll actually look once published, without
+    # needing to flip back and forth to the preview panel for every line.
+    'content_style': (
+        "body { font-family: Ubuntu, Arial, sans-serif; background: white; "
+        "color: #1a1a1a; font-size: 16px; line-height: 1.6; } "
+        "h1,h2,h3,h4 { font-weight: 600; }"
+    ),
     'codesample_languages': [
-        {'text': 'Python', 'value': 'python'}, {'text': 'HTML/XML', 'value': 'markup'},],
+        {'text': 'Python', 'value': 'python'}, {'text': 'HTML/XML', 'value': 'markup'},
+        {'text': 'JavaScript', 'value': 'javascript'}, {'text': 'CSS', 'value': 'css'},
+    ],
     'image_class_list': [{'title': 'Fluid', 'value': 'img-fluid', 'style': {}}],
+    'image_caption': True,
+    'image_advtab': True,
     'width': 'auto',
     "height": "600px",
-    'image_caption': True,
     "images_upload_url": "tinymce/upload_image",
     "images_upload_handler": "tinymce_image_upload_handler"
 }
@@ -306,3 +338,7 @@ PAYPAL_MODE = os.environ.get('PAYPAL_MODE', 'sandbox')
 # ── Domain constants (override via .env for different environments) ────────
 MEDIA_BASE_URL = os.environ.get('MEDIA_BASE_URL', 'https://admin.eyelovewear.com')
 COOKIE_DOMAIN = os.environ.get('COOKIE_DOMAIN', '.eyelovewear.com')
+# The public React site — used by the Blog admin's mobile/desktop preview
+# panel to build the two iframe URLs (see Blog/admin.py, templates/admin/
+# Blog/change_form.html). Not used anywhere requests are actually routed.
+FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'https://eyelovewear.com')

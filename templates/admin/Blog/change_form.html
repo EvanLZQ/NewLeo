@@ -1,6 +1,39 @@
-{% extends "admin/change_form.html" %} 
+{% extends "admin/change_form.html" %}
 {% load static %}
-{% block extrahead %} 
-    {{block.super }}
+{% block extrahead %}
+    {{ block.super }}
     <script type="text/javascript" src="{% static 'js/tinymce_img.js' %}"></script>
+    <link rel="stylesheet" type="text/css" href="{% static 'admin/css/blog-preview.css' %}">
+{% endblock %}
+
+{# Placed right after the form fields (a block the default change_form.html
+   already exposes for this) so the preview sits next to what it's
+   previewing, above the Save row. #}
+{% block after_field_sets %}
+    {{ block.super }}
+    <div class="blog-preview-panel">
+        <div class="blog-preview-toolbar">
+            <h2>Live Preview</h2>
+            <button type="button" id="blog-preview-refresh">Refresh Preview</button>
+            <span id="blog-preview-status"></span>
+        </div>
+        <div class="blog-preview-panes">
+            <div class="blog-preview-pane">
+                <p class="blog-preview-label">Mobile</p>
+                <div id="blog-preview-mobile-outer" class="blog-preview-frame-outer">
+                    <iframe id="blog-preview-mobile" title="Mobile preview"></iframe>
+                </div>
+            </div>
+            <div class="blog-preview-pane">
+                <p class="blog-preview-label">Desktop</p>
+                <div id="blog-preview-desktop-outer" class="blog-preview-frame-outer">
+                    <iframe id="blog-preview-desktop" title="Desktop preview"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        window.BLOG_PREVIEW_FRONTEND_BASE_URL = "{{ frontend_base_url|default:'https://eyelovewear.com'|escapejs }}";
+    </script>
+    <script type="text/javascript" src="{% static 'admin/js/blog-preview.js' %}"></script>
 {% endblock %}
