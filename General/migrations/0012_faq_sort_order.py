@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('General', '0010_alter_coupon_applied_product_and_more'),
+        ('General', '0011_newslettersubscriber'),
     ]
 
     operations = [
