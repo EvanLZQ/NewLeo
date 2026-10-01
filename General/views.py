@@ -20,7 +20,7 @@ def getCurrencyConversion(request):
 def getFAQContents(request):
     faq = FAQ.objects.all()
     serializer = FAQSerializer(faq, many=True)
-    return Response(serializer)
+    return Response(serializer.data)
 
 
 @api_view(['GET'])

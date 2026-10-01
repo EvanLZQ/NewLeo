@@ -122,6 +122,10 @@ class FAQ(models.Model):
     title = models.CharField(max_length=500)
     content = models.TextField()
     img_url = models.TextField(blank=True, null=True)
+    # No ordering control previously existed — the page just showed
+    # whatever order rows happened to be inserted in. Lower sorts first;
+    # ties fall back to insertion order via `id` (see Meta.ordering).
+    sort_order = models.IntegerField(default=0, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -132,6 +136,7 @@ class FAQ(models.Model):
         db_table = 'FAQ'
         verbose_name = 'Question and Answer'
         verbose_name_plural = 'Questions and Answers'
+        ordering = ['sort_order', 'id']
 
 
 class PageImage(models.Model):

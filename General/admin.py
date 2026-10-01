@@ -20,11 +20,20 @@ class PageImageAdmin(admin.ModelAdmin):
     list_display = ('page', 'section', 'order')
 
 
+class FAQAdmin(admin.ModelAdmin):
+    list_display = ('title', 'sort_order', 'updated_at')
+    # Edit the sort number right from the list page instead of opening
+    # each row — reordering FAQs is a frequent, low-stakes edit.
+    list_editable = ('sort_order',)
+    ordering = ('sort_order', 'id')
+    search_fields = ('title', 'content')
+
+
 admin.site.register(Address)
 admin.site.register(Coupon)
 admin.site.register(ImageUpload, UploadImageAdmin)
 admin.site.register(CurrencyConversion)
-admin.site.register(FAQ)
+admin.site.register(FAQ, FAQAdmin)
 admin.site.register(PageImage, PageImageAdmin)
 
 
