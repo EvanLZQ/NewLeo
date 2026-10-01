@@ -1,3 +1,5 @@
+import html
+import re
 import uuid
 
 import bleach
@@ -48,6 +50,24 @@ def sanitize_blog_html(raw_html):
     )
 
 
+def strip_html_to_text(raw_html):
+    """
+    `brief` is meant to be plain text — used for `brief` on save, and for
+    one-time cleanup of legacy rows saved before this existed (see
+    migration 0005). Regex-strips every tag rather than bleach.clean(tags=
+    []): bleach drops tags but doesn't insert a separator, so e.g.
+    "<p>A</p><p>B</p>" collapses to "AB" with the paragraph break silently
+    eaten — a space keeps it "A B" instead. Tag removal is complete and
+    doesn't need bleach's more careful allowlist handling the way real
+    HTML output does, since nothing here is ever re-rendered as HTML.
+    """
+    if not raw_html:
+        return raw_html
+    text = re.sub(r"<[^>]+>", " ", raw_html)
+    text = html.unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 class BlogInfo(models.Model):
     title = models.CharField(max_length=100)
     category = models.CharField(max_length=150, default="Other", db_index=True)
@@ -84,7 +104,7 @@ class BlogInfo(models.Model):
         # `brief` is a plain-text summary (rendered as text, not HTML, on
         # the frontend) — strip any markup a paste might have carried in.
         if self.brief:
-            self.brief = bleach.clean(self.brief, tags=[], strip=True)
+            self.brief = strip_html_to_text(self.brief)
 
         self.content = sanitize_blog_html(str(self.content))
 
@@ -127,7 +147,7 @@ class BlogPreview(models.Model):
         if self.content:
             self.content = sanitize_blog_html(self.content)
         if self.brief:
-            self.brief = bleach.clean(self.brief, tags=[], strip=True)
+            self.brief = strip_html_to_text(self.brief)
         super().save(*args, **kwargs)
 
     class Meta:
