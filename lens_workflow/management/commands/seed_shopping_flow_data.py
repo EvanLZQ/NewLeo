@@ -163,6 +163,44 @@ INDEX_TIERS_SVD = [
     ("1.74", D("79.95"), "Premium",  "Premium - 1.74 Index"),
 ]
 
+# Customer-facing "why this index" rationale, shown on the Index step next
+# to each option (LensIndexOption.notes -> _index_option_dict's
+# `description`). Keyed by index_value, not by tier/lens_type, since the
+# optical trade-off is a property of the index itself, not of which Lens
+# Type it's being sold under.
+#
+# 1.50/1.60/1.67/1.74's text is sourced from the "折射率算法" sheet in
+# Eyelovewear Pricing.xlsx (the same sheet _combined_power's docstring
+# cites for the bracket thresholds). 1.56/1.59/1.61 Driving/1.71 have no
+# equivalent line in that sheet — their copy below is written to fit the
+# same voice, not pulled from the source doc, and should get a once-over
+# before this ships. Deliberately framed around Abbe number (optical
+# clarity/color fringing), which IS in the source sheet — not light
+# transmittance, which isn't a figure we actually have measured for either
+# brand; swap this in once real numbers exist.
+INDEX_RATIONALE = {
+    "1.50": ("The clearest optics and best value of any lens we offer — ideal for mild "
+             "prescriptions, where a higher index wouldn't make a visible difference in "
+             "edge thickness."),
+    "1.56": ("A noticeably thinner lens than 1.50 for a modest step up in price — the "
+             "right balance for mild-to-moderate prescriptions."),
+    "1.59": ("Impact-resistant polycarbonate, built for safety and sports eyewear — "
+             "chosen for durability, not primarily for thinness."),
+    "1.61": ("Our most recommended lens for moderate-to-strong prescriptions — it "
+             "balances edge thickness against optical clarity better than any other "
+             "index, which is why it's the one we reach for most in-store."),
+    "1.67": ("A thinner, lighter lens for stronger prescriptions. It has a lower Abbe "
+             "value than 1.50/1.56/1.61, so very large frames can show a little more "
+             "color fringing at the edge — worth keeping in mind if you're choosing a "
+             "bigger frame."),
+    "1.71": ("Sits between 1.67 and 1.74 in thinness and price — for prescriptions "
+             "where 1.67 isn't quite thin enough but 1.74 is more lens than you need."),
+    "1.74": ("Our thinnest lens, for strong prescriptions. It has the most light "
+             "dispersion of any index we offer, so we strongly recommend pairing it "
+             "with a smaller frame to keep edge thickness and color fringing to a "
+             "minimum."),
+}
+
 INDEX_TIERS_BY_LENS_TYPE = {
     "SVD": INDEX_TIERS_SVD,
     "READING": INDEX_TIERS_FULL,
@@ -429,9 +467,18 @@ class Command(BaseCommand):
                 # INDEX_TIERS_SVD's "1.61 Driving" sharing index_value with
                 # "1.61 Popular"; without tier here the second row would
                 # overwrite the first instead of creating a sibling.
+                # "1.61 Driving" is the one tier whose rationale shouldn't
+                # just be the plain 1.61 text (it's a specialty product,
+                # not "our most recommended") — override by tier name.
+                notes = (
+                    "Same 1.61 index as our Popular lens, with a treatment tuned to "
+                    "reduce glare from oncoming headlights at night."
+                    if tier == "Driving" else
+                    INDEX_RATIONALE.get(index_value, "")
+                )
                 LensIndexOption.objects.update_or_create(
                     lens_type=lens_type, index_value=Decimal(index_value), tier=tier,
-                    defaults=dict(option_label=label, price=price,
+                    defaults=dict(option_label=label, price=price, notes=notes,
                                   sort_order=sort_idx * 10, is_active=True),
                 )
 

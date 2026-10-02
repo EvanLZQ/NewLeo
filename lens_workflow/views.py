@@ -120,6 +120,13 @@ def _index_option_dict(index_option, is_recommended=False):
     return _option_dict(
         id=index_option.id, code=index_option.option_label, name=index_option.option_label,
         option_type="INDEX", price=index_option.price,
+        # Customer-facing "why this index" copy — e.g. explaining that
+        # 1.56 actually transmits more light than 1.74 even though 1.74
+        # is thinner. Sourced from the "折射率算法"/"推荐的理由" sheets in
+        # Eyelovewear Pricing.xlsx (see seed_shopping_flow_data.py's
+        # INDEX_TIERS_FULL notes column) — previously the notes field
+        # existed on the model but nothing ever set or surfaced it.
+        description=index_option.notes,
         metadata={
             "tier": index_option.tier,
             "index_value": str(index_option.index_value),
@@ -130,32 +137,41 @@ def _index_option_dict(index_option, is_recommended=False):
 
 def _combined_power(prescription):
     """
-    Combined power per eye, worse (larger-magnitude) eye wins — matches the
-    bracket thresholds in LensIndexRecommendationRule. Returns
+    Spherical Equivalent (SE) per eye, worse (larger-magnitude) eye wins —
+    matches the bracket thresholds in LensIndexRecommendationRule. Returns
     (combined_power, direction) — direction is whichever eye's formula
     produced the winning value, so the caller can pick a direction-specific
     bracket set (see LensIndexRecommendationRule.direction).
 
-    Two different formulas apply depending on that eye's own prescription
-    sign (source: the "折射率算法" sheet in Eyelovewear Pricing.xlsx):
-      - Nearsighted (sphere < 0):  |sphere| + |cylinder|
-      - Farsighted  (sphere >= 0): sphere + cylinder / 2
-    Each eye is evaluated by its own sign — correctly handles the rare case
-    of one nearsighted eye and one farsighted eye.
+    SE = sphere + cylinder / 2, the standard ophthalmic formula, used for
+    BOTH signs — confirmed by the "折射率算法" sheet in Eyelovewear
+    Pricing.xlsx ("远视散光同样用等效度数：等效 = 球镜 + ½柱镜", i.e. "farsighted
+    astigmatism uses the same equivalent-power formula: SE = sphere + ½
+    cylinder") and re-stated in the boss's lens-flow redesign deck. A
+    previous version of this function used |sphere| + |cylinder| (no /2)
+    for nearsighted eyes specifically — a real bug, not an intentional
+    second formula: it could recommend a different index tier than SE
+    does for the same prescription (e.g. S-3.00 C-2.00 scores 5.00 under
+    the old formula vs SE -4.00, landing in different brackets).
+    direction still comes from the eye's own sphere sign — correctly
+    handles the rare case of one nearsighted eye and one farsighted eye —
+    and nearsighted SE is reported as a magnitude (abs) so it compares
+    against the brackets the same way the farsighted branch's naturally-
+    positive SE does.
     """
     def per_eye(sphere, cylinder):
         # `or 0` (the previous form) turns an exact Decimal("0") into a
         # plain int 0, since Decimal("0") is falsy — then `0 / 2` true-
         # divides two plain ints into a float, and Decimal + float raises
-        # TypeError in the farsighted branch below. None-checks keep both
-        # values Decimal so the arithmetic stays Decimal throughout — hits
-        # on any farsighted prescription with exactly zero astigmatism,
-        # which is common, not an edge case.
+        # TypeError. None-checks keep both values Decimal so the
+        # arithmetic stays Decimal throughout — hits on any prescription
+        # with exactly zero astigmatism, which is common, not an edge case.
         sphere = sphere if sphere is not None else Decimal("0")
         cylinder = cylinder if cylinder is not None else Decimal("0")
+        se = sphere + cylinder / 2
         if sphere < 0:
-            return abs(sphere) + abs(cylinder), LensIndexRecommendationRule.Direction.NEARSIGHTED
-        return sphere + cylinder / 2, LensIndexRecommendationRule.Direction.FARSIGHTED
+            return abs(se), LensIndexRecommendationRule.Direction.NEARSIGHTED
+        return se, LensIndexRecommendationRule.Direction.FARSIGHTED
 
     left_power, left_dir = per_eye(prescription.sphere_l, prescription.cylinder_l)
     right_power, right_dir = per_eye(prescription.sphere_r, prescription.cylinder_r)
@@ -359,11 +375,16 @@ class LensWorkflowNextView(APIView):
 
         # Group function paths by function_code — one representative row per
         # group is shown as the Step-2 button (Postgres-only: distinct(*fields)).
-        function_paths = (
+        # Postgres requires DISTINCT ON's leading ORDER BY columns to match
+        # the distinct(*fields) call, so function_code has to stay first in
+        # the query itself — cheapest-first display order is applied
+        # afterward, as a plain Python sort over the already-deduped list.
+        function_paths = sorted(
             LensFunctionPath.objects.filter(
                 lens_type=lens_type, is_active=True)
             .order_by("function_code", "sort_order", "id")
-            .distinct("function_code")
+            .distinct("function_code"),
+            key=lambda fp: fp.extra_price,
         )
         # total_steps stays null here — it depends on which Function gets
         # picked next (Sun's path is longer than Classic's) and only
@@ -416,7 +437,7 @@ class LensWorkflowNextView(APIView):
             lens_type=clicked_sun_function_path.lens_type,
             function_code=LensFunctionPath.FunctionCode.SUN,
             is_active=True,
-        ).exclude(sun_type="").order_by("sort_order", "id")
+        ).exclude(sun_type="").order_by("extra_price", "sort_order", "id")
         return _step_response(
             "TINT_TYPE", [_tint_type_option(fp) for fp in siblings], path,
             step_index=step_index, total_steps=total_steps)
@@ -471,7 +492,7 @@ class LensWorkflowNextView(APIView):
         index_options = list(
             LensIndexOption.objects.filter(
                 lens_type=function_path.lens_type, is_active=True
-            ).order_by("sort_order", "id")
+            ).order_by("price", "sort_order", "id")
         )
 
         rule = _rx_recommendation_rule(function_path.lens_type, prescription_id)
@@ -516,7 +537,7 @@ class LensWorkflowNextView(APIView):
         # choice — see _after_coating for the corresponding server-side
         # rejection if one is submitted as if it were a selection.
         coatings = LensCoating.objects.filter(
-            is_active=True).order_by("sort_order", "id")
+            is_active=True).order_by("price", "sort_order", "id")
         return _step_response(
             "COATING", [_coating_option_dict(c) for c in coatings], path,
             step_index=step_index, total_steps=total_steps)
