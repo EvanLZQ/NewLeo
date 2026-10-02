@@ -187,6 +187,10 @@ class ProductTag(models.Model):
         ('Life Style', 'Life Style'),
         ('Collection', 'Collection'),
         ('Promotion', 'Promotion'),
+        # What a frame is *for* — drives the site's Sunglasses/Driving/
+        # Reading/Progressive/Photochromic entry points (header nav, home
+        # categories). See Product/views.py filterProduct's Usage handling.
+        ('Usage', 'Usage'),
         ('Other', 'Other')
     ]
 

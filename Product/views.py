@@ -157,93 +157,66 @@ def filterProduct(request):
         except (json.JSONDecodeError, ValueError):
             return Response({'error': 'Invalid filter format'}, status=400)
 
-        combined_q_objects = Q()
-
+        # Every dimension below is applied as its OWN .filter() call, not
+        # folded into one big combined Q. Tag-based dimensions (Shape,
+        # Material, Usage, Occasion, Collection) all match through the same
+        # multi-valued productTag relation — within a single .filter()
+        # call Django requires every condition on a multi-valued relation
+        # to be satisfied by the *same* related row, so one combined Q
+        # asked for a single tag that is simultaneously, say, "Round" and
+        # "Metal(Alloy)" — impossible, so any two tag facets together
+        # always returned 0 results (verified live: Shape=Round 7,
+        # Material=Metal(Alloy) 9, both together 0). Separate .filter()
+        # calls each get their own join, so facets AND across dimensions
+        # (and OR within one dimension, via __in) the way the UI implies.
         colors = filter_dict.get('Color', [])
         if colors:
-            color_q_objects = Q()
-            for color in colors:
-                color_q_objects |= Q(productInstance__color_display_name=color)
-            combined_q_objects &= color_q_objects
+            products = products.filter(productInstance__color_display_name__in=colors)
 
         genders = filter_dict.get('Gender', [])
         if genders:
-            gender_q_objects = Q()
-            for gender in genders:
-                gender_q_objects |= Q(gender=gender)
-            combined_q_objects &= gender_q_objects
+            products = products.filter(gender__in=genders)
 
         sizes = filter_dict.get('Size', [])
         if sizes:
-            size_q_objects = Q()
-            for size in sizes:
-                size_q_objects |= Q(letter_size=size)
-            combined_q_objects &= size_q_objects
+            products = products.filter(letter_size__in=sizes)
 
         rims = filter_dict.get('Rim', [])
         if rims:
-            rim_q_objects = Q()
-            for rim in rims:
-                rim_q_objects |= Q(frame_style=rim)
-            combined_q_objects &= rim_q_objects
+            products = products.filter(frame_style__in=rims)
 
         search = filter_dict.get('Search', None)
         if search:
-            search_q_objects = Q()
-            search_q_objects |= Q(name__icontains=search)
-            search_q_objects |= Q(model_number__icontains=search)
-            combined_q_objects &= search_q_objects
+            products = products.filter(
+                Q(name__icontains=search) | Q(model_number__icontains=search))
 
-        shapes = filter_dict.get('Shape', [])
-        if shapes:
-            shape_q_objects = Q()
-            for shape in shapes:
-                shape_q_objects |= Q(productTag__name=shape)
-            combined_q_objects &= shape_q_objects
+        for key in ('Shape', 'Material', 'Occasion', 'Collection'):
+            values = filter_dict.get(key, [])
+            if values:
+                products = products.filter(productTag__name__in=values)
 
-        materials = filter_dict.get('Material', [])
-        if materials:
-            material_q_objects = Q()
-            for material in materials:
-                material_q_objects |= Q(productTag__name=material)
-            combined_q_objects &= material_q_objects
-
+        # Usage (Sunglasses/Driving/Reading/Progressive/Photochromic/...)
+        # is matched against tags in the "Usage" category only — a
+        # same-named tag in another category (e.g. a Collection called
+        # "Reading") must not make a frame show up under Usage. Both
+        # conditions sit in one .filter() on purpose here: they have to
+        # hold on the same tag row.
         usages = filter_dict.get('Usage', [])
         if usages:
-            usage_q_objects = Q()
-            for usage in usages:
-                usage_q_objects |= Q(productTag__name=usage)
-            combined_q_objects &= usage_q_objects
+            products = products.filter(
+                productTag__category='Usage', productTag__name__in=usages)
 
-        occasions = filter_dict.get('Occasion', [])
-        if occasions:
-            occasion_q_objects = Q()
-            for occasion in occasions:
-                occasion_q_objects |= Q(productTag__name=occasion)
-            combined_q_objects &= occasion_q_objects
-
-        collections = filter_dict.get('Collection', [])
-        if collections:
-            collection_q_objects = Q()
-            for collection in collections:
-                collection_q_objects |= Q(productTag__name=collection)
-            combined_q_objects &= collection_q_objects
-
-        # Matches by ProductPromotion.slug — e.g. "buy_one_get_one_free" for
-        # the footer's "Buy One Get One" link. Separate from Collection
-        # since promotions aren't ProductTag rows; they're their own model,
-        # attached to ProductInstance (not ProductInfo) via a M2M.
+        # Matches by ProductPromotion.slug — e.g. "buy_one_get_one_free".
+        # Separate from tags: promotions are their own model, attached to
+        # ProductInstance (not ProductInfo) via a M2M.
         promotions = filter_dict.get('Promotion', [])
         if promotions:
-            promotion_q_objects = Q()
-            for promo_slug in promotions:
-                promotion_q_objects |= Q(
-                    productInstance__productPromotion__slug=promo_slug,
-                    productInstance__productPromotion__is_active=True,
-                )
-            combined_q_objects &= promotion_q_objects
+            products = products.filter(
+                productInstance__productPromotion__slug__in=promotions,
+                productInstance__productPromotion__is_active=True,
+            )
 
-        products = products.filter(combined_q_objects).distinct()
+        products = products.distinct()
 
     # Pagination
     number_of_page = request.GET.get('number', 30)
