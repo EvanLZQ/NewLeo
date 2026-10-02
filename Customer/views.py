@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated
 from General.models import Coupon, Address
-from General.serializer import CouponSerializer, ImageSerializer, AddressSerializer
+from General.serializer import CustomerCouponSerializer, ImageSerializer, AddressSerializer
 from rest_framework.parsers import MultiPartParser
 from django.conf import settings
 from Prescription.models import PrescriptionInfo
@@ -364,9 +364,21 @@ def getCustomerPrescription(request):
 @authentication_classes([SessionAuthentication])
 @permission_classes([IsAuthenticated])
 def getCustomerCoupon(request):
+    from django.db.models import Q
+    from django.utils import timezone
+
     user = request.user
-    coupon = Coupon.objects.filter(online=True, valid_customer=user)
-    serializer = CouponSerializer(coupon, many=True)
+    # valid_customer empty means "valid for every customer" (same rule
+    # Order/service/order_service.py's is_coupon_applicable uses) — a
+    # plain `valid_customer=user` filter would only ever show coupons
+    # this customer was individually added to and silently hide every
+    # general/sitewide promo code, which is most of them.
+    coupon = Coupon.objects.filter(online=True).filter(
+        Q(valid_customer=user) | Q(valid_customer__isnull=True)
+    ).filter(
+        Q(expire_date__isnull=True) | Q(expire_date__gte=timezone.now().date())
+    ).distinct()
+    serializer = CustomerCouponSerializer(coupon, many=True)
     return Response(serializer.data)
 
 

@@ -11,6 +11,7 @@ urlpatterns = [
     path("get_store_credit_history", views.getCustomerStoreCreditActivity,
          name="get_store_credit_history"),
     path("upload_avatar", views.uploadCustomerAvatar, name="upload_avatar"),
+    path("get_coupons", views.getCustomerCoupon, name="get_customer_coupons"),
 
     # Below is for shopping cart
     path("get_user_shopping_cart/<int:cart_id>", views.getUserShoppingCart,

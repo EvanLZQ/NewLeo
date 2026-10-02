@@ -229,6 +229,20 @@ def filterProduct(request):
                 collection_q_objects |= Q(productTag__name=collection)
             combined_q_objects &= collection_q_objects
 
+        # Matches by ProductPromotion.slug — e.g. "buy_one_get_one_free" for
+        # the footer's "Buy One Get One" link. Separate from Collection
+        # since promotions aren't ProductTag rows; they're their own model,
+        # attached to ProductInstance (not ProductInfo) via a M2M.
+        promotions = filter_dict.get('Promotion', [])
+        if promotions:
+            promotion_q_objects = Q()
+            for promo_slug in promotions:
+                promotion_q_objects |= Q(
+                    productInstance__productPromotion__slug=promo_slug,
+                    productInstance__productPromotion__is_active=True,
+                )
+            combined_q_objects &= promotion_q_objects
+
         products = products.filter(combined_q_objects).distinct()
 
     # Pagination

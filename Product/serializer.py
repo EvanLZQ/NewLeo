@@ -16,6 +16,7 @@ class ProductReviewSerializer(serializers.ModelSerializer):
             'content',
             'online',
             'rating',
+            'created_at',
         ]
 
 
@@ -176,13 +177,24 @@ class ProductTagSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     productInstance = serializers.SerializerMethodField()
-    productReview = ProductReviewSerializer(many=True)
+    productReview = serializers.SerializerMethodField()
     productTag = ProductTagSerializer(many=True)
 
     def get_productInstance(self, obj):
         instances = obj.productInstance.filter(online=True)
         serializer = ProductInstanceSerializer(instances, many=True)
         return serializer.data
+
+    def get_productReview(self, obj):
+        # Was a plain ProductReviewSerializer(many=True) field — serialized
+        # every related row with no filter, which included reviews still
+        # pending moderation (online=False). Nothing on the frontend
+        # renders this today (the component that would is orphaned), but
+        # the API itself was already handing out unapproved review text
+        # to anyone, same bug class as productInstance's online filter
+        # above (which this mirrors).
+        reviews = obj.productReview.filter(online=True)
+        return ProductReviewSerializer(reviews, many=True).data
 
     def to_representation(self, obj):
         rep = super().to_representation(obj)
@@ -237,13 +249,18 @@ class ProductSerializer(serializers.ModelSerializer):
 
 class TargetInstanceSerializer(serializers.ModelSerializer):
     productInstance = serializers.SerializerMethodField()
-    productReview = ProductReviewSerializer(many=True)
+    productReview = serializers.SerializerMethodField()
 
     def get_productInstance(self, obj):
         sku = self.context['sku']
         instances = obj.productInstance.filter(online=True, sku=sku).first()
         serializer = ProductInstanceSerializer(instances, many=False)
         return [serializer.data]
+
+    def get_productReview(self, obj):
+        # See ProductSerializer.get_productReview — same online=True fix.
+        reviews = obj.productReview.filter(online=True)
+        return ProductReviewSerializer(reviews, many=True).data
 
     def to_representation(self, obj):
         rep = super().to_representation(obj)
