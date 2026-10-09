@@ -89,6 +89,25 @@ class OrderImage(models.Model):
         verbose_name_plural = 'Order Images'
 
 
+class OrderStatusEvent(models.Model):
+    """
+    One row each time an order's order_status is set (including its first
+    value at creation) — written by Order/signals.py. Feeds the dated
+    progress timeline on the public /order_tracking page; OrderUpdates
+    (below) has no timestamp, so it can't. Orders created before this
+    table existed simply have no events (their timeline still shows the
+    right stage, just without dates).
+    """
+    order = models.ForeignKey(
+        'Order.OrderInfo', on_delete=models.CASCADE, related_name='status_events')
+    status = models.CharField(max_length=50)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'OrderStatusEvent'
+        ordering = ['created_at', 'id']
+
+
 class OrderUpdates(models.Model):
     order = models.ForeignKey(
         'Order.OrderInfo', on_delete=models.CASCADE)

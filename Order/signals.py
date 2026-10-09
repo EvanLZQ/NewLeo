@@ -3,7 +3,7 @@ import logging
 from django.db.models.signals import pre_save, post_save, m2m_changed
 from django.dispatch import receiver
 
-from .models import OrderInfo, CompleteSet
+from .models import OrderInfo, OrderStatusEvent, CompleteSet
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,8 @@ def order_updated_handler(sender, instance, created, **kwargs):
     because the confirmation email is sent separately in confirmPayment view.
     """
     if created:
+        # First status of a new order — the anchor for its tracking timeline.
+        OrderStatusEvent.objects.create(order=instance, status=instance.order_status)
         return
 
     old_status   = getattr(instance, '_pre_save_status',   None)
@@ -43,6 +45,9 @@ def order_updated_handler(sender, instance, created, **kwargs):
 
     status_changed   = old_status   != instance.order_status
     tracking_changed = old_tracking != instance.tracking_number
+
+    if status_changed:
+        OrderStatusEvent.objects.create(order=instance, status=instance.order_status)
 
     if not (status_changed or tracking_changed):
         return

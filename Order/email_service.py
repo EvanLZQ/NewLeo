@@ -10,7 +10,7 @@ STATUS_SUBJECTS = {
     'PROCESSING': 'Your Eyelovewear order is being processed',
     'SHIPPED':    'Your Eyelovewear order has shipped! 🚚',
     'DELIVERED':  'Your Eyelovewear order has been delivered! 🎉',
-    'CANCELLED':  'Your Eyelovewear order has been cancelled',
+    'CANCELED':   'Your Eyelovewear order has been cancelled',
     'COMPLETE':   'Your Eyelovewear order is complete',
     'REFUND':     'Refund update for your Eyelovewear order',
 }
@@ -47,7 +47,7 @@ def send_order_confirmation(order) -> None:
         f'Thank you for your order!\n\n'
         f'Order Number: {order.order_number}\n'
         f'Total: ${order.total_amount}\n\n'
-        f'View your order at https://www.eyelovewear.com/user/order'
+        f'Track your order at https://www.eyelovewear.com/order_tracking?order_number={order.order_number}'
     )
 
     msg = EmailMultiAlternatives(
@@ -87,7 +87,7 @@ def send_order_status_update(order) -> None:
     text_content = (
         f'Your order {order.order_number} has been updated.\n\n'
         f'Status: {order.order_status}\n'
-        f'View details at https://www.eyelovewear.com/user/order'
+        f'Track your order at https://www.eyelovewear.com/order_tracking?order_number={order.order_number}'
     )
 
     msg = EmailMultiAlternatives(

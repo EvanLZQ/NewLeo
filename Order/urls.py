@@ -25,4 +25,5 @@ urlpatterns = [
     path('confirm_payment_guest', views.confirmPaymentGuest, name='confirm_payment_guest'),
     path('cancel_pending_guest/<int:order_id>', views.cancelPendingOrderGuest, name='cancel_pending_order_guest'),
     path('guest_lookup', views.guestOrderLookup, name='guest_order_lookup'),
+    path('track', views.trackOrder, name='track_order'),
 ]

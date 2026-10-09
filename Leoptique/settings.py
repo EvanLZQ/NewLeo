@@ -342,3 +342,16 @@ COOKIE_DOMAIN = os.environ.get('COOKIE_DOMAIN', '.eyelovewear.com')
 # panel to build the two iframe URLs (see Blog/admin.py, templates/admin/
 # Blog/change_form.html). Not used anywhere requests are actually routed.
 FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'https://eyelovewear.com')
+
+# Rate limiting (login, password reset, guest lookup, order tracking) is
+# built on django.core.cache. With no CACHES configured Django uses a
+# per-process in-memory cache, so with several gunicorn workers each one
+# kept its own counter and the limits leaked. A database cache is shared by
+# all workers with no new service; its table is created by Order migration
+# 0023 (see create_cache_table there).
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'django_cache_table',
+    }
+}

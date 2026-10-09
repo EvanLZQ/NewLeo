@@ -1156,3 +1156,114 @@ def guestOrderLookup(request):
         'created_at':     order.created_at.isoformat(),
         'shipping_company': order.shipping_company,
     })
+
+
+# ── Public order tracking (guests and signed-in customers alike) ─────────────
+
+def _client_ip(request):
+    """Real client IP: first hop of X-Forwarded-For when a reverse proxy set
+    it, else REMOTE_ADDR. Behind nginx REMOTE_ADDR alone is the proxy's own
+    address, which would put every visitor in one shared rate-limit bucket."""
+    forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    if forwarded:
+        return forwarded.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', 'unknown')
+
+
+def _rate_limited(key, limit, window_seconds):
+    """Fixed-window counter on the shared cache; True once `limit` hits are
+    reached inside the window."""
+    from django.core.cache import cache
+    cache.add(key, 0, window_seconds)
+    try:
+        return cache.incr(key) > limit
+    except ValueError:  # key expired between add() and incr()
+        cache.set(key, 1, window_seconds)
+        return False
+
+
+@api_view(['POST'])
+@authentication_classes([])   # public lookup: ignore any login session (and its CSRF check)
+@permission_classes([AllowAny])
+def trackOrder(request):
+    """
+    Order number + the email used on the order -> a customer-safe view of
+    where it is. Works for guest and registered customers alike (proof of
+    ownership is knowing both values). POST, not GET, so the email never
+    lands in a URL or access log.
+    """
+    from .service.tracking import (
+        STATUS_LABELS, build_timeline, carrier_tracking_url)
+
+    order_number = str(request.data.get('order_number', '')).strip()
+    email = str(request.data.get('email', '')).strip()
+    if not order_number or not email:
+        return Response({'error': 'Order number and email are required.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    ip = _client_ip(request)
+    if (_rate_limited(f'rl:track:ip:{ip}', 15, 300)
+            or _rate_limited(f'rl:track:order:{ip}:{order_number.lower()}', 10, 900)):
+        return Response({'error': 'Too many attempts. Please try again in a few minutes.'},
+                        status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+    # Deliberately one generic "not found" for every miss (wrong number,
+    # wrong email, or an order that was never paid for) — no hint about
+    # which part didn't match.
+    order = (
+        OrderInfo.objects
+        .filter(order_number__iexact=order_number, email__iexact=email)
+        .exclude(payment_status__in=['UNPAID', 'NULL'])
+        .exclude(order_status='NULL')
+        .select_related('address')
+        .order_by('-created_at')
+        .first()
+    )
+    if order is None:
+        return Response({'error': 'We could not find an order matching those details.'},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    sets = (
+        order.completeset_set
+        .select_related('frame', 'frame__product', 'lens_type', 'function_path',
+                        'tint_type', 'index_option', 'color_option', 'reader_strength')
+        .prefetch_related('coatings', 'frame__productImage')
+    )
+    items = []
+    for cs in sets:
+        carousel = [i for i in cs.frame.productImage.all()
+                    if i.image_type == 'carousel' and i.image]
+        items.append({
+            'name': cs.frame.product.name if cs.frame.product else cs.frame.sku,
+            'color': cs.frame.color_display_name,
+            'image': f'{settings.MEDIA_BASE_URL}{carousel[0].image.url}' if carousel else None,
+            'lens_type': cs.lens_type.label if cs.lens_type else None,
+            'options': [row['label'] for row in get_complete_set_line_items(cs)],
+        })
+
+    timeline = build_timeline(
+        order.order_status, order.created_at,
+        order.status_events.values_list('status', 'created_at'))
+    for step in timeline['steps']:
+        step['date'] = step['date'].isoformat() if step['date'] else None
+    if timeline['terminal_date']:
+        timeline['terminal_date'] = timeline['terminal_date'].isoformat()
+
+    destination = ''
+    if order.address:
+        destination = ', '.join(
+            part for part in (order.address.city, order.address.country) if part)
+
+    return Response({
+        'order_number': order.order_number,
+        'status': order.order_status,
+        'status_label': STATUS_LABELS.get(order.order_status, order.order_status.title()),
+        'placed_at': order.created_at.isoformat(),
+        'carrier': order.shipping_company,
+        'tracking_number': order.tracking_number,
+        'tracking_url': carrier_tracking_url(order.shipping_company, order.tracking_number),
+        'destination': destination,
+        'timeline': timeline,
+        'items': items,
+    })
+
