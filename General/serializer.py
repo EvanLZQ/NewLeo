@@ -58,7 +58,12 @@ class CustomerCouponSerializer(serializers.ModelSerializer):
             ('Order', obj.order_discount_type, obj.order_discount_amount),
         ]:
             if amount and amount > 0:
-                value = f"{amount}% off" if dtype == "Percentage" else f"${amount} off"
+                # Decimal("99.00") would print as "99.00% off" — trim the
+                # trailing zeros for percentages ("99", "12.5").
+                if dtype == "Percentage":
+                    value = f"{amount.normalize():f}% off"
+                else:
+                    value = f"${amount:.2f} off"
                 parts.append({"label": label, "value": value})
         return parts
 
