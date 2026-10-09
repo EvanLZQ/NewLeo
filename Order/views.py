@@ -1,6 +1,7 @@
 import uuid
 import datetime
 import logging
+from Leoptique.client_ip import get_client_ip
 from decimal import Decimal, InvalidOperation
 
 import requests
@@ -1135,7 +1136,7 @@ def guestOrderLookup(request):
                         status=status.HTTP_400_BAD_REQUEST)
 
     # Rate limit by IP
-    ip = request.META.get('REMOTE_ADDR', 'unknown')
+    ip = get_client_ip(request)
     rl_key = f'rl:guest_lookup:{ip}'
     count = cache.get(rl_key, 0)
     if count >= 10:
@@ -1159,24 +1160,6 @@ def guestOrderLookup(request):
 
 
 # ── Public order tracking (guests and signed-in customers alike) ─────────────
-
-def _client_ip(request):
-    """Real client IP for rate limiting.
-
-    nginx *appends* the address it actually saw to any X-Forwarded-For the
-    client sent ("<whatever the client claimed>, <real address>"), so the
-    FIRST entry is attacker-controlled — rotating it gave every request its
-    own rate-limit bucket (verified against production). The LAST entry is
-    the one our own proxy added, so that's the one to trust. This assumes
-    exactly one proxy (nginx) in front of Django; if a CDN is ever put in
-    front, this needs revisiting. Falls back to REMOTE_ADDR when there is no
-    header (direct access, local dev).
-    """
-    forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
-    if forwarded:
-        return forwarded.split(',')[-1].strip()
-    return request.META.get('REMOTE_ADDR', 'unknown')
-
 
 def _rate_limited(key, limit, window_seconds):
     """Fixed-window counter on the shared cache; True once `limit` hits are
@@ -1209,7 +1192,7 @@ def trackOrder(request):
         return Response({'error': 'Order number and email are required.'},
                         status=status.HTTP_400_BAD_REQUEST)
 
-    ip = _client_ip(request)
+    ip = get_client_ip(request)
     if (_rate_limited(f'rl:track:ip:{ip}', 15, 300)
             or _rate_limited(f'rl:track:order:{ip}:{order_number.lower()}', 10, 900)):
         return Response({'error': 'Too many attempts. Please try again in a few minutes.'},

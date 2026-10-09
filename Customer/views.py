@@ -28,6 +28,7 @@ import uuid
 from django.core.cache import cache
 from Order.serializer import OrderSerializer
 from Order.models import OrderInfo
+from Leoptique.client_ip import get_client_ip
 # from django.contrib.auth.backends import ModelBackend
 
 # Create your views here.
@@ -147,7 +148,7 @@ def updateShoppingCart(request, cart_id):
 
 @api_view(['POST'])
 def login_view(request):
-    ip = request.META.get('REMOTE_ADDR', 'unknown')
+    ip = get_client_ip(request)
     if _is_rate_limited(f'rl:login:{ip}'):
         return RATE_LIMIT_RESPONSE
 
