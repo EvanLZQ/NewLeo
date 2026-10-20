@@ -15,7 +15,6 @@ gunicorn
 Pillow
 django-tinymce
 bleach[css]
-paypalrestsdk
 requests
 django-anymail[mailgun]
 openpyxl

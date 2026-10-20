@@ -15,18 +15,11 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authentication import SessionAuthentication
 from rest_framework import status
-import paypalrestsdk
 
 from Leoptique.authentication import AccessTokenAuthentication
 from .models import *
 from .serializer import CompleteSetSerializer, OrderSerializer, CompleteSetObjectSerializer
 from .service.order_service import OrderService, get_complete_set_line_items
-
-paypalrestsdk.configure({
-    "mode": settings.PAYPAL_MODE,
-    "client_id": settings.PAYPAL_CLIENT_ID,
-    "client_secret": settings.PAYPAL_CLIENT_SECRET,
-})
 
 AUTH_CLASSES = [SessionAuthentication, AccessTokenAuthentication]
 
@@ -137,9 +130,9 @@ def _preview_coupon_discount(coupon, customer, complete_sets):
 
 
 # ── PayPal server-side verification ─────────────────────────────────────────
-# `paypalrestsdk` (imported above) only speaks PayPal's legacy Payments v1
+# The legacy `paypalrestsdk` SDK only speaks PayPal's Payments v1
 # API. The frontend's PayPal JS SDK (PayPalButton.tsx) creates/captures
-# orders via the newer Orders v2 API, which paypalrestsdk doesn't cover — so
+# orders via the newer Orders v2 API, which that SDK doesn't cover — so
 # verification here talks to Orders v2 directly over REST instead of trying
 # to reuse that SDK.
 
@@ -750,36 +743,6 @@ def cancelPendingOrder(request, order_id):
     _cancel_orders(OrderInfo.objects.filter(pk=order.pk))
 
     return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-# ── Legacy PayPal View (unwired — kept for reference) ─────────────────────────
-def payment(request):
-
-    payment = paypalrestsdk.Payment({
-        "intent": "sale",
-        "payer": {
-            "payment_method": "paypal",
-        },
-        "redirect_urls": {
-            "return_url": "https://admin.eyelovewear.com/payment/execute/",
-            "cancel_url": "https://admin.eyelovewear.com/payment/canceled/",
-        },
-        "transactions": [{
-            "amount": {
-                "total": "10.00",
-                "currency": "USD"
-            },
-            "description": "Testing PayPal payment transaction."
-        }]
-    })
-
-    if payment.create():
-        for link in payment.links:
-            if link.rel == "approval_url":
-                approval_url = str(link.href)
-                return redirect(approval_url)
-    else:
-        return JsonResponse({'error': 'payment not created'})
 
 
 # ── Guest checkout helpers ────────────────────────────────────────────────────

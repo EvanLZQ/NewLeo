@@ -342,6 +342,8 @@ COOKIE_DOMAIN = os.environ.get('COOKIE_DOMAIN', '.eyelovewear.com')
 # panel to build the two iframe URLs (see Blog/admin.py, templates/admin/
 # Blog/change_form.html). Not used anywhere requests are actually routed.
 FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'https://eyelovewear.com')
+# Canonical public address used in sitemap.xml (General/views.py sitemap_xml).
+SITE_BASE_URL = os.environ.get('SITE_BASE_URL', 'https://www.eyelovewear.com')
 
 # Rate limiting (login, password reset, guest lookup, order tracking) is
 # built on django.core.cache. With no CACHES configured Django uses a

@@ -85,7 +85,7 @@ class OrderService:
 
         if OrderService.is_coupon_applicable(order):
             if order.coupon_used.applied_product.exists():
-                if order.coupon_used.applied_product.filter(SKU=complete_set.frame.SKU).exists():
+                if order.coupon_used.applied_product.filter(sku=complete_set.frame.sku).exists():
                     if order.coupon_used.frame_discount_type == 'Percentage':
                         frame_discount = frame_price * \
                             (order.coupon_used.frame_discount_amount / 100)
