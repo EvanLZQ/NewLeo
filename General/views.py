@@ -88,6 +88,13 @@ SITEMAP_STATIC_PATHS = [
     ('/our_story', 'monthly', '0.4'),
     ('/ourLens', 'monthly', '0.4'),
     ('/prescription_guide', 'monthly', '0.5'),
+    ('/face-shape-quiz', 'monthly', '0.7'),
+    ('/face-shape/oval', 'monthly', '0.7'),
+    ('/face-shape/round', 'monthly', '0.7'),
+    ('/face-shape/square', 'monthly', '0.7'),
+    ('/face-shape/heart', 'monthly', '0.7'),
+    ('/face-shape/diamond', 'monthly', '0.7'),
+    ('/face-shape/oblong', 'monthly', '0.7'),
 ]
 
 

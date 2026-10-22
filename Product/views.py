@@ -4,6 +4,7 @@ from rest_framework.decorators import api_view
 from django.db.models import Q
 from django.core.paginator import Paginator
 import logging
+import random
 
 from .models import *
 from .serializer import *
@@ -57,10 +58,6 @@ def getPageProducts(request):
     if exclude:
         products = products.exclude(model_number=exclude)
 
-    # 按需筛选标签
-    if tag:
-        products = products.filter(productTag__name=tag)
-
     # 获取分页大小（默认 8 个产品）
     number_of_page = request.GET.get('number', 8)
     try:
@@ -69,6 +66,30 @@ def getPageProducts(request):
             number_of_page = 8
     except ValueError:
         number_of_page = 8
+
+    # Home-page shelves: ?ordering=newest (most recently added first) or
+    # ?ordering=random. With ?fallback=random, a tag nobody has been
+    # tagged with yet (e.g. "best_sellers" before staff add it in admin)
+    # shows a random pick of the catalog instead of an empty shelf.
+    ordering = request.GET.get('ordering')
+    fallback = request.GET.get('fallback')
+
+    # 按需筛选标签
+    if tag:
+        tagged = products.filter(productTag__name=tag)
+        if fallback == 'random' and not tagged.exists():
+            ordering = 'random'
+        else:
+            products = tagged
+
+    if ordering == 'newest':
+        products = products.order_by('-created_at', '-id')
+    elif ordering == 'random':
+        # Picked in Python: SELECT DISTINCT can't ORDER BY RANDOM() on
+        # PostgreSQL, and a shelf is a handful of rows anyway.
+        ids = list(products.values_list('id', flat=True))
+        picked = random.sample(ids, min(len(ids), number_of_page))
+        products = products.filter(id__in=picked)
 
     # 创建分页器
     paginator = Paginator(products, number_of_page)
