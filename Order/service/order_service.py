@@ -11,6 +11,19 @@ from django.apps import apps
 PRISM_SURCHARGE = Decimal("27.00")
 
 
+# Shipping. Priority Shipping (7-15 business days) is free for orders of at
+# least FREE_SHIPPING_THRESHOLD (USD, the order's sub_total) with fewer than
+# FREE_SHIPPING_MAX_PAIRS pairs of glasses; UPS (Canada only, 5-10 business
+# days) is never free. Times exclude lens processing (usually another 3-7
+# business days). Keep UserSite/src/config/helper.ts shippingOptions in step.
+SHIPPING_PRIORITY = "Priority Shipping"
+SHIPPING_UPS = "UPS"
+PRIORITY_SHIPPING_COST = Decimal("8.95")
+UPS_SHIPPING_COST = Decimal("24.95")
+FREE_SHIPPING_THRESHOLD = Decimal("59")
+FREE_SHIPPING_MAX_PAIRS = 3
+
+
 def has_prism(complete_set):
     """True when this CompleteSet's attached prescription has Prism values set."""
     return bool(
@@ -130,36 +143,33 @@ class OrderService:
         return total
 
     @staticmethod
-    def calculate_shipping_cost(country, sub_total, shipping_method):
-        # Return Decimal values so they are compatible with DecimalField arithmetic
-        # (mixing float + Decimal raises TypeError in Python 3).
-        if country == "United States":
-            if sub_total < 59:
-                primary_express, ups = Decimal('8.95'), Decimal('19.95')
-            elif sub_total <= 100:
-                primary_express, ups = Decimal('0'), Decimal('14.95')
-            elif sub_total <= 150:
-                primary_express, ups = Decimal('0'), Decimal('9.95')
-            elif sub_total <= 200:
-                primary_express, ups = Decimal('0'), Decimal('4.95')
-            else:
-                primary_express, ups = Decimal('0'), Decimal('0')
-        else:
-            if sub_total < 59:
-                xpresspost, ups = Decimal('13.95'), Decimal('24.95')
-            elif sub_total <= 100:
-                xpresspost, ups = Decimal('0'), Decimal('19.95')
-            elif sub_total <= 150:
-                xpresspost, ups = Decimal('0'), Decimal('14.95')
-            elif sub_total <= 200:
-                xpresspost, ups = Decimal('0'), Decimal('9.95')
-            else:
-                xpresspost, ups = Decimal('0'), Decimal('0')
+    def normalize_shipping_method(country, shipping_method):
+        """
+        The two shipping options a customer can pick:
+          * "Priority Shipping" (everyone)
+          * "UPS" (Canada only)
+        Anything else a client sends, including the names this checkout used
+        before ("Primary express", "Xpresspost"), becomes Priority Shipping,
+        and UPS requested for a US address is Priority Shipping too.
+        """
+        if country != "United States" and shipping_method == SHIPPING_UPS:
+            return SHIPPING_UPS
+        return SHIPPING_PRIORITY
 
-        if country == "United States":
-            return primary_express if shipping_method == "Primary express" else ups
-        else:
-            return xpresspost if shipping_method == "Xpresspost" else ups
+    @staticmethod
+    def calculate_shipping_cost(country, sub_total, shipping_method, pairs=0):
+        """
+        Priority Shipping: 8.95, free from FREE_SHIPPING_THRESHOLD of sub_total
+        as long as the order has fewer than FREE_SHIPPING_MAX_PAIRS pairs of
+        glasses. UPS (Canada only): flat 24.95, never free. Returns Decimal.
+        """
+        method = OrderService.normalize_shipping_method(country, shipping_method)
+        if method == SHIPPING_UPS:
+            return UPS_SHIPPING_COST
+        if (Decimal(str(sub_total)) >= FREE_SHIPPING_THRESHOLD
+                and pairs < FREE_SHIPPING_MAX_PAIRS):
+            return Decimal('0')
+        return PRIORITY_SHIPPING_COST
 
     @staticmethod
     def calculate_customs_fee(country, sub_total):
@@ -190,10 +200,13 @@ class OrderService:
         # Calculate shipping cost (and customs fee) if address is provided
         if order.address:
             country = order.address.country
-            # Assuming shipping_company is used to store the shipping method
-            shipping_method = order.shipping_company
+            # shipping_company holds the method the customer picked until
+            # staff overwrite it with the real carrier when the order ships
+            # (anything but "UPS" prices as Priority Shipping).
+            CompleteSet = apps.get_model('Order', 'CompleteSet')
+            pairs = CompleteSet.objects.filter(order=order).count()
             shipping_cost = OrderService.calculate_shipping_cost(
-                country, order.sub_total, shipping_method)
+                country, order.sub_total, order.shipping_company, pairs)
             shipping_discount = OrderService.calculate_shipping_discount(
                 order, shipping_cost)
             order.shipping_cost = max(0, shipping_cost - shipping_discount)

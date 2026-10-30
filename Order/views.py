@@ -443,7 +443,7 @@ def createPendingOrder(request):
     Request body:
         complete_set_ids  – list[int]   IDs of CompleteSet rows to attach
         address_id        – int         FK to General.Address
-        shipping_method   – str         e.g. "Primary express" / "Xpresspost" / "UPS"
+        shipping_method   – str         "Priority Shipping" or "UPS" (UPS: Canada only)
         country           – str         e.g. "United States"  (used for shipping calc)
         email             – str         customer e-mail for the order record
         coupon_code       – str         optional — validated for real here (see
@@ -570,7 +570,8 @@ def createPendingOrder(request):
                 payment_status='UNPAID',
                 payment_type='paypal',
                 address=order_address,
-                shipping_company=shipping_method,
+                shipping_company=OrderService.normalize_shipping_method(
+                    country, shipping_method),
                 coupon_used=coupon,
                 comment='',
                 refound_status='',
@@ -594,6 +595,7 @@ def createPendingOrder(request):
         order.sub_total     = OrderService.calculate_sub_total(order)
         order.shipping_cost = OrderService.calculate_shipping_cost(
             country, float(order.sub_total), shipping_method,
+            CompleteSet.objects.filter(order=order).count(),
         )
         shipping_discount   = OrderService.calculate_shipping_discount(order, order.shipping_cost)
         order.shipping_cost = max(Decimal('0'), order.shipping_cost - shipping_discount)
@@ -899,7 +901,8 @@ def createPendingOrderGuest(request):
                 payment_status='UNPAID',
                 payment_type='paypal',
                 address=addr,
-                shipping_company=shipping_method,
+                shipping_company=OrderService.normalize_shipping_method(
+                    country, shipping_method),
                 coupon_used=coupon,
                 comment='',
                 refound_status='',
@@ -919,7 +922,8 @@ def createPendingOrderGuest(request):
         # calculate_shipping_discount unconditionally is safe.
         order.sub_total = OrderService.calculate_sub_total(order)
         order.shipping_cost = OrderService.calculate_shipping_cost(
-            country, float(order.sub_total), shipping_method)
+            country, float(order.sub_total), shipping_method,
+            CompleteSet.objects.filter(order=order).count())
         shipping_discount = OrderService.calculate_shipping_discount(order, order.shipping_cost)
         order.shipping_cost = max(Decimal('0'), order.shipping_cost - shipping_discount)
         order.customs_fee = OrderService.calculate_customs_fee(country, order.sub_total)
