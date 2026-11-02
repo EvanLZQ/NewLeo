@@ -1,4 +1,11 @@
-from django.contrib import admin
+import io
+
+from django.contrib import admin, messages
+from django.db.models import Count, Max, Min
+from django.http import HttpResponse
+from django.shortcuts import redirect, render
+from django.urls import path, reverse
+from django.utils import timezone
 from django.utils.html import format_html
 
 from .models import (
@@ -9,7 +16,10 @@ from .models import (
     LensCoating,
     LensIndexRecommendationRule,
     LensReaderStrength,
+    LensPriceBlock,
+    LensPriceImport,
 )
+from . import price_table
 
 
 # ---------- Inlines ----------
@@ -120,3 +130,156 @@ class LensIndexRecommendationRuleAdmin(admin.ModelAdmin):
                      "recommended_index_value", "sort_order", "updated_at")
     list_filter = ("category",)
     ordering = ("category", "sort_order")
+
+
+# ── Lens price table ─────────────────────────────────────────────────────────
+# Read-only here: the table is maintained in Excel. "Export" downloads the
+# current table; "Import" validates an uploaded file in the same layout and,
+# if it has no errors, replaces the prices with it.
+
+MAX_REPORTED = 300   # problems shown per list on the import page
+
+
+@admin.register(LensPriceBlock)
+class LensPriceBlockAdmin(admin.ModelAdmin):
+    change_list_template = "admin/lens_workflow/lenspriceblock/change_list.html"
+    list_display = ("tier", "prescription_type", "lens_type", "coating_main",
+                    "coating_add_on", "lens_index", "material", "priced_cells",
+                    "price_range")
+    list_filter = ("tier", "prescription_type", "lens_type", "lens_index")
+    search_fields = ("prescription_type", "lens_type", "coating_main",
+                     "coating_add_on", "material")
+    ordering = ("tier", "position")
+    list_per_page = 100
+
+    def get_queryset(self, request):
+        return (super().get_queryset(request)
+                .annotate(_n=Count("cells"), _lo=Min("cells__price"), _hi=Max("cells__price")))
+
+    @admin.display(description="Priced powers", ordering="_n")
+    def priced_cells(self, obj):
+        return obj._n
+
+    @admin.display(description="Price range")
+    def price_range(self, obj):
+        if not obj._n:
+            return "no prices"
+        return f"{obj._lo} - {obj._hi}" if obj._lo != obj._hi else f"{obj._lo}"
+
+    # Prices change only through the Excel upload.
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_actions(self, request):
+        return {}   # no site-wide "Export to Excel" action on this table
+
+    def _can_manage(self, request):
+        return request.user.has_perm("lens_workflow.import_price_table")
+
+    def get_urls(self):
+        info = self.model._meta.app_label, self.model._meta.model_name
+        # Drop the site-wide generic "Import from Excel" URL (Leoptique/admin_import.py):
+        # it would update individual blocks from a different layout.
+        urls = [u for u in super().get_urls()
+                if not (getattr(u, "name", "") or "").endswith("_import_xlsx")]
+        custom = [
+            path("export-prices/", self.admin_site.admin_view(self.export_view),
+                 name="%s_%s_export_prices" % info),
+            path("import-prices/", self.admin_site.admin_view(self.import_view),
+                 name="%s_%s_import_prices" % info),
+        ]
+        return custom + urls
+
+    def changelist_view(self, request, extra_context=None):
+        info = self.model._meta.app_label, self.model._meta.model_name
+        extra_context = extra_context or {}
+        extra_context.update(
+            can_manage_prices=self._can_manage(request),
+            export_url=reverse("admin:%s_%s_export_prices" % info),
+            import_url=reverse("admin:%s_%s_import_prices" % info),
+        )
+        return super().changelist_view(request, extra_context)
+
+    def export_view(self, request):
+        if not self._can_manage(request):
+            messages.error(request, "You don't have permission to export the price table.")
+            return redirect("admin:lens_workflow_lenspriceblock_changelist")
+        data = price_table.build_workbook()
+        stamp = timezone.localtime().strftime("%m%d%Y-%H%M")
+        response = HttpResponse(
+            data, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response["Content-Disposition"] = f'attachment; filename="Eyelovewear Lens Pricing {stamp}.xlsx"'
+        return response
+
+    def import_view(self, request):
+        info = self.model._meta.app_label, self.model._meta.model_name
+        changelist = reverse("admin:%s_%s_changelist" % info)
+        if not self._can_manage(request):
+            messages.error(request, "You don't have permission to replace the price table.")
+            return redirect(changelist)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": "Replace the lens price table from Excel",
+            "changelist_url": changelist,
+            "export_url": reverse("admin:%s_%s_export_prices" % info),
+            "recent_imports": LensPriceImport.objects.all()[:10],
+            "max_reported": MAX_REPORTED,
+        }
+        if request.method == "POST":
+            upload = request.FILES.get("xlsx_file")
+            apply_it = request.POST.get("action") == "apply"
+            if upload is None:
+                context["form_error"] = "Choose an .xlsx file first."
+            elif not upload.name.lower().endswith(".xlsx"):
+                context["form_error"] = "The file must be an Excel workbook ending in .xlsx."
+            else:
+                data = upload.read()
+                result = price_table.parse_workbook(io.BytesIO(data))
+                context.update(
+                    filename=upload.name,
+                    errors=result.errors[:MAX_REPORTED],
+                    error_total=len(result.errors),
+                    warnings=result.warnings[:MAX_REPORTED],
+                    warning_total=len(result.warnings),
+                    summary=result.summary(),
+                    checked=True,
+                )
+                if result.ok and apply_it:
+                    price_table.apply_import(
+                        result, user=request.user, filename=upload.name, file_bytes=data)
+                    context["applied"] = True
+                    context["recent_imports"] = LensPriceImport.objects.all()[:10]
+        return render(request, "admin/lens_workflow/price_table_import.html", context)
+
+
+@admin.register(LensPriceImport)
+class LensPriceImportAdmin(admin.ModelAdmin):
+    """History of uploaded price files (download one and upload it again to roll back)."""
+    list_display = ("created_at", "original_filename", "uploaded_by", "warning_count", "download")
+    readonly_fields = ("created_at", "original_filename", "uploaded_by", "warning_count",
+                       "summary", "file")
+    ordering = ("-created_at",)
+
+    @admin.display(description="File")
+    def download(self, obj):
+        return format_html('<a href="{}">download</a>', obj.file.url) if obj.file else "-"
+
+    def get_actions(self, request):
+        return {}
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

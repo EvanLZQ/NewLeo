@@ -1,0 +1,10 @@
+{# Lens price table: the table is edited in Excel, so the changelist gets Export / Replace buttons instead of Add. #}
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    {% if can_manage_prices %}
+    <li><a href="{{ export_url }}" class="addlink">Download current prices (Excel)</a></li>
+    <li><a href="{{ import_url }}" class="importlink">Replace prices from Excel</a></li>
+    {% endif %}
+{% endblock %}

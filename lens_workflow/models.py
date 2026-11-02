@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 __all__ = [
@@ -8,6 +9,9 @@ __all__ = [
     "LensCoating",
     "LensIndexRecommendationRule",
     "LensReaderStrength",
+    "LensPriceBlock",
+    "LensPriceCell",
+    "LensPriceImport",
 ]
 
 
@@ -424,3 +428,101 @@ class LensIndexRecommendationRule(TimeStampedModel):
     def __str__(self):
         bound = f"≤{self.max_combined_power}" if self.max_combined_power is not None else "unbounded"
         return f"{self.category} {bound} → recommend {self.recommended_index_value}"
+
+
+# ── Lens price table (prescription-dependent pricing) ────────────────────────
+# Mirrors the "Eyelovewear Lens Pricing" Excel file: two tiers (sheets), each
+# a stack of blocks. A block is one lens product (prescription type + lens
+# type + coatings + index) with a sphere x cylinder grid of prices; a power
+# with no price in the grid ("N" in the Excel) means that lens does not exist
+# for that prescription. Staff replace the whole table by uploading the same
+# Excel layout in the admin (see lens_workflow/price_table.py).
+
+class LensPriceBlock(TimeStampedModel):
+    class Tier(models.TextChoices):
+        PREMIUM = "premium", "Premium Lens (Conant)"
+        ECONOMIC = "economic", "Economic Lens (Value)"
+
+    tier = models.CharField(max_length=20, choices=Tier.choices, db_index=True)
+    position = models.PositiveIntegerField(
+        default=0, help_text="Order of this block inside its sheet.")
+
+    recommended_se = models.CharField(max_length=60, blank=True)
+    limitation_s = models.CharField(max_length=40, blank=True)
+    limitation_c = models.CharField(max_length=40, blank=True)
+    rationale = models.TextField(blank=True)
+    note = models.CharField(
+        max_length=255, blank=True,
+        help_text='Extra text in column A below the first row, e.g. "Free Upgrade to 1.56".')
+
+    prescription_type = models.CharField(max_length=100)
+    lens_type = models.CharField(max_length=100)
+    coating_main = models.CharField(max_length=100, default="N")
+    coating_add_on = models.CharField(max_length=100, default="N")
+    lens_index = models.DecimalField(max_digits=3, decimal_places=2)
+    material = models.CharField(max_length=100, blank=True)
+
+    # The grid's axes, in sheet order, as strings ("0.00", "-0.25", ...).
+    # Only priced cells are stored as rows; every other (sphere, cylinder)
+    # combination on these axes is "N" (not available).
+    sphere_axis = models.JSONField(default=list)
+    cylinder_axis = models.JSONField(default=list)
+
+    class Meta:
+        db_table = "LensPriceBlock"
+        verbose_name = "Lens Price Block"
+        verbose_name_plural = "Lens Price Table"
+        ordering = ["tier", "position"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tier", "prescription_type", "lens_type",
+                        "coating_main", "coating_add_on", "lens_index"],
+                name="uniq_lens_price_block"),
+        ]
+        permissions = [
+            ("import_price_table", "Can export and replace the lens price table"),
+        ]
+
+    def __str__(self):
+        return (f"{self.get_tier_display()}: {self.prescription_type} / {self.lens_type} / "
+                f"{self.coating_main} / {self.coating_add_on} / {self.lens_index}")
+
+
+class LensPriceCell(models.Model):
+    block = models.ForeignKey(
+        LensPriceBlock, on_delete=models.CASCADE, related_name="cells")
+    sphere = models.DecimalField(max_digits=5, decimal_places=2)
+    cylinder = models.DecimalField(max_digits=5, decimal_places=2)
+    price = models.DecimalField(max_digits=8, decimal_places=2)
+
+    class Meta:
+        db_table = "LensPriceCell"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["block", "sphere", "cylinder"], name="uniq_lens_price_cell"),
+        ]
+
+    def __str__(self):
+        return f"S {self.sphere} / C {self.cylinder}: {self.price}"
+
+
+class LensPriceImport(TimeStampedModel):
+    """One row per uploaded price file that replaced the table (an audit
+    trail, and the uploaded file itself so an older version can be downloaded
+    and uploaded again to roll back)."""
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+")
+    original_filename = models.CharField(max_length=255)
+    file = models.FileField(upload_to="lens_price_imports/%Y/%m/")
+    summary = models.JSONField(default=dict, blank=True)
+    warning_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "LensPriceImport"
+        verbose_name = "Lens Price Import"
+        verbose_name_plural = "Lens Price Imports"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.original_filename} ({self.created_at:%Y-%m-%d %H:%M})"

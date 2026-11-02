@@ -1,0 +1,108 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{{ changelist_url }}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; Replace from Excel
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main" style="max-width:1000px;">
+    <h1>{{ title }}</h1>
+
+    <div style="background:#f5f5f5; border:1px solid #ddd; border-radius:6px; padding:16px 20px; margin:20px 0;">
+        <h3 style="margin-top:0;">How it works</h3>
+        <ol style="margin:0; padding-left:20px; line-height:1.7;">
+            <li><a href="{{ export_url }}">Download the current prices</a>, edit the file in Excel and keep the same layout (sheets
+                <em>Premium Lens</em> and <em>Economic Lens</em>, one block per lens, a price or <strong>N</strong> in every cell).</li>
+            <li>Upload it below. <strong>Check file</strong> only reports problems and changes nothing.
+                <strong>Check and replace prices</strong> replaces the prices of every sheet in the file, but only when the file has no errors.</li>
+            <li>A price means that lens exists for that power. <strong>N</strong> means it does not.</li>
+            <li>Every uploaded file is kept in the history below, so an older version can be downloaded and uploaded again.</li>
+        </ol>
+    </div>
+
+    {% if form_error %}<p class="errornote">{{ form_error }}</p>{% endif %}
+
+    {% if checked %}
+        {% if applied %}
+            <div style="background:#e8f5e9; border:1px solid #a5d6a7; border-radius:6px; padding:14px 18px; margin-bottom:18px;">
+                <strong>Prices replaced</strong> from <em>{{ filename }}</em>.
+                {% for sheet, s in summary.items %}
+                    <div>{{ sheet }}: {{ s.blocks }} lenses, {{ s.priced_cells }} priced powers
+                        ({{ s.blocks_without_prices }} lenses without any price).</div>
+                {% endfor %}
+            </div>
+        {% elif error_total %}
+            <div style="background:#ffebee; border:1px solid #ef9a9a; border-radius:6px; padding:14px 18px; margin-bottom:18px;">
+                <strong>{{ error_total }} problem{{ error_total|pluralize }} found in <em>{{ filename }}</em>. Nothing was changed.</strong>
+                Fix them in Excel and upload the file again.
+            </div>
+        {% else %}
+            <div style="background:#e3f2fd; border:1px solid #90caf9; border-radius:6px; padding:14px 18px; margin-bottom:18px;">
+                <strong><em>{{ filename }}</em> has no errors.</strong> Nothing was changed yet; choose
+                <em>Check and replace prices</em> to apply it. It would replace:
+                {% for sheet, s in summary.items %}
+                    <div>{{ sheet }}: {{ s.blocks }} lenses, {{ s.priced_cells }} priced powers
+                        ({{ s.blocks_without_prices }} lenses without any price).</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if errors %}
+        <h3 style="color:#b71c1c;">Errors ({{ error_total }})</h3>
+        {% if error_total > max_reported %}<p>Showing the first {{ max_reported }}.</p>{% endif %}
+        <table style="width:100%;">
+            <thead><tr><th style="width:150px;">Sheet</th><th style="width:80px;">Cell</th><th>Problem</th></tr></thead>
+            <tbody>
+            {% for e in errors %}<tr><td>{{ e.sheet }}</td><td><strong>{{ e.cell }}</strong></td><td>{{ e.message }}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if warnings %}
+        <h3 style="color:#e65100; margin-top:28px;">Warnings ({{ warning_total }}) &mdash; these do not block the upload, but look like mistakes</h3>
+        {% if warning_total > max_reported %}<p>Showing the first {{ max_reported }}.</p>{% endif %}
+        <table style="width:100%;">
+            <thead><tr><th style="width:150px;">Sheet</th><th style="width:80px;">Cell</th><th>Note</th></tr></thead>
+            <tbody>
+            {% for w in warnings %}<tr><td>{{ w.sheet }}</td><td><strong>{{ w.cell }}</strong></td><td>{{ w.message }}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" style="margin-top:28px;">
+        {% csrf_token %}
+        <fieldset class="module aligned">
+            <div class="form-row">
+                <label for="id_xlsx_file" class="required">Excel file (.xlsx):</label>
+                <input type="file" name="xlsx_file" id="id_xlsx_file" accept=".xlsx" required>
+            </div>
+        </fieldset>
+        <div class="submit-row">
+            <button type="submit" name="action" value="check" class="button">Check file</button>
+            <button type="submit" name="action" value="apply" class="default"
+                    onclick="return confirm('Replace the current lens prices with this file?');">Check and replace prices</button>
+            <a href="{{ changelist_url }}" class="button cancel-link" style="margin-left:12px;">Cancel</a>
+        </div>
+    </form>
+
+    <h3 style="margin-top:34px;">Recent uploads</h3>
+    {% if recent_imports %}
+    <table style="width:100%;">
+        <thead><tr><th>When</th><th>File</th><th>By</th><th>Warnings</th><th></th></tr></thead>
+        <tbody>
+        {% for i in recent_imports %}
+            <tr><td>{{ i.created_at }}</td><td>{{ i.original_filename }}</td><td>{{ i.uploaded_by|default:"-" }}</td>
+                <td>{{ i.warning_count }}</td><td>{% if i.file %}<a href="{{ i.file.url }}">download</a>{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}<p>No file has been uploaded yet.</p>{% endif %}
+</div>
+{% endblock %}
