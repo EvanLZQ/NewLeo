@@ -143,12 +143,12 @@ MAX_REPORTED = 300   # problems shown per list on the import page
 @admin.register(LensPriceBlock)
 class LensPriceBlockAdmin(admin.ModelAdmin):
     change_list_template = "admin/lens_workflow/lenspriceblock/change_list.html"
-    list_display = ("tier", "prescription_type", "lens_type", "coating_main",
-                    "coating_add_on", "lens_index", "material", "priced_cells",
+    list_display = ("tier", "prescription_type", "lens_type", "color", "depth",
+                    "coating", "lens_index", "material", "priced_cells",
                     "price_range")
     list_filter = ("tier", "prescription_type", "lens_type", "lens_index")
-    search_fields = ("prescription_type", "lens_type", "coating_main",
-                     "coating_add_on", "material")
+    search_fields = ("prescription_type", "lens_type", "color", "depth",
+                     "coating", "material")
     ordering = ("tier", "position")
     list_per_page = 100
 

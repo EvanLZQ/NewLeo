@@ -5,12 +5,16 @@ The Excel layout (one sheet per tier, "Premium Lens" and "Economic Lens"):
 
     row 1        title, e.g. "Premium Lens (Conant)"          (ignored)
     header row   Recommended SE | Limitation S | Limitation C | Rationale |
-                 Prescription Type | Lens Type | Coating Main | Coating Add-on |
+                 Prescription Type | Lens Type | Color | Depth | Coating |
                  Index | Material | Sphere/Cylinder | <cylinder powers...>
-    data rows    first row carries the block's text columns (A-J); every row
-                 has a sphere power in column K ("Plano" or a number) and a
-                 price, or "N" for not available, under each cylinder power.
-                 Text in column A below the first row is kept as a note
+                 Columns are found by their header text, so they may be in
+                 any order and Recommended SE, Limitation S/C and Rationale
+                 may be left out; the cylinder powers must come after
+                 Sphere/Cylinder.
+    data rows    the first row carries the block's text columns; every row
+                 has a sphere power ("Plano" or a number) and a price, or "N"
+                 for not available, under each cylinder power. Text in the
+                 Recommended SE column below the first row is kept as a note
                  (e.g. "Free Upgrade to 1.56").
     ... the next header row starts the next block; blocks follow each other.
 
@@ -42,15 +46,22 @@ TIERS = [
 ]
 SHEET_TO_TIER = {name.lower(): code for code, name, _ in TIERS}
 
-HEADER = [
+# Header text (lower case) -> field. "Shpere" is a typo that appeared in older files.
+COLUMNS = {
+    "recommended se": "recommended_se", "limitation s": "limitation_s",
+    "limitation c": "limitation_c", "rationale": "rationale",
+    "prescription type": "prescription_type", "lens type": "lens_type",
+    "color": "color", "depth": "depth", "coating": "coating",
+    "index": "index", "material": "material",
+    "sphere/cylinder": "sphere", "shpere/cylinder": "sphere",
+}
+REQUIRED = ["prescription_type", "lens_type", "index", "sphere"]
+EXPORT_HEADER = [
     "Recommended SE", "Limitation S", "Limitation C", "Rationale",
-    "Prescription Type", "Lens Type", "Coating Main", "Coating Add-on",
+    "Prescription Type", "Lens Type", "Color", "Depth", "Coating",
     "Index", "Material", "Sphere/Cylinder",
 ]
-# the original files spell it "Shpere/Cylinder"; accept both
-_HEADER_ALIASES = {"shpere/cylinder": "sphere/cylinder"}
-SPHERE_COL = 11            # K
-FIRST_CYL_COL = 12         # L
+EXPORT_SPHERE_COL = 12     # L
 MAX_PRICE = Decimal("100000")
 CENTS = Decimal("0.01")
 
@@ -76,23 +87,25 @@ class BlockData:
     note: str = ""
     prescription_type: str = ""
     lens_type: str = ""
-    coating_main: str = "N"
-    coating_add_on: str = "N"
+    color: str = "N"
+    depth: str = "N"
+    coating: str = "N"
     lens_index: Decimal = Decimal("0")
     material: str = ""
     sphere_axis: list = field(default_factory=list)      # [Decimal]
     cylinder_axis: list = field(default_factory=list)    # [Decimal]
     prices: dict = field(default_factory=dict)           # (sphere, cyl) -> Decimal
     refs: dict = field(default_factory=dict)             # (sphere, cyl) -> "L12"
+    first_cyl_col: int = 13
 
     @property
     def key(self):
-        return (self.prescription_type, self.lens_type, self.coating_main,
-                self.coating_add_on, self.lens_index)
+        return (self.prescription_type, self.lens_type, self.color,
+                self.depth, self.coating, self.lens_index)
 
     def label(self):
-        return (f"{self.prescription_type} / {self.lens_type} / {self.coating_main} / "
-                f"{self.coating_add_on} / index {self.lens_index}")
+        return (f"{self.prescription_type} / {self.lens_type} / {self.color} / "
+                f"{self.depth} / {self.coating} / index {self.lens_index}")
 
 
 @dataclass
@@ -207,18 +220,22 @@ def _parse_sheet(ws, tier, result):
         row = rows[r - 1]
         return row[c - 1] if c - 1 < len(row) else None
 
-    header_rows = [i + 1 for i, row in enumerate(rows)
-                   if row and _text(row[0]).lower() == "recommended se"]
+    # Every block starts with a header row; find them by the label "Recommended SE"
+    # in column A, or, when that column was left out, by "Prescription Type".
+    def is_header(row):
+        labels = {_text(v).lower() for v in row[:15] if v is not None}
+        return "recommended se" in labels or ("prescription type" in labels and "lens type" in labels)
+
+    header_rows = [i + 1 for i, row in enumerate(rows) if row and is_header(row)]
     if not header_rows:
         err("A1", 'No block headers found. Each block must start with a header row '
-                  'whose column A says "Recommended SE".')
+                  '(Recommended SE | Limitation S | ... | Prescription Type | Lens Type | ... | Sphere/Cylinder | cylinder powers).')
         return
 
-    first_header = header_rows[0]
-    for r in range(1, first_header):
-        for c in range(1, SPHERE_COL + 1):
+    for r in range(2, header_rows[0]):
+        for c in range(1, 16):
             v = cell(r, c)
-            if v is not None and r != 1 and _text(v):
+            if v is not None and _text(v):
                 warn(_ref(c, r), f'Text above the first header row is ignored: "{_text(v)}".')
 
     blocks = []
@@ -237,8 +254,40 @@ def _parse_sheet(ws, tier, result):
             where = ", ".join(f"row {b.header_row}" for b in dup)
             err(f"A{dup[1].header_row}",
                 f"The same lens is defined more than once ({where}): {dup[0].label()}. "
-                "Each combination of prescription type, lens type, coatings and index may only appear once.")
+                "Each combination of prescription type, lens type, color, depth, coating and index "
+                "may only appear once.")
     result.blocks[tier] = blocks
+
+
+def _read_header(h, cell, err):
+    """Header row -> {field: column} (including "sphere"), or None. The text
+    columns are read left to right up to Sphere/Cylinder; the cylinder powers
+    are to its right."""
+    cols = {}
+    names = sorted({"Recommended SE" if k == "recommended se" else k.title()
+                    for k in COLUMNS if k != "shpere/cylinder"})
+    for c in range(1, 41):
+        raw = cell(h, c)
+        label = _text(raw).lower()
+        if label == "":
+            continue
+        field_name = COLUMNS.get(label)
+        if field_name is None:
+            err(_ref(c, h), f'Unknown column header "{_text(raw)}". Expected: ' + ", ".join(names) + ".")
+        elif field_name in cols:
+            err(_ref(c, h), f'Column "{_text(raw)}" appears twice in this header row.')
+        else:
+            cols[field_name] = c
+        if field_name == "sphere":
+            break
+    else:
+        err(_ref(1, h), 'This header row has no "Sphere/Cylinder" column.')
+        return None
+    for field_name in REQUIRED:
+        if field_name not in cols:
+            nice = next(k for k, v in COLUMNS.items() if v == field_name).title()
+            err(_ref(1, h), f'This header row is missing the "{nice}" column.')
+    return cols
 
 
 def _parse_block(sheet, tier, position, h, end, cell, result):
@@ -247,16 +296,15 @@ def _parse_block(sheet, tier, position, h, end, cell, result):
     n_errors_before = len(result.errors)
     block = BlockData(tier=tier, position=position, header_row=h)
 
-    # header labels
-    for c, expected in enumerate(HEADER, start=1):
-        got = _text(cell(h, c)).lower()
-        got = _HEADER_ALIASES.get(got, got)
-        if got != expected.lower():
-            err(_ref(c, h), f'Header should be "{expected}" but is "{_text(cell(h, c))}".')
+    cols = _read_header(h, cell, err)
+    if cols is None or len(result.errors) > n_errors_before:
+        return None
+    sphere_col = cols["sphere"]
+    first_cyl = sphere_col + 1
 
-    # cylinder axis (L onwards until the first empty header cell)
+    # cylinder axis (right of Sphere/Cylinder until the first empty header cell)
     cyl_cols = []
-    c = FIRST_CYL_COL
+    c = first_cyl
     while cell(h, c) is not None and _text(cell(h, c)) != "":
         p = _power(cell(h, c))
         if p is None:
@@ -267,52 +315,63 @@ def _parse_block(sheet, tier, position, h, end, cell, result):
             cyl_cols.append((c, p))
         c += 1
     if not cyl_cols and len(result.errors) == n_errors_before:
-        err(_ref(FIRST_CYL_COL, h), "This header row has no cylinder powers (columns L onwards).")
+        err(_ref(first_cyl, h), f"This header row has no cylinder powers (columns {get_column_letter(first_cyl)} onwards).")
     block.cylinder_axis = [p for _, p in cyl_cols]
+    block.first_cyl_col = first_cyl
 
     # text columns: first non-empty value in the block
-    text = {}
-    for c in range(1, 11):
+    def first_text(field_name, default=""):
+        col = cols.get(field_name)
+        if col is None:
+            return default, 0
         for r in range(h + 1, end + 1):
-            v = _text(cell(r, c))
+            v = _text(cell(r, col))
             if v:
-                text[c] = (v, r)
-                break
-    block.recommended_se = text.get(1, ("", 0))[0]
-    block.limitation_s = text.get(2, ("", 0))[0]
-    block.limitation_c = text.get(3, ("", 0))[0]
-    block.rationale = text.get(4, ("", 0))[0]
-    block.prescription_type = text.get(5, ("", 0))[0]
-    block.lens_type = text.get(6, ("", 0))[0]
-    block.coating_main = text.get(7, ("N", 0))[0] or "N"
-    block.coating_add_on = text.get(8, ("N", 0))[0] or "N"
-    block.material = text.get(10, ("", 0))[0]
+                return v, r
+        return default, 0
+
+    block.recommended_se = first_text("recommended_se")[0]
+    block.limitation_s = first_text("limitation_s")[0]
+    block.limitation_c = first_text("limitation_c")[0]
+    block.rationale = first_text("rationale")[0]
+    block.prescription_type = first_text("prescription_type")[0]
+    block.lens_type = first_text("lens_type")[0]
+    block.color = first_text("color", "N")[0] or "N"
+    block.depth = first_text("depth", "N")[0] or "N"
+    block.coating = first_text("coating", "N")[0] or "N"
+    block.material = first_text("material")[0]
     notes = []
-    for r in range(h + 1, end + 1):
-        v = _text(cell(r, 1))
-        if v and v != block.recommended_se:
-            notes.append(v)
+    if "recommended_se" in cols:
+        for r in range(h + 1, end + 1):
+            v = _text(cell(r, cols["recommended_se"]))
+            if v and v != block.recommended_se:
+                notes.append(v)
     block.note = "; ".join(notes)[:255]
 
     if not block.prescription_type:
-        err(_ref(5, h + 1), f"Prescription Type is empty in the block that starts at row {h}.")
+        err(_ref(cols["prescription_type"], h + 1), f"Prescription Type is empty in the block that starts at row {h}.")
     if not block.lens_type:
-        err(_ref(6, h + 1), f"Lens Type is empty in the block that starts at row {h}.")
-    idx_text = text.get(9)
-    idx = _number(idx_text[0]) if idx_text else None
+        err(_ref(cols["lens_type"], h + 1), f"Lens Type is empty in the block that starts at row {h}.")
+    idx_text, idx_row = first_text("index")
+    idx = _number(idx_text) if idx_text else None
     if idx is None:
-        err(_ref(9, h + 1), f"Index must be a number such as 1.56 (block starting at row {h}).")
+        err(_ref(cols["index"], h + 1), f"Index must be a number such as 1.56 (block starting at row {h}).")
     elif not (Decimal("1") <= idx < Decimal("2")):
-        err(_ref(9, idx_text[1]), f"Index {idx} is outside the expected 1.00 - 1.99 range.")
+        err(_ref(cols["index"], idx_row), f"Index {idx} is outside the expected 1.00 - 1.99 range.")
     else:
         block.lens_index = idx.quantize(CENTS, rounding=ROUND_HALF_UP)
-    if not block.material:
-        warn(_ref(10, h + 1), f"Material is empty for {block.label()}.")
+    for field_name, label in (("color", "Color"), ("depth", "Depth"), ("coating", "Coating")):
+        if field_name in cols and not first_text(field_name)[0]:
+            warn(_ref(cols[field_name], h + 1),
+                 f'{label} is empty for the lens at row {h}; it is treated as "N" (none).')
+    if "material" in cols and not block.material:
+        warn(_ref(cols["material"], h + 1), f"Material is empty for {block.label()}.")
 
     # sphere rows
     seen_sphere = {}
+    sph_letter = get_column_letter(sphere_col)
     for r in range(h + 1, end + 1):
-        label = cell(r, SPHERE_COL)
+        label = cell(r, sphere_col)
         grid = [(c, cell(r, c)) for c, _ in cyl_cols]
         if _text(label) == "":
             numbers = [(c, v) for c, v in grid if _number(v) is not None]
@@ -320,18 +379,18 @@ def _parse_block(sheet, tier, position, h, end, cell, result):
                      and _number(v) is None]
             if numbers:
                 err(_ref(numbers[0][0], r),
-                    "This row has prices but no sphere power in column K.")
+                    f"This row has prices but no sphere power in column {sph_letter}.")
             elif texts:
                 warn(_ref(texts[0][0], r),
-                     f'Row {r} has no sphere power in column K, so it is ignored '
+                     f'Row {r} has no sphere power in column {sph_letter}, so it is ignored '
                      f'(it contains text such as "{_text(texts[0][1])}").')
             continue
         sphere = _power(label)
         if sphere is None:
-            err(_ref(SPHERE_COL, r), f'Sphere power must be "Plano" or a number, but is "{_text(label)}".')
+            err(_ref(sphere_col, r), f'Sphere power must be "Plano" or a number, but is "{_text(label)}".')
             continue
         if sphere in seen_sphere:
-            err(_ref(SPHERE_COL, r), f"Sphere power {sphere} is listed twice in this block "
+            err(_ref(sphere_col, r), f"Sphere power {sphere} is listed twice in this block "
                                      f"(also on row {seen_sphere[sphere]}).")
             continue
         seen_sphere[sphere] = r
@@ -356,12 +415,14 @@ def _parse_block(sheet, tier, position, h, end, cell, result):
                 block.refs[(sphere, cyl)] = ref
 
     if not block.sphere_axis and len(result.errors) == n_errors_before:
-        err(_ref(SPHERE_COL, h + 1), f"The block starting at row {h} has no sphere rows.")
+        err(_ref(sphere_col, h + 1), f"The block starting at row {h} has no sphere rows.")
     return block
 
 
 def _quality_warnings(result):
-    """Problems that don't stop an import but are almost certainly typos."""
+    """Problems that don't stop an import but are probably typos. (A higher
+    index costing less than a lower one is NOT flagged: it happens with real
+    stock/custom price differences and the cheaper lens is simply recommended.)"""
     for tier, blocks in result.blocks.items():
         sheet = next(n for c, n, _ in TIERS if c == tier)
         warn = lambda cell, msg: result.warnings.append(Problem(sheet, cell, msg))   # noqa: E731
@@ -373,26 +434,10 @@ def _quality_warnings(result):
             if idx:
                 for i in range(idx[0], idx[-1]):
                     if not has[i]:
-                        col = FIRST_CYL_COL + i
+                        col = b.first_cyl_col + i
                         warn(f"{get_column_letter(col)}{b.header_row + 1}",
                              f"Cylinder {b.cylinder_axis[i]} has no price on any row of the block at "
                              f"row {b.header_row} ({b.label()}), but the powers on both sides do.")
-
-        # a higher index costing less than a lower one at the same power
-        families = defaultdict(dict)
-        for b in blocks:
-            families[(b.prescription_type, b.lens_type, b.coating_main, b.coating_add_on)][b.lens_index] = b
-        for fam, by_index in families.items():
-            order = sorted(by_index)
-            for lo, hi in zip(order, order[1:]):
-                a, z = by_index[lo], by_index[hi]
-                bad = [k for k in a.prices if k in z.prices and z.prices[k] < a.prices[k]]
-                if bad:
-                    k = bad[0]
-                    warn(z.refs[k],
-                         f"{fam[0]} / {fam[1]} / {fam[2]} / {fam[3]}: at sphere {k[0]}, cylinder {k[1]} "
-                         f"index {hi} costs {z.prices[k]} but index {lo} ({a.refs[k]}) costs {a.prices[k]}"
-                         f" ({len(bad)} cells affected).")
 
 
 # ── Applying ─────────────────────────────────────────────────────────────────
@@ -415,7 +460,7 @@ def apply_import(result, *, user=None, filename="", file_bytes=None):
                 recommended_se=b.recommended_se[:60], limitation_s=b.limitation_s[:40],
                 limitation_c=b.limitation_c[:40], rationale=b.rationale, note=b.note,
                 prescription_type=b.prescription_type[:100], lens_type=b.lens_type[:100],
-                coating_main=b.coating_main[:100], coating_add_on=b.coating_add_on[:100],
+                color=b.color[:100], depth=b.depth[:50], coating=b.coating[:100],
                 lens_index=b.lens_index, material=b.material[:100],
                 sphere_axis=_axis_json(b.sphere_axis), cylinder_axis=_axis_json(b.cylinder_axis))
             LensPriceCell.objects.bulk_create(
@@ -444,6 +489,7 @@ def build_workbook():
     wb.remove(wb.active)
     bold = Font(bold=True)
     head_fill = PatternFill("solid", fgColor="EEEEEE")
+    first_cyl = EXPORT_SPHERE_COL + 1
     for code, name, title in TIERS:
         ws = wb.create_sheet(name)
         ws["A1"] = title
@@ -455,33 +501,33 @@ def build_workbook():
             spheres = [Decimal(x) for x in b.sphere_axis]
             cyls = [Decimal(x) for x in b.cylinder_axis]
             prices = {(c.sphere, c.cylinder): c.price for c in b.cells.all()}
-            for c, label in enumerate(HEADER, start=1):
+            for c, label in enumerate(EXPORT_HEADER, start=1):
                 ws.cell(r, c, label)
             for i, cyl in enumerate(cyls):
-                ws.cell(r, FIRST_CYL_COL + i, _axis_label(cyl))
-            for c in range(1, FIRST_CYL_COL + len(cyls)):
+                ws.cell(r, first_cyl + i, _axis_label(cyl))
+            for c in range(1, first_cyl + len(cyls)):
                 ws.cell(r, c).font = bold
                 ws.cell(r, c).fill = head_fill
             for n, sphere in enumerate(spheres):
                 row = r + 1 + n
                 if n == 0:
                     meta = [b.recommended_se, b.limitation_s, b.limitation_c, b.rationale,
-                            b.prescription_type, b.lens_type, b.coating_main, b.coating_add_on,
+                            b.prescription_type, b.lens_type, b.color, b.depth, b.coating,
                             float(b.lens_index), b.material]
                     for c, v in enumerate(meta, start=1):
                         if v != "":
                             ws.cell(row, c, v)
                 elif n == 1 and b.note:
                     ws.cell(row, 1, b.note)
-                ws.cell(row, SPHERE_COL, _axis_label(sphere))
+                ws.cell(row, EXPORT_SPHERE_COL, _axis_label(sphere))
                 for i, cyl in enumerate(cyls):
                     price = prices.get((sphere, cyl))
-                    ws.cell(row, FIRST_CYL_COL + i, float(price) if price is not None else "N")
+                    ws.cell(row, first_cyl + i, float(price) if price is not None else "N")
             r += 1 + len(spheres)
         ws.column_dimensions["A"].width = 24
-        for letter in "EFGH":
+        for letter in "EFGHI":
             ws.column_dimensions[letter].width = 22
-        ws.column_dimensions["J"].width = 30
+        ws.column_dimensions["K"].width = 30
         ws.freeze_panes = "A2"
     buf = io.BytesIO()
     wb.save(buf)
@@ -490,13 +536,13 @@ def build_workbook():
 
 # ── Lookup (for the shopping flow) ───────────────────────────────────────────
 
-def price_for(tier, prescription_type, lens_type, coating_main, coating_add_on,
+def price_for(tier, prescription_type, lens_type, color, depth, coating,
               lens_index, sphere, cylinder):
     """Price of one lens for a prescription, or None when that lens doesn't
     exist for these powers (no price in the table)."""
     block = LensPriceBlock.objects.filter(
         tier=tier, prescription_type=prescription_type, lens_type=lens_type,
-        coating_main=coating_main or "N", coating_add_on=coating_add_on or "N",
+        color=color or "N", depth=depth or "N", coating=coating or "N",
         lens_index=lens_index).first()
     if block is None:
         return None

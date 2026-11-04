@@ -10,7 +10,7 @@ from . import price_table as pt
 from .models import LensPriceBlock, LensPriceCell, LensPriceImport
 
 HEADER = ["Recommended SE", "Limitation S", "Limitation C", "Rationale", "Prescription Type",
-          "Lens Type", "Coating Main", "Coating Add-on", "Index", "Material", "Shpere/Cylinder"]
+          "Lens Type", "Color", "Depth", "Coating", "Index", "Material", "Sphere/Cylinder"]
 
 
 def workbook(sheets):
@@ -28,14 +28,14 @@ def workbook(sheets):
 
 
 def block(index=1.5, material="CR-39", rx="Single Vision Distance", lens="Clear",
-          cmain="N", cadd="N", prices=None, note=None, cyl=("Plano", -0.25, -0.5)):
+          color="N", depth="N", coating="N", prices=None, note=None, cyl=("Plano", -0.25, -0.5)):
     """A small valid block: 3 sphere rows x len(cyl) cylinder columns."""
     prices = prices or [[9.95, "N", 9.95], [9.95, "N", 9.95], ["N", "N", "N"]]
     rows = [HEADER + list(cyl)]
     spheres = ["Plano", -0.25, -0.5]
     for n, (sph, pr) in enumerate(zip(spheres, prices)):
-        meta = ["0 ~ -1.50D", "S<=-1.00", "C<=-1.00", None, rx, lens, cmain, cadd, index, material] if n == 0 \
-            else [note if n == 1 else None] + [None] * 9
+        meta = ["0 ~ -1.50D", "S<=-1.00", "C<=-1.00", None, rx, lens, color, depth, coating, index, material] if n == 0 \
+            else [note if n == 1 else None] + [None] * 10
         rows.append(meta + [sph] + pr)
     return rows
 
@@ -67,17 +67,35 @@ class ParseTests(TestCase):
         rows = block(prices=[[9.95, "x", 9.95], [9.95, None, -5], ["N", "N", "N"]])
         r = pt.parse_workbook(workbook({"Premium Lens": rows}))
         cells = {e.cell: e.message for e in r.errors}
-        self.assertIn('Price must be a number', cells["M2"])        # "x" at row 2, col M
-        self.assertIn("Empty cell", cells["M3"])
-        self.assertIn("greater than 0", cells["N3"])
+        self.assertIn('Price must be a number', cells["N2"])        # "x" at row 2, col N
+        self.assertIn("Empty cell", cells["N3"])
+        self.assertIn("greater than 0", cells["O3"])
 
     def test_wrong_header_and_bad_index(self):
         rows = block(index="abc")
-        rows[0][4] = "Rx"
+        r = pt.parse_workbook(workbook({"Economic Lens": rows}))
+        self.assertIn("Index must be a number", {e.cell: e.message for e in r.errors}["J2"])
+        rows = block()
+        rows[0][4] = "Rx"          # stale / wrong header text
+        rows[0][7] = "Coating Main"   # the old layout's column name
         r = pt.parse_workbook(workbook({"Economic Lens": rows}))
         msgs = {e.cell: e.message for e in r.errors}
-        self.assertIn('Header should be "Prescription Type"', msgs["E1"])
-        self.assertIn("Index must be a number", msgs["I2"])
+        self.assertIn('Unknown column header "Rx"', msgs["E1"])
+        self.assertIn('Unknown column header "Coating Main"', msgs["H1"])
+
+    def test_columns_are_found_by_name_so_rationale_can_be_deleted(self):
+        rows = block()
+        rows = [[v for i, v in enumerate(row) if i != 3] for row in rows]    # drop column D
+        r = pt.parse_workbook(workbook({"Premium Lens": rows}))
+        self.assertTrue(r.ok, [e.message for e in r.errors])
+        self.assertEqual(r.blocks["premium"][0].lens_index, Decimal("1.50"))
+        self.assertEqual(r.blocks["premium"][0].prices[(Decimal("0"), Decimal("0"))], Decimal("9.95"))
+
+    def test_empty_color_depth_coating_is_a_warning(self):
+        r = pt.parse_workbook(workbook({"Premium Lens": block(color=None)}))
+        self.assertTrue(r.ok)
+        self.assertTrue(any("Color is empty" in w.message for w in r.warnings))
+        self.assertEqual(r.blocks["premium"][0].color, "N")
 
     def test_missing_required_text(self):
         rows = block(lens=None)
@@ -90,16 +108,16 @@ class ParseTests(TestCase):
 
     def test_price_row_without_sphere_is_an_error_but_text_row_a_warning(self):
         rows = block()
-        rows.append([None] * 10 + [None, 5.0, "N", "N"])
+        rows.append([None] * 11 + [None, 5.0, "N", "N"])
         r = pt.parse_workbook(workbook({"Premium Lens": rows}))
         self.assertTrue(any("no sphere power" in e.message for e in r.errors))
         rows = block()
-        rows.append([None] * 10 + [None, "Conant", "Conant", "Conant"])
+        rows.append([None] * 11 + [None, "Conant", "Conant", "Conant"])
         r = pt.parse_workbook(workbook({"Premium Lens": rows}))
         self.assertTrue(r.ok)
         self.assertTrue(any("is ignored" in w.message for w in r.warnings))
 
-    def test_warnings_for_cylinder_hole_and_index_inversion(self):
+    def test_warning_for_cylinder_hole(self):
         hole = [[9.95, "N", 9.95], [9.95, "N", 9.95], ["N", "N", "N"]]
         cheap = [[5.00, 5.00, 5.00], [5.00, 5.00, 5.00], ["N", "N", "N"]]
         rows = block(index=1.5, prices=hole) + block(index=1.6, prices=cheap)
@@ -107,11 +125,17 @@ class ParseTests(TestCase):
         self.assertTrue(r.ok)
         text = " | ".join(w.message for w in r.warnings)
         self.assertIn("has no price on any row", text)
-        self.assertIn("costs 5.00 but index 1.50", text)
 
     def test_missing_sheet_is_a_warning(self):
         r = pt.parse_workbook(workbook({"Premium Lens": block()}))
         self.assertTrue(any("Economic Lens" in w.message for w in r.warnings))
+
+    def test_index_price_inversion_is_not_flagged(self):
+        # A higher index costing less than a lower one is normal (stock vs custom lenses)
+        cheap = [[5.00, 5.00, 5.00], [5.00, 5.00, 5.00], ["N", "N", "N"]]
+        rows = block(index=1.5) + block(index=1.6, prices=cheap)
+        r = pt.parse_workbook(workbook({"Premium Lens": rows}))
+        self.assertFalse(any("costs" in w.message for w in r.warnings))
 
 
 class ImportExportTests(TestCase):
@@ -119,7 +143,7 @@ class ImportExportTests(TestCase):
         return workbook({
             "Premium Lens": [["Premium Lens (Conant)"], []] + block(note="Free Upgrade to 1.56")
                             + block(index=1.56, material="NK55", prices=[[9.95, 9.95, 9.95]] * 3),
-            "Economic Lens": [["Economic Lens (Value)"], []] + block(index=1.6, cadd="30%, 50%"),
+            "Economic Lens": [["Economic Lens (Value)"], []] + block(index=1.6, depth="30%, 50%"),
         })
 
     def test_apply_replaces_only_sheets_in_file(self):
@@ -148,7 +172,7 @@ class ImportExportTests(TestCase):
 
     def test_price_lookup(self):
         pt.apply_import(pt.parse_workbook(self.sample()), filename="a.xlsx", file_bytes=b"x")
-        args = ("premium", "Single Vision Distance", "Clear", "N", "N", Decimal("1.50"))
+        args = ("premium", "Single Vision Distance", "Clear", "N", "N", "N", Decimal("1.50"))
         self.assertEqual(pt.price_for(*args, Decimal("0"), Decimal("0")), Decimal("9.95"))
         self.assertIsNone(pt.price_for(*args, Decimal("0"), Decimal("-0.25")))     # N
         self.assertIsNone(pt.price_for(*args, Decimal("-9"), Decimal("0")))        # off the grid
@@ -188,7 +212,7 @@ class AdminTests(TestCase):
         bad = block(index=1.6, prices=[[9.95, "oops", 9.95], [9.95, "N", 9.95], ["N", "N", "N"]])
         r = self.upload(workbook({"Premium Lens": bad}), "apply")
         self.assertContains(r, "Nothing was changed")
-        self.assertContains(r, "M2")
+        self.assertContains(r, "N2")
         self.assertEqual(LensPriceBlock.objects.get().lens_index, Decimal("1.50"))
 
     def test_check_only_does_not_apply_and_apply_does(self):

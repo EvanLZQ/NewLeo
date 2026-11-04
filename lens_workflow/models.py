@@ -457,8 +457,9 @@ class LensPriceBlock(TimeStampedModel):
 
     prescription_type = models.CharField(max_length=100)
     lens_type = models.CharField(max_length=100)
-    coating_main = models.CharField(max_length=100, default="N")
-    coating_add_on = models.CharField(max_length=100, default="N")
+    color = models.CharField(max_length=100, default="N")
+    depth = models.CharField(max_length=50, default="N")
+    coating = models.CharField(max_length=100, default="N")
     lens_index = models.DecimalField(max_digits=3, decimal_places=2)
     material = models.CharField(max_length=100, blank=True)
 
@@ -476,7 +477,7 @@ class LensPriceBlock(TimeStampedModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["tier", "prescription_type", "lens_type",
-                        "coating_main", "coating_add_on", "lens_index"],
+                        "color", "depth", "coating", "lens_index"],
                 name="uniq_lens_price_block"),
         ]
         permissions = [
@@ -485,7 +486,7 @@ class LensPriceBlock(TimeStampedModel):
 
     def __str__(self):
         return (f"{self.get_tier_display()}: {self.prescription_type} / {self.lens_type} / "
-                f"{self.coating_main} / {self.coating_add_on} / {self.lens_index}")
+                f"{self.color} / {self.depth} / {self.coating} / {self.lens_index}")
 
 
 class LensPriceCell(models.Model):
