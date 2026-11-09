@@ -209,6 +209,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'shipping_company',
             'tracking_number',
             'shipping_cost',
+            'customs_fee',
             'discount',
             'accessory_total',
             'sub_total',
