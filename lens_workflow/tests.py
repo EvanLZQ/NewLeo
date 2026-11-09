@@ -178,6 +178,52 @@ class ImportExportTests(TestCase):
         self.assertIsNone(pt.price_for(*args, Decimal("-9"), Decimal("0")))        # off the grid
 
 
+class LookupTests(TestCase):
+    """lookup_price: Premium first, then Economic; Free Upgrade to 1.56."""
+
+    def setUp(self):
+        prem_150 = [[9.95, "N", 9.95], [9.95, "N", 9.95], ["N", "N", "N"]]
+        prem_156 = [[19.95, 19.95, 19.95]] * 3
+        prem_tint = [["N", "N", "N"]] * 3                       # Premium has nothing
+        eco_tint = [[5.00, 5.00, 5.00], [5.00, 5.00, 5.00], ["N", "N", "N"]]
+        eco_nonote = [[7.00, 7.00, 7.00]] * 3
+        pt.apply_import(pt.parse_workbook(workbook({
+            "Premium Lens": (block(index=1.5, prices=prem_150, note="Free Upgrade to 1.56")
+                             + block(index=1.56, prices=prem_156)
+                             + block(index=1.5, lens="Tinted", prices=prem_tint)),
+            "Economic Lens": (block(index=1.5, lens="Tinted", prices=eco_tint)
+                              + block(index=1.5, lens="Plain", prices=eco_nonote)),
+        })), filename="t.xlsx", file_bytes=b"x")
+
+    def lookup(self, lens="Clear", sph=0, cyl=0, index="1.50"):
+        return pt.lookup_price("Single Vision Distance", lens, "N", "N", "N",
+                               Decimal(index), Decimal(str(sph)), Decimal(str(cyl)))
+
+    def test_premium_price_wins(self):
+        r = self.lookup()
+        self.assertEqual((r.tier, r.price, r.lens_index, r.free_upgrade),
+                         ("premium", Decimal("9.95"), Decimal("1.50"), False))
+
+    def test_free_upgrade_uses_156_price(self):
+        r = self.lookup(cyl=-0.25)       # N on 1.50, 1.56 has a price
+        self.assertEqual((r.tier, r.price, r.lens_index, r.free_upgrade),
+                         ("premium", Decimal("19.95"), Decimal("1.56"), True))
+
+    def test_falls_back_to_economic(self):
+        r = self.lookup(lens="Tinted")
+        self.assertEqual((r.tier, r.price, r.free_upgrade), ("economic", Decimal("5.00"), False))
+
+    def test_free_upgrade_only_with_the_note(self):
+        # Economic "Plain" lens has no note and no 1.56 block: N stays N
+        self.assertEqual(self.lookup(lens="Plain").price, Decimal("7.00"))
+        self.assertIsNone(self.lookup(lens="Tinted", sph=-0.5))
+
+    def test_none_when_unavailable_everywhere(self):
+        self.assertIsNone(self.lookup(sph=-0.5, cyl=0, index="1.67"))   # no such index
+        self.assertIsNone(self.lookup(sph=-9))                           # off the grid
+        self.assertIsNone(self.lookup(lens="Nope"))
+
+
 class AdminTests(TestCase):
     def setUp(self):
         User = get_user_model()

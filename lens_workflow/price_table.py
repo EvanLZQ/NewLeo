@@ -536,10 +536,23 @@ def build_workbook():
 
 # ── Lookup (for the shopping flow) ───────────────────────────────────────────
 
+@dataclass
+class PriceLookup:
+    """Result of `lookup_price`."""
+    price: Decimal
+    tier: str            # "premium" or "economic"
+    lens_index: Decimal  # actual index used (may be 1.56 when 1.50 has a free upgrade)
+    free_upgrade: bool   # True: 1.56 lens included at no extra cost
+
+
+_FREE_UPGRADE_156 = Decimal("1.56")
+_FREE_UPGRADE_TAG = "free upgrade to 1.56"
+
+
 def price_for(tier, prescription_type, lens_type, color, depth, coating,
               lens_index, sphere, cylinder):
-    """Price of one lens for a prescription, or None when that lens doesn't
-    exist for these powers (no price in the table)."""
+    """Price of one lens, or None. No fallback: use `lookup_price` for the
+    full Premium -> Economic + free-upgrade logic."""
     block = LensPriceBlock.objects.filter(
         tier=tier, prescription_type=prescription_type, lens_type=lens_type,
         color=color or "N", depth=depth or "N", coating=coating or "N",
@@ -548,3 +561,42 @@ def price_for(tier, prescription_type, lens_type, color, depth, coating,
         return None
     cell = block.cells.filter(sphere=sphere, cylinder=cylinder).first()
     return cell.price if cell else None
+
+
+def _block_price(block, sphere, cylinder):
+    """Price from one block, with the Free Upgrade to 1.56 rule.
+    Returns (price, actual_lens_index, is_free_upgrade), or (None, index, False)."""
+    cell = block.cells.filter(sphere=sphere, cylinder=cylinder).first()
+    if cell is not None:
+        return cell.price, block.lens_index, False
+    combined = f"{block.note} {block.recommended_se}".lower()
+    if _FREE_UPGRADE_TAG in combined and block.lens_index != _FREE_UPGRADE_156:
+        upgrade = LensPriceBlock.objects.filter(
+            tier=block.tier, prescription_type=block.prescription_type,
+            lens_type=block.lens_type, color=block.color,
+            depth=block.depth, coating=block.coating,
+            lens_index=_FREE_UPGRADE_156).first()
+        if upgrade:
+            cell = upgrade.cells.filter(sphere=sphere, cylinder=cylinder).first()
+            if cell is not None:
+                return cell.price, _FREE_UPGRADE_156, True
+    return None, block.lens_index, False
+
+
+def lookup_price(prescription_type, lens_type, color, depth, coating,
+                 lens_index, sphere, cylinder):
+    """Full price lookup: Premium first, then Economic; with Free Upgrade to
+    1.56 inside each tier. Returns a PriceLookup, or None when this lens is
+    not available for these powers."""
+    for tier in ("premium", "economic"):
+        block = LensPriceBlock.objects.filter(
+            tier=tier, prescription_type=prescription_type, lens_type=lens_type,
+            color=color or "N", depth=depth or "N", coating=coating or "N",
+            lens_index=lens_index).first()
+        if block is None:
+            continue
+        price, actual_index, free_upgrade = _block_price(block, sphere, cylinder)
+        if price is not None:
+            return PriceLookup(price=price, tier=tier,
+                               lens_index=actual_index, free_upgrade=free_upgrade)
+    return None
