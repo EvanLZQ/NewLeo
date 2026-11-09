@@ -77,6 +77,12 @@
                   {% if order.shipping_cost == 0 %}Free{% else %}${{ order.shipping_cost }}{% endif %}
                 </td>
               </tr>
+              {% if order.customs_fee %}
+              <tr>
+                <td style="padding:4px 0;font-size:14px;color:#555;">Customs fee</td>
+                <td style="padding:4px 0;font-size:14px;color:#555;text-align:right;">${{ order.customs_fee }}</td>
+              </tr>
+              {% endif %}
               {% if order.discount > 0 %}
               <tr>
                 <td style="padding:4px 0;font-size:14px;color:#27ae60;">Discount</td>

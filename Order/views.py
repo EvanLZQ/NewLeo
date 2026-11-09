@@ -83,6 +83,128 @@ def _cancel_orders(queryset):
     OrderInfo.objects.filter(pk__in=ids).update(order_status='CANCELED')
 
 
+# Fields that identify a shipping address for "is this the same row?" checks.
+# instruction / default_address are not part of that identity.
+_ADDRESS_IDENTITY_FIELDS = (
+    'full_name', 'phone', 'address', 'city', 'province_state', 'country', 'post_code',
+)
+
+
+def _clean_address_value(value):
+    if value is None:
+        return ''
+    return str(value).strip()
+
+
+def _posted_address_fields(data):
+    """
+    Address fields from create_pending, if the client sent them.
+    Accepts address_data, a nested address object, or the same keys at the
+    top level. Returns None when no address fields were posted.
+    """
+    raw = None
+    for key in ('address_data', 'address'):
+        candidate = data.get(key)
+        if isinstance(candidate, dict):
+            raw = candidate
+            break
+    if raw is None:
+        if any(_clean_address_value(data.get(field)) for field in _ADDRESS_IDENTITY_FIELDS):
+            raw = data
+        else:
+            return None
+    return {field: _clean_address_value(raw.get(field)) for field in _ADDRESS_IDENTITY_FIELDS}
+
+
+def _posted_address_id(data):
+    """id from address_id, or from a nested address / address_data object."""
+    address_id = data.get('address_id')
+    if address_id not in (None, ''):
+        return address_id
+    for key in ('address', 'address_data'):
+        nested = data.get(key)
+        if isinstance(nested, dict) and nested.get('id') not in (None, ''):
+            return nested.get('id')
+    return None
+
+
+def _identical_saved_address(customer, fields):
+    from General.models import Address
+    # Compare trimmed values in Python so a second post of the same form
+    # matches a row that was saved with incidental whitespace.
+    for row in Address.objects.filter(customer=customer).order_by('id'):
+        if all(
+            _clean_address_value(getattr(row, field)) == fields[field]
+            for field in _ADDRESS_IDENTITY_FIELDS
+        ):
+            return row
+    return None
+
+
+def _resolve_checkout_address(user, data):
+    """
+    The address create_pending should attach. Never inserts a second copy
+    of an address this customer already has.
+
+    A posted id is reused as-is (the checkout used to clone that row into a
+    new customer-owned Address, so going forward to payment and back to the
+    address step listed the same address again). The same fields posted
+    again, with no id, reuse the existing row instead of inserting another.
+    """
+    from General.models import Address
+
+    address_id = _posted_address_id(data)
+    if address_id not in (None, ''):
+        try:
+            address_id = int(address_id)
+        except (TypeError, ValueError):
+            return None, Response(
+                {'error': 'Invalid address_id'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            return Address.objects.get(pk=address_id, customer=user), None
+        except Address.DoesNotExist:
+            return None, Response(
+                {'error': 'Invalid address_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+    fields = _posted_address_fields(data)
+    if fields is None or any(not fields[field] for field in _ADDRESS_IDENTITY_FIELDS):
+        return None, Response(
+            {'error': 'Invalid address_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+    existing = _identical_saved_address(user, fields)
+    if existing is not None:
+        return existing, None
+    return Address.objects.create(customer=user, **fields), None
+
+
+def _detach_paid_order_address(address):
+    """
+    Copy a customer-owned address onto an unowned row for a paid order.
+
+    Pending checkout reuses the saved address (so the address book does not
+    grow a duplicate on every create_pending). Once the order is paid, freeze
+    that snapshot with customer=None so a later edit or delete of the saved
+    address does not rewrite what the order shipped to, and so the copy does
+    not show up in get_addresses.
+    """
+    from General.models import Address
+
+    if address is None or address.customer_id is None:
+        return address
+    return Address.objects.create(
+        customer=None,
+        full_name=address.full_name,
+        phone=address.phone,
+        address=address.address,
+        city=address.city,
+        province_state=address.province_state,
+        country=address.country,
+        post_code=address.post_code,
+        instruction=address.instruction,
+        default_address=False,
+    )
+
+
 # ── Coupons ──────────────────────────────────────────────────────────────────
 
 def _resolve_coupon(code, customer):
@@ -442,7 +564,12 @@ def createPendingOrder(request):
 
     Request body:
         complete_set_ids  – list[int]   IDs of CompleteSet rows to attach
-        address_id        – int         FK to General.Address
+        address_id        – int         FK to General.Address. Reused as-is;
+                                        a second checkout with the same id does not
+                                        insert another address row.
+        address_data      – dict        optional, used only when address_id is
+                                        omitted. Same fields posted again for this
+                                        user reuse the existing row.
         shipping_method   – str         "Priority Shipping" or "UPS" (UPS: Canada only)
         country           – str         e.g. "United States"  (used for shipping calc)
         email             – str         customer e-mail for the order record
@@ -453,12 +580,11 @@ def createPendingOrder(request):
                                          never surprises the customer either way.
 
     Response (201):
-        { order_id, order_number, sub_total, shipping_cost, total_amount,
-          coupon_code, discount_amount }
+        { order_id, order_number, sub_total, shipping_cost, customs_fee,
+          total_amount, coupon_code, discount_amount }
     """
     data             = request.data
     complete_set_ids = data.get('complete_set_ids', [])
-    address_id       = data.get('address_id')
     shipping_method  = data.get('shipping_method', '')
     country          = data.get('country', '')
     email            = data.get('email', '') or ''
@@ -539,26 +665,15 @@ def createPendingOrder(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # ── Address snapshot ─────────────────────────────────────────────────
-        # Clone the customer's saved address into a dedicated row for this
-        # order rather than pointing at the live one — editing or deleting a
-        # saved address later must not change what a past order says it
-        # shipped to.
-        from General.models import Address
-        try:
-            source_address = Address.objects.get(pk=address_id, customer=request.user)
-        except Address.DoesNotExist:
-            return Response({'error': 'Invalid address_id'}, status=status.HTTP_400_BAD_REQUEST)
-        order_address = Address.objects.create(
-            customer=request.user,
-            full_name=source_address.full_name,
-            phone=source_address.phone,
-            address=source_address.address,
-            city=source_address.city,
-            province_state=source_address.province_state,
-            country=source_address.country,
-            post_code=source_address.post_code,
-        )
+        # ── Address ──────────────────────────────────────────────────────────
+        # Reuse the selected saved address. Cloning it into another
+        # customer-owned row made the address book list a duplicate every
+        # time checkout called create_pending and the customer stepped back.
+        # The paid-order snapshot is taken in confirmPayment
+        # (_detach_paid_order_address), not here.
+        order_address, address_error = _resolve_checkout_address(request.user, data)
+        if address_error:
+            return address_error
 
         # ── Step 1: create the OrderInfo shell ─────────────────────────────────
         try:
@@ -694,10 +809,15 @@ def confirmPayment(request):
             transaction_status='completed',
         )
 
+        # Freeze the ship-to address before the saved row can be edited.
+        # customer=None keeps the copy out of the address book.
+        frozen_address = _detach_paid_order_address(order.address)
+
         # Mark the order PAID
         OrderInfo.objects.filter(pk=order.pk).update(
             payment_status='PAID',
             payment_type='paypal',
+            address=frozen_address,
         )
 
     # Remove paid items from all shopping carts (they've been purchased).
