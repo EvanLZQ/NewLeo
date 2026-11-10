@@ -466,3 +466,200 @@ class LensSheetCheckoutTests(TestCase):
         self.assertEqual(response.status_code, 400, response.data)
         self.assertIn('not on the price sheet', response.data['error'])
         self.assertFalse(OrderInfo.objects.filter(customer=self.user).exists())
+
+
+class PlanoGuestCheckoutTests(TestCase):
+    """The production failure: a priced plano pair could not check out.
+
+    OrderInfo.save() prices every complete set on the order before the order
+    row exists. That query is `order_id IS NULL`, so it also priced every
+    other cart. One unpriced pair refused checkout for a pair the quote,
+    summary, and cart had already priced.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        pt.apply_import(pt.parse_workbook(workbook({
+            'Premium Lens': block(index=1.5, prices=[[9.95, 9.95, 9.95]] * 3),
+            'Economic Lens': block(index=1.5, prices=[[4.95, 4.95, 4.95]] * 3),
+        })), filename='plano.xlsx', file_bytes=b'x')
+        cls.lens_type = LensType.objects.create(
+            code='SVD', label='Single Vision Distance',
+            is_prescription_required=True, is_active=True, sort_order=10)
+        cls.function = LensFunctionPath.objects.create(
+            lens_type=cls.lens_type, function_code='CLEAR', function_label='Classic',
+            color_required=False, extra_price=Decimal('0'), is_active=True)
+        cls.index = LensIndexOption.objects.create(
+            lens_type=cls.lens_type, tier='Basic', option_label='Basic - 1.50 Index',
+            index_value=Decimal('1.50'), price=Decimal('4.95'), is_active=True)
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.defaults['HTTP_X_FORWARDED_PROTO'] = 'https'
+        self.frame = _frame('CHY-MTL-ROU-88198-C2', Decimal('35.00'))
+
+    def _workflow_ids(self):
+        start = self.client.get('/api/lens-workflow/start/')
+        self.assertEqual(start.status_code, 200, start.content)
+        svd = next(opt for opt in start.data['options'] if opt['code'] == 'SVD')
+        functions = self.client.get('/api/lens-workflow/next/', {
+            'current_step_code': 'LENS_TYPE',
+            'selected_option_id': svd['id'],
+        })
+        self.assertEqual(functions.status_code, 200, functions.content)
+        classic = next(opt for opt in functions.data['options'] if opt['code'] == 'CLEAR')
+        indexes = self.client.get('/api/lens-workflow/next/', {
+            'current_step_code': 'FUNCTION',
+            'selected_option_id': classic['id'],
+            'selection_path': str(svd['id']),
+        })
+        self.assertEqual(indexes.status_code, 200, indexes.content)
+        self.assertEqual(indexes.data['current_step']['code'], 'INDEX')
+        basic = next(
+            opt for opt in indexes.data['options']
+            if opt['metadata']['index_value'] == '1.50')
+        return svd['id'], classic['id'], basic['id']
+
+    def _plano_pair(self, *, sphere='0'):
+        lens_type_id, function_id, index_id = self._workflow_ids()
+        quote = self.client.post('/api/lens-workflow/rx-quote/', {
+            'od': {'sph': sphere, 'cyl': '0', 'add': '0', 'pd': '32'},
+            'os': {'sph': sphere, 'cyl': '0', 'add': '0', 'pd': '31.5'},
+            'lens_type_id': lens_type_id,
+            'function_path_id': function_id,
+            'index_option_id': index_id,
+            'price': '1.00',
+        }, format='json')
+        self.assertEqual(quote.status_code, 200, quote.content)
+        self.assertEqual(quote.data['pricing_source'], 'price_table')
+        self.assertEqual(quote.data['selection']['lens_price'], '9.95')
+        self.assertEqual(quote.data['total_lens_price'], '9.95')
+        summary = self.client.get('/api/lens-workflow/summary/', {
+            'lens_type_id': lens_type_id,
+            'function_path_id': function_id,
+            'index_option_id': index_id,
+            'od_sph': sphere, 'od_cyl': '0', 'os_sph': sphere, 'os_cyl': '0',
+        })
+        self.assertEqual(summary.status_code, 200, summary.content)
+        self.assertEqual(summary.data['pricing_source'], 'price_table')
+        self.assertEqual(summary.data['total_add_on_price'], '9.95')
+        rx = PrescriptionInfo.objects.create(
+            sphere_r=Decimal(sphere), sphere_l=Decimal(sphere),
+            cylinder_r=Decimal('0'), cylinder_l=Decimal('0'),
+            pd_r=Decimal('32'), pd_l=Decimal('31.50'))
+        created = self.client.post('/api/order/createcompleteset', {
+            'frame': {'sku': self.frame.sku},
+            'lens_type': lens_type_id,
+            'function_path': function_id,
+            'index_option': index_id,
+            'prescription': {'id': rx.id},
+            'sub_total': '1.00',
+        }, format='json')
+        self.assertEqual(created.status_code, 201, created.content)
+        return created.data
+
+    def _guest_address(self):
+        return {
+            'full_name': 'Guest Plano',
+            'phone': '123-456-7890',
+            'address': '1 Main St',
+            'city': 'Austin',
+            'province_state': 'Texas (TX)',
+            'country': 'United States',
+            'post_code': '78701',
+        }
+
+    def test_guest_and_logged_in_checkout_match_the_quote_despite_other_carts(self):
+        good = self._plano_pair()
+        self.assertEqual(Decimal(good['sub_total']), Decimal('44.95'))
+        self.assertIsNone(good['lens_unavailable'])
+
+        # Another shopper left a pair in the cart, then changed the
+        # prescription to a power the sheet does not sell. The stored
+        # sub_total is stale; the next pricing of that row refuses it.
+        # Checkout of the plano pair must not see that row.
+        other_rx = PrescriptionInfo.objects.create()
+        other = CompleteSet.objects.create(
+            frame=self.frame, lens_type=self.lens_type, function_path=self.function,
+            index_option=self.index, prescription=other_rx)
+        other_rx.sphere_r = Decimal('-8')
+        other_rx.sphere_l = Decimal('-8')
+        other_rx.save()
+        self.assertIsNone(other.order_id)
+
+        added = self.client.post('/api/order/guest_cart', {
+            'action': 'add', 'complete_set_id': good['id'],
+        }, format='json')
+        self.assertEqual(added.status_code, 200, added.content)
+        cart = self.client.post('/api/order/guest_cart', {'action': 'get'}, format='json')
+        self.assertEqual(cart.status_code, 200, cart.content)
+        self.assertEqual(Decimal(cart.data['active_subtotal']), Decimal('44.95'))
+        self.assertEqual(cart.data['eyeglasses_set'][0]['sub_total'], '44.95')
+
+        guest = self.client.post('/api/order/create_pending_guest', {
+            'complete_set_ids': [good['id']],
+            'email': 'guest@example.com',
+            'address_data': self._guest_address(),
+            'shipping_method': 'Priority Shipping',
+            'country': 'United States',
+        }, format='json')
+        self.assertEqual(guest.status_code, 201, guest.content)
+        self.assertEqual(Decimal(guest.data['sub_total']), Decimal('44.95'))
+        order = OrderInfo.objects.get(pk=guest.data['order_id'])
+        self.assertEqual(
+            list(order.completeset_set.values_list('id', flat=True)),
+            [good['id']])
+        other.refresh_from_db()
+        self.assertIsNone(other.order_id)
+
+        # Logged-in checkout of a second identical pair, poison set still present.
+        user = User.objects.create_user(username='buyer@example.com', password='test-pass-123')
+        user.refresh_from_db()
+        logged_in = APIClient()
+        logged_in.defaults['HTTP_X_FORWARDED_PROTO'] = 'https'
+        logged_in.force_login(user)
+        second = self._plano_pair()
+        user.shopping_cart.eyeglasses_set.add(second['id'])
+        address = Address.objects.create(customer=user, **_address_fields())
+        response = logged_in.post('/api/order/create_pending', {
+            'complete_set_ids': [second['id']],
+            'address_id': address.id,
+            'shipping_method': 'Priority Shipping',
+            'country': 'United States',
+            'email': '',
+            'sub_total': '1.00',
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(Decimal(response.data['sub_total']), Decimal('44.95'))
+
+    def test_checkout_still_refuses_a_power_the_sheet_does_not_sell(self):
+        good = self._plano_pair()
+        rx = PrescriptionInfo.objects.get(pk=CompleteSet.objects.get(pk=good['id']).prescription_id)
+        rx.sphere_r = Decimal('-8')
+        rx.sphere_l = Decimal('-8')
+        rx.save()
+        added = self.client.post('/api/order/guest_cart', {
+            'action': 'add', 'complete_set_id': good['id'],
+        }, format='json')
+        self.assertEqual(added.status_code, 200, added.content)
+        guest = self.client.post('/api/order/create_pending_guest', {
+            'complete_set_ids': [good['id']],
+            'email': 'guest@example.com',
+            'address_data': self._guest_address(),
+            'shipping_method': 'Priority Shipping',
+            'country': 'United States',
+        }, format='json')
+        self.assertEqual(guest.status_code, 400, guest.content)
+        self.assertEqual(guest.data['error'], 'Not offered for this prescription')
+        self.assertFalse(OrderInfo.objects.exists())
+
+    def test_checkout_still_refuses_cylinder_above_6(self):
+        rx = PrescriptionInfo.objects.create(
+            sphere_r=Decimal('0'), sphere_l=Decimal('0'),
+            cylinder_r=Decimal('-6.25'), cylinder_l=Decimal('0'))
+        with self.assertRaises(LensNotOffered) as caught:
+            CompleteSet.objects.create(
+                frame=self.frame, lens_type=self.lens_type,
+                function_path=self.function, index_option=self.index,
+                prescription=rx)
+        self.assertEqual(str(caught.exception), 'Max CYL is 6.00D')
