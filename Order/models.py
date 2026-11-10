@@ -262,7 +262,10 @@ class CompleteSet(models.Model):
         blank=True
     )
     saved_for_later = models.BooleanField(default=False)
-    sub_total = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    # max_digits=8: one pair can exceed $999.99 once the price sheet is in
+    # use (high-index progressive photochromic cells reach $589.95 before
+    # the frame, prism, and any coating the sheet does not include).
+    sub_total = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     sub_color = models.CharField(max_length=50, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

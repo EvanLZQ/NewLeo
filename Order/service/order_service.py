@@ -41,7 +41,15 @@ def get_complete_set_line_items(complete_set):
     Order/serializer.py's CompleteSetSerializer.price_breakdown (cart/order
     itemization). Lives here (not in views.py) so serializer.py can import
     it without a circular import — views.py already imports from serializer.py.
+
+    When the lens price sheet is loaded, the stacked function/tint/index/color
+    rows collapse into one all-in "lens" row. Prism and coatings the sheet
+    does not price (Oleophobic, Hydrophobic) stay as their own rows.
     """
+    from lens_workflow.pricing import line_items_for_complete_set
+    sheet_items = line_items_for_complete_set(complete_set)
+    if sheet_items is not None:
+        return sheet_items
     items = []
     for component, option_obj, price_field, label_field in [
         ('function_path',   complete_set.function_path,   'extra_price', 'function_label'),
@@ -248,28 +256,15 @@ class OrderService:
 
     @staticmethod
     def calculate_complete_set_sub_total(complete_set):
-        total_price = 0
-        if complete_set.frame:
-            total_price += complete_set.frame.price
-        if complete_set.function_path:
-            total_price += complete_set.function_path.extra_price
-        if complete_set.tint_type:
-            total_price += complete_set.tint_type.extra_price
-        if complete_set.index_option:
-            total_price += complete_set.index_option.price
-        if complete_set.color_option:
-            total_price += complete_set.color_option.extra_price
-        if complete_set.reader_strength:
-            total_price += complete_set.reader_strength.price
-        # coatings is a ManyToMany — only queryable once this instance has a
-        # pk. During the very first save() (pre-INSERT), self.pk is still
-        # None, so this contributes 0 for that one call; the m2m_changed
-        # signal in Order/signals.py recalculates for real once coatings
-        # are actually attached (which can only happen post-save anyway).
-        if complete_set.pk:
-            for coating in complete_set.coatings.all():
-                total_price += coating.price
-        # density is now a plain CharField — no add_on_price contribution
-        if has_prism(complete_set):
-            total_price += PRISM_SURCHARGE
-        return total_price
+        # Frame plus the lens. The lens comes from the price sheet when that
+        # table has rows (all-in cell + prism + coatings the sheet does not
+        # cover). An empty table keeps the old add-on stack and logs a
+        # warning — see lens_workflow.pricing. Raises LensNotOffered when the
+        # sheet is loaded and this pair cannot be made; callers that charge
+        # a customer must turn that into a 400 and must not invent a price.
+        from lens_workflow.pricing import lens_total_for_complete_set
+        total_price = Decimal("0.00")
+        if complete_set.frame and complete_set.frame.price:
+            total_price += Decimal(str(complete_set.frame.price))
+        total_price += lens_total_for_complete_set(complete_set)
+        return total_price.quantize(Decimal("0.01"))

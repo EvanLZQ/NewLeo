@@ -8,7 +8,8 @@ from lens_workflow import price_table
 
 class Command(BaseCommand):
     help = ("Load the lens price table from an Excel file (same as the admin's "
-            "'Replace prices from Excel'). Prints every problem with its sheet and cell.")
+            "'Replace prices from Excel'). Prints every problem with its sheet and cell. "
+            "Re-running replaces only the sheets in the file; it is safe to run again.")
 
     def add_arguments(self, parser):
         parser.add_argument("path", help="Path to the .xlsx file")

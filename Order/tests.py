@@ -8,6 +8,16 @@ from General.models import Address
 from Order.models import CompleteSet, OrderInfo
 from Order.serializer import OrderSerializer
 from Order.service.order_service import OrderService
+from Prescription.models import PrescriptionInfo, PrescriptionPrism
+from lens_workflow import price_table as pt
+from lens_workflow.models import (
+    LensCoating,
+    LensFunctionPath,
+    LensIndexOption,
+    LensType,
+)
+from lens_workflow.pricing import LensNotOffered, MAX_CYL_MESSAGE
+from lens_workflow.tests import block, workbook
 from Order.views import _detach_paid_order_address
 from Product.models import ProductInfo, ProductInstance
 
@@ -318,3 +328,141 @@ class OrderLevelCouponTests(TestCase):
         self.assertEqual(Decimal(res.data['discount_amount']), Decimal('1200.00'))
         order = OrderInfo.objects.get(pk=res.data['order_id'])
         self.assertEqual(order.discount, Decimal('1200.00'))
+
+
+def _svd_catalog():
+    lens_type = LensType.objects.create(
+        code='SVD', label='Single Vision Distance', is_prescription_required=True)
+    clear = LensFunctionPath.objects.create(
+        lens_type=lens_type, function_code='CLEAR', function_label='Classic',
+        extra_price=Decimal('0'))
+    blue = LensFunctionPath.objects.create(
+        lens_type=lens_type, function_code='BLUE_LIGHT_FILTERING',
+        function_label='Blue Light Filtering', extra_price=Decimal('9.95'))
+    index = LensIndexOption.objects.create(
+        lens_type=lens_type, tier='Basic', option_label='Basic - 1.50 Index',
+        index_value=Decimal('1.50'), price=Decimal('4.95'))
+    return lens_type, clear, blue, index
+
+
+def _import_clear_sheet():
+    """Premium clear 1.50 plano is 9.95. Blue-light clear 1.50 plano is 14.95.
+    Economic clear 1.50 is 4.95 and is only used when Premium has no cell."""
+    prem = (block(index=1.5, prices=[[9.95, 9.95, 9.95]] * 3)
+            + block(index=1.5, coating='Blue Light Filtering',
+                    prices=[[14.95, 14.95, 14.95]] * 3))
+    pt.apply_import(pt.parse_workbook(workbook({
+        'Premium Lens': prem,
+        'Economic Lens': block(index=1.5, prices=[[4.95, 4.95, 4.95]] * 3),
+    })), filename='checkout.xlsx', file_bytes=b'x')
+
+
+class LensSheetCheckoutTests(TestCase):
+    """Quote, cart sub_total, and the charged order total use one price."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='lens@example.com', password='test-pass-123')
+        self.user.refresh_from_db()
+        self.client = APIClient()
+        self.client.defaults["HTTP_X_FORWARDED_PROTO"] = "https"
+        self.client.force_login(self.user)
+        self.frame = _frame('QA-LENS', Decimal('100.00'))
+        self.lens_type, self.clear, self.blue, self.index = _svd_catalog()
+        self.rx = PrescriptionInfo.objects.create()
+        self.address = Address.objects.create(customer=self.user, **_address_fields())
+
+    def _set(self, **extra):
+        fields = dict(
+            frame=self.frame, lens_type=self.lens_type, function_path=self.clear,
+            index_option=self.index, prescription=self.rx)
+        fields.update(extra)
+        complete_set = CompleteSet.objects.create(**fields)
+        self.user.shopping_cart.eyeglasses_set.add(complete_set)
+        return complete_set
+
+    def _checkout(self, complete_set):
+        return self.client.post('/api/order/create_pending', {
+            'complete_set_ids': [complete_set.id],
+            'address_id': self.address.id,
+            'shipping_method': 'Priority Shipping',
+            'country': 'United States',
+            'email': '',
+            'sub_total': '1.00',
+        }, format='json')
+
+    def test_empty_table_keeps_the_old_stack_and_logs(self):
+        with self.assertLogs('lens_workflow.pricing', level='WARNING') as logs:
+            complete_set = self._set()
+        self.assertEqual(complete_set.sub_total, Decimal('104.95'))
+        self.assertTrue(any('price table is empty' in line for line in logs.output))
+        response = self._checkout(complete_set)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(Decimal(response.data['sub_total']), Decimal('104.95'))
+        # Shipping rules are unchanged: US, subtotal over $59, one pair.
+        self.assertEqual(Decimal(response.data['shipping_cost']), Decimal('0'))
+        self.assertEqual(
+            Decimal(response.data['customs_fee']),
+            OrderService.calculate_customs_fee('United States', Decimal('104.95')))
+
+    def test_checkout_charges_the_sheet_price_not_the_client_or_the_old_stack(self):
+        _import_clear_sheet()
+        complete_set = self._set()
+        # Old stack would be frame 100 + index 4.95 = 104.95. The sheet cell is 9.95.
+        self.assertEqual(complete_set.sub_total, Decimal('109.95'))
+        CompleteSet.objects.filter(pk=complete_set.pk).update(sub_total=Decimal('1.00'))
+        response = self._checkout(complete_set)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(Decimal(response.data['sub_total']), Decimal('109.95'))
+        self.assertEqual(Decimal(response.data['shipping_cost']), Decimal('0'))
+        self.assertEqual(
+            Decimal(response.data['customs_fee']),
+            OrderService.calculate_customs_fee('United States', Decimal('109.95')))
+        complete_set.refresh_from_db()
+        from Order.service.order_service import get_complete_set_line_items
+        items = get_complete_set_line_items(complete_set)
+        self.assertEqual(items[0]['component'], 'lens')
+        self.assertEqual(items[0]['price'], 9.95)
+        self.assertEqual(
+            Decimal(str(self.frame.price)) + Decimal(str(sum(row['price'] for row in items))),
+            complete_set.sub_total)
+
+    def test_blue_light_is_inside_the_cell_and_oleophobic_is_not(self):
+        _import_clear_sheet()
+        oleo = LensCoating.objects.create(
+            code='OLEOPHOBIC', label='Oleophobic', price=Decimal('4.95'))
+        complete_set = self._set(function_path=self.blue)
+        complete_set.coatings.add(oleo)
+        complete_set.refresh_from_db()
+        # Sheet blue-light cell 14.95 + oleophobic 4.95 + frame 100.
+        # The old blue-light add-on ($9.95) is not added on top of the cell.
+        self.assertEqual(complete_set.sub_total, Decimal('119.90'))
+
+    def test_prism_stays_because_the_sheet_does_not_price_it(self):
+        _import_clear_sheet()
+        PrescriptionPrism.objects.create(
+            prescription=self.rx, horizontal_value_r=Decimal('1.00'),
+            horizontal_direction_r='In')
+        complete_set = self._set()
+        self.assertEqual(complete_set.sub_total, Decimal('136.95'))
+
+    def test_max_cylinder_is_refused_at_checkout(self):
+        _import_clear_sheet()
+        self.rx.cylinder_r = Decimal('-6.25')
+        self.rx.save()
+        with self.assertRaises(LensNotOffered) as caught:
+            self._set()
+        self.assertEqual(str(caught.exception), MAX_CYL_MESSAGE)
+
+    def test_index_missing_from_the_sheet_cannot_be_checked_out(self):
+        # Saved under the empty-table fallback, then the sheet arrives.
+        odd = LensIndexOption.objects.create(
+            lens_type=self.lens_type, tier='Safety', option_label='Safety - 1.59 Index',
+            index_value=Decimal('1.59'), price=Decimal('19.95'))
+        complete_set = self._set(index_option=odd)
+        self.assertEqual(complete_set.sub_total, Decimal('119.95'))
+        _import_clear_sheet()
+        response = self._checkout(complete_set)
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('not on the price sheet', response.data['error'])
+        self.assertFalse(OrderInfo.objects.filter(customer=self.user).exists())

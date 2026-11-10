@@ -65,6 +65,25 @@ EXPORT_SPHERE_COL = 12     # L
 MAX_PRICE = Decimal("100000")
 CENTS = Decimal("0.01")
 
+# A blank Color cell, or the literal placeholder "Color Table", is not a
+# product. Those blocks are stored (so the file round-trips) but
+# `price_for` / `lookup_price` will not sell them. None means "caller did
+# not pass a color" and still means N (no tint), which is a real product.
+UNRESOLVED_COLOR_VALUES = ("", "color table")
+
+
+def is_unresolved_color(color):
+    """True when this color must not be sold.
+
+    None is not unresolved: omitting color means N, i.e. no tint. A blank
+    string and the sheet's "Color Table" placeholder are unresolved — the
+    cleaned color tables are not in this file, and an empty color (for
+    example Economic Progressive Clear 1.56) must not be treated as Clear/N.
+    """
+    if color is None:
+        return False
+    return str(color).strip().lower() in UNRESOLVED_COLOR_VALUES
+
 
 # ── Reporting ────────────────────────────────────────────────────────────────
 
@@ -336,7 +355,13 @@ def _parse_block(sheet, tier, position, h, end, cell, result):
     block.rationale = first_text("rationale")[0]
     block.prescription_type = first_text("prescription_type")[0]
     block.lens_type = first_text("lens_type")[0]
-    block.color = first_text("color", "N")[0] or "N"
+    # Color is different from depth and coating. An omitted Color column
+    # means N (no tint). A Color column that is present but blank is a gap
+    # in the sheet, not Clear — store "" so lookup will not sell it as N.
+    if "color" in cols:
+        block.color = first_text("color", "")[0]
+    else:
+        block.color = "N"
     block.depth = first_text("depth", "N")[0] or "N"
     block.coating = first_text("coating", "N")[0] or "N"
     block.material = first_text("material")[0]
@@ -360,7 +385,11 @@ def _parse_block(sheet, tier, position, h, end, cell, result):
         err(_ref(cols["index"], idx_row), f"Index {idx} is outside the expected 1.00 - 1.99 range.")
     else:
         block.lens_index = idx.quantize(CENTS, rounding=ROUND_HALF_UP)
-    for field_name, label in (("color", "Color"), ("depth", "Depth"), ("coating", "Coating")):
+    if "color" in cols and not first_text("color")[0]:
+        warn(_ref(cols["color"], h + 1),
+             f"Color is empty for the lens at row {h}; this block is not offered. "
+             'It is not treated as "N" (clear).')
+    for field_name, label in (("depth", "Depth"), ("coating", "Coating")):
         if field_name in cols and not first_text(field_name)[0]:
             warn(_ref(cols[field_name], h + 1),
                  f'{label} is empty for the lens at row {h}; it is treated as "N" (none).')
@@ -552,12 +581,18 @@ _FREE_UPGRADE_TAG = "free upgrade to 1.56"
 def price_for(tier, prescription_type, lens_type, color, depth, coating,
               lens_index, sphere, cylinder):
     """Price of one lens, or None. No fallback: use `lookup_price` for the
-    full Premium -> Economic + free-upgrade logic."""
+    full Premium -> Economic + free-upgrade logic.
+
+    Blank color and "Color Table" are not products (see `is_unresolved_color`).
+    """
+    if is_unresolved_color(color):
+        return None
+    color = color or "N"
     block = LensPriceBlock.objects.filter(
         tier=tier, prescription_type=prescription_type, lens_type=lens_type,
-        color=color or "N", depth=depth or "N", coating=coating or "N",
+        color=color, depth=depth or "N", coating=coating or "N",
         lens_index=lens_index).first()
-    if block is None:
+    if block is None or is_unresolved_color(block.color):
         return None
     cell = block.cells.filter(sphere=sphere, cylinder=cylinder).first()
     return cell.price if cell else None
@@ -576,7 +611,7 @@ def _block_price(block, sphere, cylinder):
             lens_type=block.lens_type, color=block.color,
             depth=block.depth, coating=block.coating,
             lens_index=_FREE_UPGRADE_156).first()
-        if upgrade:
+        if upgrade and not is_unresolved_color(upgrade.color):
             cell = upgrade.cells.filter(sphere=sphere, cylinder=cylinder).first()
             if cell is not None:
                 return cell.price, _FREE_UPGRADE_156, True
@@ -587,13 +622,22 @@ def lookup_price(prescription_type, lens_type, color, depth, coating,
                  lens_index, sphere, cylinder):
     """Full price lookup: Premium first, then Economic; with Free Upgrade to
     1.56 inside each tier. Returns a PriceLookup, or None when this lens is
-    not available for these powers."""
+    not available for these powers.
+
+    "N" in a cell is not a price, so the search continues in the other tier.
+    Blank color and "Color Table" never match — those rows stay in the
+    database but are not offered. Premium grids past cylinder -2.00 are often
+    incomplete; this falls through to Economic instead of inventing a price.
+    """
+    if is_unresolved_color(color):
+        return None
+    color = color or "N"
     for tier in ("premium", "economic"):
         block = LensPriceBlock.objects.filter(
             tier=tier, prescription_type=prescription_type, lens_type=lens_type,
-            color=color or "N", depth=depth or "N", coating=coating or "N",
+            color=color, depth=depth or "N", coating=coating or "N",
             lens_index=lens_index).first()
-        if block is None:
+        if block is None or is_unresolved_color(block.color):
             continue
         price, actual_index, free_upgrade = _block_price(block, sphere, cylinder)
         if price is not None:
