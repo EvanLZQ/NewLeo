@@ -44,7 +44,11 @@ class OrderInfo(models.Model):
     # shipping_cost) because 15% of a large sub_total can exceed $999.99.
     customs_fee = models.DecimalField(
         max_digits=6, decimal_places=2, default=0, blank=True)
-    discount = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    # Combined coupon savings ("you saved"), written at checkout. Wider than
+    # the old numeric(5,2): frame + lens + order + shipping discounts are
+    # stored together, so two discounted pairs can exceed $999.99 and the
+    # UPDATE would abort the whole checkout transaction.
+    discount = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     accessory_total = models.DecimalField(
         max_digits=5, decimal_places=2, default=0)
     sub_total = models.DecimalField(max_digits=6, decimal_places=2)

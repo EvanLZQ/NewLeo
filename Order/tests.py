@@ -293,3 +293,28 @@ class OrderLevelCouponTests(TestCase):
         self.assertEqual(
             OrderService.calculate_order_discount(order, Decimal('50.00')),
             Decimal('0'))
+
+    def test_discount_over_999_dollars_is_stored(self):
+        # discount used to be numeric(5,2). Checkout now persists the combined
+        # savings; $1,200 on two pairs must not overflow that column and roll
+        # the order back.
+        OrderInfo._meta.get_field('discount').clean(Decimal('1200.00'), None)
+        self.frame.price = Decimal('600.00')
+        self.frame.save()
+        self.coupon.order_discount_amount = Decimal('100')
+        self.coupon.save()
+        first = self._set()
+        second = self._set()
+        res = self.client.post('/api/order/create_pending', {
+            'complete_set_ids': [first.id, second.id],
+            'address_id': self.address.id,
+            'shipping_method': 'Priority Shipping',
+            'country': 'Canada',
+            'email': '',
+            'coupon_code': 'TENOFF',
+        }, format='json')
+        self.assertEqual(res.status_code, 201, res.data)
+        self.assertEqual(Decimal(res.data['sub_total']), Decimal('0.00'))
+        self.assertEqual(Decimal(res.data['discount_amount']), Decimal('1200.00'))
+        order = OrderInfo.objects.get(pk=res.data['order_id'])
+        self.assertEqual(order.discount, Decimal('1200.00'))
