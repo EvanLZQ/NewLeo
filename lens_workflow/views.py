@@ -13,8 +13,16 @@ from .models import (
     LensIndexRecommendationRule,
     LensReaderStrength,
 )
-from .serializers import NextStepRequestSerializer
+from .serializers import NextStepRequestSerializer, RxQuoteRequestSerializer
 from Prescription.models import PrescriptionInfo
+from lens_workflow.pricing import (
+    Eye,
+    QuoteError,
+    QuoteRequest,
+    quote,
+    quote_to_dict,
+    prism_requested,
+)
 
 STEP_LABELS = {
     "LENS_TYPE": "What kind of glasses are you looking for today?",
@@ -635,9 +643,239 @@ class LensWorkflowSummaryView(APIView):
             selected.append(_color_option_dict(color_option))
         selected.extend(_coating_option_dict(c) for c in coatings)
 
-        return Response({
+        tint_type = None
+        tint_type_id = request.query_params.get("tint_type_id")
+        if tint_type_id:
+            try:
+                tint_type = LensFunctionPath.objects.get(id=int(tint_type_id))
+            except (TypeError, ValueError, LensFunctionPath.DoesNotExist):
+                return Response(
+                    {"detail": "tint_type_id was not found."},
+                    status=status.HTTP_404_NOT_FOUND)
+
+        body = {
             "selected_options": selected,
             "total_add_on_price": str(total),
             "missing_option_ids": [],
-        }, status=status.HTTP_200_OK)
+        }
+        try:
+            result = quote(_summary_quote_request(
+                request, lens_type, function_path, tint_type, index_option,
+                color_option, coatings))
+        except QuoteError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        body["pricing_source"] = result.pricing_source
+        body["quote"] = quote_to_dict(result)
+        if result.blocked or not result.available:
+            body["total_add_on_price"] = None
+            body["block_reason"] = result.block_reason or (
+                result.selection.reason if result.selection is not None else None)
+        else:
+            body["total_add_on_price"] = str(result.total_lens_price)
+            body["block_reason"] = None
+        return Response(body, status=status.HTTP_200_OK)
+
+
+def _eye_from_query(request, side, prescription, sph_attr, cyl_attr, add_attr, pd_attr):
+    prefix = "od" if side == "od" else "os"
+    if request.query_params.get(f"{prefix}_sph") is not None or request.query_params.get(f"{prefix}_cyl") is not None:
+        return Eye(
+            sph=Decimal(request.query_params.get(f"{prefix}_sph") or "0"),
+            cyl=Decimal(request.query_params.get(f"{prefix}_cyl") or "0"),
+            add=Decimal(request.query_params.get(f"{prefix}_add") or "0"),
+            pd=Decimal(request.query_params.get(f"{prefix}_pd") or "0"),
+        )
+    if prescription is None:
+        return Eye()
+    return Eye(
+        sph=getattr(prescription, sph_attr) or Decimal("0"),
+        cyl=getattr(prescription, cyl_attr) or Decimal("0"),
+        add=getattr(prescription, add_attr) or Decimal("0"),
+        pd=getattr(prescription, pd_attr) or Decimal("0"),
+    )
+
+
+def _summary_quote_request(request, lens_type, function_path, tint_type,
+                           index_option, color_option, coatings):
+    prescription = None
+    prescription_id = request.query_params.get("prescription_id")
+    if prescription_id:
+        try:
+            prescription = PrescriptionInfo.objects.get(id=int(prescription_id))
+        except (TypeError, ValueError, PrescriptionInfo.DoesNotExist):
+            raise QuoteError(f"Prescription id {prescription_id} was not found.")
+    sent_powers = any(
+        request.query_params.get(key) is not None
+        for key in ("od_sph", "od_cyl", "os_sph", "os_cyl"))
+    od = _eye_from_query(request, "od", prescription, "sphere_r", "cylinder_r", "add_r", "pd_r")
+    os = _eye_from_query(request, "os", prescription, "sphere_l", "cylinder_l", "add_l", "pd_l")
+    sun_type = tint_type.sun_type if tint_type is not None and tint_type.sun_type else (
+        function_path.sun_type if function_path is not None else "")
+    is_reader = bool(lens_type.is_reader or lens_type.code == "READER")
+    is_non_rx = bool(not lens_type.is_prescription_required and not is_reader)
+    prism = prism_requested(request.query_params.get("prism"))
+    if not prism and prescription is not None and not sent_powers:
+        prism = prescription.prism.exists()
+    return QuoteRequest(
+        od=od, os=os, prism=prism,
+        lens_type_code=lens_type.code,
+        function_code=function_path.function_code if function_path is not None else "",
+        sun_type=sun_type or "",
+        color_name=color_option.color_name if color_option is not None else "",
+        index_value=index_option.index_value if index_option is not None else None,
+        coating_codes=tuple(c.code for c in coatings),
+        lens_type=lens_type, function_path=function_path, tint_type=tint_type,
+        color_option=color_option, index_option=index_option, coatings=tuple(coatings),
+        prescription_missing=(
+            lens_type.is_prescription_required and prescription is None and not sent_powers),
+        is_reader=is_reader, is_non_rx=is_non_rx)
+
+
+class LensWorkflowRxQuoteView(APIView):
+    """POST /api/lens-workflow/rx-quote/
+
+    Authoritative all-in lens price for a prescription and a lens selection.
+    The response is what summary and checkout charge. The client must not
+    send a price; this server ignores any price field.
+    """
+
+    def post(self, request):
+        serializer = RxQuoteRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({"detail": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            req = _rx_quote_request(serializer.validated_data)
+            result = quote(req, include_options=True, require_index=False)
+        except QuoteError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(quote_to_dict(result), status=status.HTTP_200_OK)
+
+
+def _rx_quote_request(data):
+    from decimal import Decimal as _D
+    prescription = None
+    if data.get("prescription_id"):
+        try:
+            prescription = PrescriptionInfo.objects.get(id=data["prescription_id"])
+        except PrescriptionInfo.DoesNotExist:
+            raise QuoteError(f"Prescription id {data['prescription_id']} was not found.")
+    if data.get("od"):
+        od = Eye(
+            sph=data["od"]["sph"], cyl=data["od"].get("cyl") or _D("0"),
+            add=data["od"].get("add") or _D("0"), pd=data["od"].get("pd") or _D("0"))
+        os_data = data["os"]
+        os = Eye(
+            sph=os_data["sph"], cyl=os_data.get("cyl") or _D("0"),
+            add=os_data.get("add") or _D("0"), pd=os_data.get("pd") or _D("0"))
+    elif prescription is not None:
+        od = Eye(prescription.sphere_r or _D("0"), prescription.cylinder_r or _D("0"),
+                 prescription.add_r or _D("0"), prescription.pd_r or _D("0"))
+        os = Eye(prescription.sphere_l or _D("0"), prescription.cylinder_l or _D("0"),
+                 prescription.add_l or _D("0"), prescription.pd_l or _D("0"))
+    else:
+        raise QuoteError("Provide od and os, or prescription_id.")
+
+    lens_type = None
+    if data.get("lens_type_id"):
+        try:
+            lens_type = LensType.objects.get(id=data["lens_type_id"])
+        except LensType.DoesNotExist:
+            raise QuoteError(f"Lens type id {data['lens_type_id']} was not found.")
+        code = lens_type.code
+    else:
+        code = data.get("lens_type_code") or ""
+        lens_type = LensType.objects.filter(code=code).first()
+
+    function_path = None
+    function_code = data.get("function_code") or ""
+    if data.get("function_path_id"):
+        try:
+            function_path = LensFunctionPath.objects.get(id=data["function_path_id"])
+        except LensFunctionPath.DoesNotExist:
+            raise QuoteError(f"Function path id {data['function_path_id']} was not found.")
+        function_code = function_path.function_code
+    sun_type = data.get("sun_type") or ""
+    tint_type = None
+    if data.get("tint_type_id"):
+        try:
+            tint_type = LensFunctionPath.objects.get(id=data["tint_type_id"])
+        except LensFunctionPath.DoesNotExist:
+            raise QuoteError(f"Tint type id {data['tint_type_id']} was not found.")
+        if tint_type.sun_type:
+            sun_type = tint_type.sun_type
+    elif not sun_type and function_path is not None and function_path.sun_type:
+        sun_type = function_path.sun_type
+
+    color_option = None
+    color_name = data.get("color_name") or ""
+    if data.get("color_option_id"):
+        try:
+            color_option = LensColorOption.objects.get(id=data["color_option_id"])
+        except LensColorOption.DoesNotExist:
+            raise QuoteError(f"Color id {data['color_option_id']} was not found.")
+        color_name = color_option.color_name
+
+    index_option = None
+    index_value = data.get("index_value")
+    if data.get("index_option_id"):
+        try:
+            index_option = LensIndexOption.objects.get(id=data["index_option_id"])
+        except LensIndexOption.DoesNotExist:
+            raise QuoteError(f"Index id {data['index_option_id']} was not found.")
+        index_value = index_option.index_value
+
+    coatings = []
+    coating_ids = data.get("coating_ids") or []
+    if coating_ids:
+        coatings = list(LensCoating.objects.filter(id__in=coating_ids))
+        if len(coatings) != len(set(coating_ids)):
+            raise QuoteError("One or more coating ids were not found.")
+    codes = list(data.get("coating_codes") or [])
+    if codes:
+        found = list(LensCoating.objects.filter(code__in=codes))
+        known = {choice for choice, _label in LensCoating.Code.choices}
+        unknown = [code for code in codes if code not in known]
+        if unknown:
+            raise QuoteError(f"Unknown coating code(s): {unknown}.")
+        present = {row.code for row in found}
+        missing_priced = [
+            code for code in codes
+            if code not in present and code not in ("BLUE_LIGHT_FILTERING",
+                                                    "ANTI_SCRATCH", "ANTI_GLARE", "UV_PROTECTION")]
+        if missing_priced:
+            raise QuoteError(
+                f"Coating code(s) {missing_priced} are not in the catalog, so they cannot be priced.")
+        by_code = {row.code: row for row in coatings}
+        for row in found:
+            by_code.setdefault(row.code, row)
+        coatings = list(by_code.values())
+    seen_groups = {}
+    for coating in coatings:
+        if not coating.exclusive_group:
+            continue
+        if coating.exclusive_group in seen_groups:
+            raise QuoteError(
+                f"'{coating.label}' and '{seen_groups[coating.exclusive_group]}' can't both be selected.")
+        seen_groups[coating.exclusive_group] = coating.label
+    coating_codes = tuple(dict.fromkeys(
+        [c.code for c in coatings] + [c for c in codes if c not in {row.code for row in coatings}]))
+
+    if "prism" in data:
+        prism = prism_requested(data.get("prism"))
+    elif prescription is not None and not data.get("od"):
+        prism = prescription.prism.exists()
+    else:
+        prism = False
+
+    is_reader = bool(lens_type and (lens_type.is_reader or lens_type.code == "READER")) or code == "READER"
+    is_non_rx = bool(lens_type and not lens_type.is_prescription_required and not is_reader) or code == "NON_RX"
+    return QuoteRequest(
+        od=od, os=os, prism=prism,
+        lens_type_code=code, function_code=function_code, sun_type=sun_type or "",
+        color_name=color_name, density=data.get("density") or "",
+        index_value=index_value, coating_codes=coating_codes,
+        lens_type=lens_type, function_path=function_path, tint_type=tint_type,
+        color_option=color_option, index_option=index_option, coatings=tuple(coatings),
+        prescription_missing=False,
+        is_reader=is_reader, is_non_rx=is_non_rx)
 

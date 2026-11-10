@@ -20,8 +20,21 @@ from Leoptique.authentication import AccessTokenAuthentication
 from .models import *
 from .serializer import CompleteSetSerializer, OrderSerializer, CompleteSetObjectSerializer
 from .service.order_service import OrderService, get_complete_set_line_items
+from lens_workflow.pricing import LensNotOffered
 
 AUTH_CLASSES = [SessionAuthentication, AccessTokenAuthentication]
+
+
+def _reprice_linked_sets(complete_set_ids):
+    """Recompute each pair from the price table before the order total is
+    frozen. Returning a Response rolls the checkout transaction back."""
+    try:
+        for complete_set in CompleteSet.objects.filter(id__in=list(complete_set_ids)):
+            complete_set.save()
+    except LensNotOffered as exc:
+        transaction.set_rollback(True)
+        return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return None
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -706,6 +719,13 @@ def createPendingOrder(request):
         # ── Step 2: link the complete sets ─────────────────────────────────────
         CompleteSet.objects.filter(id__in=complete_set_ids).update(order=order)
 
+        # The price sheet (when loaded) is authoritative. Recompute before
+        # the order total is taken from the stored sub_totals, so a cart
+        # saved under the old add-on stack cannot be charged at that price.
+        refused = _reprice_linked_sets(complete_set_ids)
+        if refused is not None:
+            return refused
+
         # ── Step 3: calculate totals ───────────────────────────────────────────
         # calculate_sub_total already applies the frame/lens coupon discount
         # per item (via is_coupon_applicable, reading order.coupon_used set
@@ -1045,6 +1065,10 @@ def createPendingOrderGuest(request):
 
         # Link complete sets
         CompleteSet.objects.filter(id__in=complete_set_ids).update(order=order)
+
+        refused = _reprice_linked_sets(complete_set_ids)
+        if refused is not None:
+            return refused
 
         # Calculate totals — see createPendingOrder above for why calling
         # calculate_shipping_discount unconditionally is safe.

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import *
-from .service.order_service import get_complete_set_line_items
+from .service.order_service import OrderService, get_complete_set_line_items
+from lens_workflow.pricing import LensNotOffered
 from lens_workflow.models import (
     LensType,
     LensFunctionPath,
@@ -91,6 +92,17 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         rep['is_prescription_required'] = (
             obj.lens_type.is_prescription_required if obj.lens_type else None
         )
+        # Open carts show the price checkout will charge. A pair already on
+        # an order keeps the sub_total that was frozen at checkout.
+        rep['lens_unavailable'] = None
+        if obj.order_id is None:
+            try:
+                fresh = OrderService.calculate_complete_set_sub_total(obj)
+            except LensNotOffered as exc:
+                rep['lens_unavailable'] = str(exc)
+                rep['sub_total'] = None
+            else:
+                rep['sub_total'] = f"{fresh:.2f}"
         return rep
 
     # ── create ───────────────────────────────────────────────────────────────
@@ -108,22 +120,28 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         # kwargs, needs .set() after the row exists.
         coatings = validated_data.get('coatings')
 
-        instance = CompleteSet.objects.create(
-            frame=frame_obj,
-            lens_type=validated_data.get('lens_type'),
-            function_path=validated_data.get('function_path'),
-            tint_type=validated_data.get('tint_type'),
-            index_option=validated_data.get('index_option'),
-            color_option=validated_data.get('color_option'),
-            reader_strength=validated_data.get('reader_strength'),
-            density=validated_data.get('density'),
-            prescription=rx_obj,
-            sub_color=validated_data.get('sub_color'),
-            saved_for_later=validated_data.get('saved_for_later', False),
-            sub_total=validated_data.get('sub_total', 0),
-        )
+        from django.db import transaction
+        try:
+            with transaction.atomic():
+                instance = CompleteSet.objects.create(
+                    frame=frame_obj,
+                    lens_type=validated_data.get('lens_type'),
+                    function_path=validated_data.get('function_path'),
+                    tint_type=validated_data.get('tint_type'),
+                    index_option=validated_data.get('index_option'),
+                    color_option=validated_data.get('color_option'),
+                    reader_strength=validated_data.get('reader_strength'),
+                    density=validated_data.get('density'),
+                    prescription=rx_obj,
+                    sub_color=validated_data.get('sub_color'),
+                    saved_for_later=validated_data.get('saved_for_later', False),
+                    sub_total=validated_data.get('sub_total', 0),
+                )
+                if coatings:
+                    instance.coatings.set(coatings)
+        except LensNotOffered as exc:
+            raise serializers.ValidationError({'detail': str(exc)})
         if coatings:
-            instance.coatings.set(coatings)
             # CompleteSet.save() recomputes sub_total unconditionally, but on
             # this first save() (pre-INSERT) coatings can't be queried yet —
             # see calculate_complete_set_sub_total's `if complete_set.pk:`
@@ -169,20 +187,15 @@ class CompleteSetSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError(
                         {'prescription': f'Prescription id {rx_id} not found'})
 
-        instance.save()
-
-        # coatings is many-to-many — .set() after save() (not in the plain
-        # setattr loop above; direct assignment to an M2M is disallowed).
-        # The m2m_changed signal in Order/signals.py recalculates sub_total
-        # for real once this runs — but only in the DB, via a separate
-        # queryset .update() call that never touches this in-memory
-        # `instance`. refresh_from_db() pulls that corrected total back in,
-        # same reasoning as create() above — otherwise the response (and
-        # build_price_check in views.py) would report the pre-coatings-change
-        # total instead of what actually got saved.
-        if 'coatings' in validated_data:
-            instance.coatings.set(validated_data.get('coatings'))
-            instance.refresh_from_db()
+        from django.db import transaction
+        try:
+            with transaction.atomic():
+                instance.save()
+                if 'coatings' in validated_data:
+                    instance.coatings.set(validated_data.get('coatings'))
+                    instance.refresh_from_db()
+        except LensNotOffered as exc:
+            raise serializers.ValidationError({'detail': str(exc)})
 
         return instance
 

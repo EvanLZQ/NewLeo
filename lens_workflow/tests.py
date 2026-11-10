@@ -95,7 +95,8 @@ class ParseTests(TestCase):
         r = pt.parse_workbook(workbook({"Premium Lens": block(color=None)}))
         self.assertTrue(r.ok)
         self.assertTrue(any("Color is empty" in w.message for w in r.warnings))
-        self.assertEqual(r.blocks["premium"][0].color, "N")
+        # A blank Color cell is a gap, not Clear / "N". Lookup will not sell it.
+        self.assertEqual(r.blocks["premium"][0].color, "")
 
     def test_missing_required_text(self):
         rows = block(lens=None)
