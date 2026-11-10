@@ -171,9 +171,24 @@ class OrderService:
         return total
 
     @staticmethod
-    def calculate_sub_total(order):
+    def complete_sets_for_order(order):
+        """Pairs attached to a saved order.
+
+        `CompleteSet.objects.filter(order=unsaved_order)` compiles to
+        `order_id IS NULL`. OrderInfo.save() runs that lookup before the new
+        order has a primary key, so it used to load every pair still sitting
+        in a cart. Pricing one of those (a power the sheet does not sell)
+        raised "Not offered for this prescription" and rolled back a checkout
+        whose own pair was fine.
+        """
         CompleteSet = apps.get_model('Order', 'CompleteSet')
-        complete_sets = CompleteSet.objects.filter(order=order)
+        if getattr(order, 'pk', None) is None:
+            return CompleteSet.objects.none()
+        return CompleteSet.objects.filter(order_id=order.pk)
+
+    @staticmethod
+    def calculate_sub_total(order):
+        complete_sets = OrderService.complete_sets_for_order(order)
         total = OrderService.calculate_items_total(order, complete_sets)
         return total - OrderService.calculate_order_discount(order, total)
 
@@ -238,8 +253,7 @@ class OrderService:
             # shipping_company holds the method the customer picked until
             # staff overwrite it with the real carrier when the order ships
             # (anything but "UPS" prices as Priority Shipping).
-            CompleteSet = apps.get_model('Order', 'CompleteSet')
-            pairs = CompleteSet.objects.filter(order=order).count()
+            pairs = OrderService.complete_sets_for_order(order).count()
             shipping_cost = OrderService.calculate_shipping_cost(
                 country, order.sub_total, order.shipping_company, pairs)
             shipping_discount = OrderService.calculate_shipping_discount(
