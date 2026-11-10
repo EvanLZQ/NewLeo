@@ -35,10 +35,19 @@ from Leoptique.client_ip import get_client_ip
 
 User = get_user_model()
 
-RATE_LIMIT_RESPONSE = Response(
-    {'error': 'Too many attempts. Please try again later.'},
-    status=status.HTTP_429_TOO_MANY_REQUESTS,
-)
+# Backend used when logging a user in without authenticate() (sign-up,
+# guest -> account). Several AUTHENTICATION_BACKENDS are configured, so
+# login() refuses to guess and raises unless one is named.
+MODEL_BACKEND = 'django.contrib.auth.backends.ModelBackend'
+
+
+def _rate_limit_response():
+    # A fresh Response per request: a shared module-level instance would carry
+    # cookies that middleware set on it for one visitor over to the next.
+    return Response(
+        {'error': 'Too many attempts. Please try again later.'},
+        status=status.HTTP_429_TOO_MANY_REQUESTS,
+    )
 
 
 def _is_rate_limited(key, max_attempts=5, window=300):
@@ -48,6 +57,24 @@ def _is_rate_limited(key, max_attempts=5, window=300):
         return True
     cache.set(key, count + 1, window)
     return False
+
+
+def _rate_limit_reached(key, max_attempts=5):
+    return cache.get(key, 0) >= max_attempts
+
+
+def _record_failure(key, window=300):
+    cache.set(key, cache.get(key, 0) + 1, window)
+
+
+def _normalize_email(value):
+    return (value or '').strip().lower()
+
+
+def _find_user_by_email(email):
+    """Case-insensitive lookup; accounts created before emails were
+    normalised may have mixed-case usernames."""
+    return User.objects.filter(username__iexact=email).order_by('id').first()
 
 
 @api_view(['GET'])
@@ -96,18 +123,26 @@ def getUserShoppingCart(request, cart_id):
     # ownership of whatever cart that id happens to point to. The only cart
     # ever merged in is the one tied to *this request's own session* below.
 
-    # Merge guest session cart if present
+    _merge_session_guest_cart(request, shopping_cart)
+
+    serializer = ShoppingCartSerializer(shopping_cart)
+    return Response(serializer.data)
+
+
+def _merge_session_guest_cart(request, shopping_cart):
+    """Move the items of this session's guest cart (if any) into the
+    account's cart. Called by every endpoint that hands a signed-in customer
+    their cart, so items added before signing in are never left behind."""
     guest_cart_id = request.session.get("guest_cart_id")
-    if guest_cart_id and guest_cart_id != shopping_cart.id:
+    if not guest_cart_id:
+        return
+    if guest_cart_id != shopping_cart.id:
         try:
             guest_cart = ShoppingCart.objects.get(id=guest_cart_id)
             shopping_cart.merge_with(guest_cart)
         except ShoppingCart.DoesNotExist:
             pass
-        del request.session["guest_cart_id"]
-
-    serializer = ShoppingCartSerializer(shopping_cart)
-    return Response(serializer.data)
+    del request.session["guest_cart_id"]
 
 
 @api_view(['POST'])
@@ -117,14 +152,17 @@ def createShoppingCart(request):
     if request.user.shopping_cart_id:
         # Already has one — behave like a fetch rather than minting a second,
         # orphaned cart the user's shopping_cart FK will never point to.
-        serializer = ShoppingCartSerializer(request.user.shopping_cart)
+        cart = request.user.shopping_cart
+        _merge_session_guest_cart(request, cart)
+        serializer = ShoppingCartSerializer(cart)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     serializer = ShoppingCartSerializer(data=request.data, context={'request': request})
     if serializer.is_valid():
         cart = serializer.save()
         CustomerInfo.objects.filter(pk=request.user.pk).update(shopping_cart=cart)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        _merge_session_guest_cart(request, cart)
+        return Response(ShoppingCartSerializer(cart).data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -149,17 +187,25 @@ def updateShoppingCart(request, cart_id):
 @api_view(['POST'])
 def login_view(request):
     ip = get_client_ip(request)
-    if _is_rate_limited(f'rl:login:{ip}'):
-        return RATE_LIMIT_RESPONSE
+    rl_key = f'rl:login:{ip}'
+    # Only failed attempts count, so a customer who signs in and out a few
+    # times (or several people behind one IP) is not locked out.
+    if _rate_limit_reached(rl_key, max_attempts=10):
+        return _rate_limit_response()
 
-    username = request.data.get('username')
-    password = request.data.get('password')
-    user = authenticate(request, username=username, password=password)
+    username = _normalize_email(request.data.get('username'))
+    password = request.data.get('password') or ''
+    existing = _find_user_by_email(username) if username else None
+    user = authenticate(
+        request,
+        username=existing.username if existing else username,
+        password=password,
+    )
     if user is not None:
         login(request, user)
         return Response({"message": "Login successful!"})
-    else:
-        return Response({"error": "Invalid credentials"}, status=400)
+    _record_failure(rl_key)
+    return Response({"error": "Invalid credentials"}, status=400)
 
 
 @api_view(['POST'])
@@ -315,10 +361,27 @@ def updateCustomerProfile(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def createCustomer(request):
-    serializer = CustomerCreateSerializer(data=request.data)
+    from django.core.validators import validate_email
+
+    data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+    email = _normalize_email(data.get('username'))
+    password = data.get('password') or ''
+    try:
+        validate_email(email)
+    except ValidationError:
+        return Response({'username': ['Please enter a valid email address.']}, status=400)
+    if _find_user_by_email(email):
+        return Response({'username': ['An account with this email already exists.']}, status=400)
+    try:
+        validate_password(password, user=CustomerInfo(username=email, email=email))
+    except ValidationError as e:
+        return Response({'password': e.messages}, status=400)
+    data['username'] = email
+
+    serializer = CustomerCreateSerializer(data=data)
     if serializer.is_valid():
         serializer.save()
-        login(request, serializer.instance)
+        login(request, serializer.instance, backend=MODEL_BACKEND)
         try:
             from Customer.email_service import send_welcome_email
             send_welcome_email(serializer.instance)
@@ -336,7 +399,11 @@ def createCustomer(request):
 @permission_classes([IsAuthenticated])
 def getCustomerOrders(request):
     user = request.user
-    orders = OrderInfo.objects.filter(customer=user)
+    # Only orders the customer actually paid for. An UNPAID row is a checkout
+    # attempt (created when the payment step opens, cancelled when they step
+    # back); listing those made every abandoned attempt look like a
+    # "Canceled" order the customer never placed. Staff still see them all.
+    orders = OrderInfo.objects.filter(customer=user).exclude(payment_status='UNPAID')
     serializer = OrderSerializer(orders, many=True)
     return Response(serializer.data)
 
@@ -555,9 +622,8 @@ def request_password_reset_code(request):
     if not PasswordResetCode.can_request(email):
         return Response({'message': generic_msg}, status=status.HTTP_200_OK)
 
-    try:
-        user = User.objects.get(username=email)
-    except User.DoesNotExist:
+    user = _find_user_by_email(email)
+    if user is None:
         return Response({'message': generic_msg}, status=status.HTTP_200_OK)
 
     code = PasswordResetCode.generate_code()
@@ -584,7 +650,7 @@ def verify_password_reset_code(request):
     code = (request.data.get('code') or '').strip()
 
     if email and _is_rate_limited(f'rl:verify:{email}'):
-        return RATE_LIMIT_RESPONSE
+        return _rate_limit_response()
 
     if not email or not code:
         return Response(
@@ -629,7 +695,7 @@ def reset_password(request):
     confirm_password = request.data.get('confirm_password', '')
 
     if email and _is_rate_limited(f'rl:reset:{email}'):
-        return RATE_LIMIT_RESPONSE
+        return _rate_limit_response()
 
     if not all([email, code, new_password, confirm_password]):
         return Response(
@@ -668,9 +734,8 @@ def reset_password(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    try:
-        user = User.objects.get(username=email)
-    except User.DoesNotExist:
+    user = _find_user_by_email(email)
+    if user is None:
         return Response(
             {'error': 'Invalid or expired code.'},
             status=status.HTTP_400_BAD_REQUEST,
@@ -713,7 +778,7 @@ def createFromGuest(request):
     from django.contrib.auth.password_validation import validate_password
     from django.core.exceptions import ValidationError
 
-    email        = (request.data.get('email') or '').strip()
+    email        = _normalize_email(request.data.get('email'))
     password     = request.data.get('password', '')
     order_number = request.data.get('order_number', '')
 
@@ -722,7 +787,7 @@ def createFromGuest(request):
                         status=status.HTTP_400_BAD_REQUEST)
 
     # Check if account already exists
-    if CustomerInfo.objects.filter(username=email).exists():
+    if _find_user_by_email(email):
         return Response({'error': 'An account with this email already exists'},
                         status=status.HTTP_409_CONFLICT)
 
@@ -733,7 +798,7 @@ def createFromGuest(request):
         return Response({'error': e.messages}, status=status.HTTP_400_BAD_REQUEST)
 
     # Create the user
-    user = CustomerInfo.objects.create_user(username=email, password=password)
+    user = CustomerInfo.objects.create_user(username=email, email=email, password=password)
 
     # Link guest order(s) to the new account
     if order_number:
@@ -749,8 +814,7 @@ def createFromGuest(request):
                 Address.objects.filter(pk=order.address_id).update(customer=user)
 
     # Auto-login
-    user.backend = 'django.contrib.auth.backends.ModelBackend'
-    login(request, user)
+    login(request, user, backend=MODEL_BACKEND)
 
     # Send welcome email
     try:

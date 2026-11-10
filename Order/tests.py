@@ -227,3 +227,69 @@ class CreatePendingAddressTests(TestCase):
         self.assertEqual(frozen.full_name, saved.full_name)
         self.assertEqual(Address.objects.filter(customer=self.user).count(), 1)
         self.assertEqual(_detach_paid_order_address(frozen).id, frozen.id)
+
+
+class OrderLevelCouponTests(TestCase):
+    """Coupon.order_discount_* used to be shown to customers but never applied."""
+
+    def setUp(self):
+        from General.models import Coupon
+        self.user = User.objects.create_user(
+            username='coupon@example.com', password='test-pass-123')
+        self.user.refresh_from_db()
+        self.client = APIClient()
+        self.client.force_login(self.user)
+        self.frame = _frame('QA-CPN-1', Decimal('50.00'))
+        self.coupon = Coupon.objects.create(
+            code='TENOFF', online=True,
+            order_discount_type='Percentage', order_discount_amount=Decimal('10'))
+        self.address = Address.objects.create(
+            customer=self.user, **_address_fields(country='Canada',
+                                                  province_state='Ontario (ON)',
+                                                  city='Toronto', post_code='M5V 2T6'))
+
+    def _set(self):
+        complete_set = CompleteSet.objects.create(frame=self.frame)
+        self.user.shopping_cart.eyeglasses_set.add(complete_set)
+        return complete_set
+
+    def test_validate_coupon_previews_order_discount(self):
+        complete_set = self._set()
+        res = self.client.post('/api/order/validate_coupon',
+                               {'code': 'tenoff', 'complete_set_ids': [complete_set.id]},
+                               format='json')
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertEqual(Decimal(res.data['discount_amount']), Decimal('5.00'))
+
+    def test_create_pending_applies_and_stores_order_discount(self):
+        complete_set = self._set()
+        res = self.client.post('/api/order/create_pending', {
+            'complete_set_ids': [complete_set.id], 'address_id': self.address.id,
+            'shipping_method': 'Priority Shipping', 'country': 'Canada', 'email': '',
+            'coupon_code': 'TENOFF',
+        }, format='json')
+        self.assertEqual(res.status_code, 201, res.data)
+        self.assertEqual(Decimal(res.data['sub_total']), Decimal('45.00'))
+        # $45 is under the $59 free-shipping threshold.
+        self.assertEqual(Decimal(res.data['shipping_cost']), Decimal('8.95'))
+        self.assertEqual(Decimal(res.data['total_amount']), Decimal('53.95'))
+        self.assertEqual(Decimal(res.data['discount_amount']), Decimal('5.00'))
+        order = OrderInfo.objects.get(pk=res.data['order_id'])
+        self.assertEqual(order.discount, Decimal('5.00'))
+
+    def test_amount_discount_never_exceeds_items(self):
+        self.coupon.order_discount_type = 'Amount'
+        self.coupon.order_discount_amount = Decimal('500')
+        self.coupon.save()
+        order = OrderInfo(customer=self.user, coupon_used=self.coupon)
+        self.assertEqual(
+            OrderService.calculate_order_discount(order, Decimal('50.00')),
+            Decimal('50.00'))
+
+    def test_coupon_without_order_discount_changes_nothing(self):
+        self.coupon.order_discount_amount = Decimal('0')
+        self.coupon.save()
+        order = OrderInfo(customer=self.user, coupon_used=self.coupon)
+        self.assertEqual(
+            OrderService.calculate_order_discount(order, Decimal('50.00')),
+            Decimal('0'))

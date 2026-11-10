@@ -86,6 +86,7 @@ SITEMAP_STATIC_PATHS = [
     ('/FAQ', 'monthly', '0.5'),
     ('/why_choose_us', 'monthly', '0.4'),
     ('/our_story', 'monthly', '0.4'),
+    ('/contact', 'monthly', '0.4'),
     ('/ourLens', 'monthly', '0.4'),
     ('/prescription_guide', 'monthly', '0.5'),
     ('/face-shape-quiz', 'monthly', '0.7'),
@@ -145,3 +146,65 @@ def sitemap_xml(request):
     xml.endElement('urlset')
     xml.endDocument()
     return HttpResponse(out.getvalue(), content_type='application/xml')
+
+
+CONTACT_MAX_PER_HOUR = 5
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def contact_us(request):
+    """
+    Storefront "Contact us" form. Saves the message as a CustomerMessage
+    (Django admin > Customer Messages), linked to the account when the
+    visitor is signed in. If CONTACT_NOTIFY_EMAIL is configured, staff also
+    get an email copy.
+    """
+    from django.core.cache import cache
+    from Customer.models import CustomerMessage
+    from Leoptique.client_ip import get_client_ip
+
+    name = (request.data.get('name') or '').strip()[:100]
+    email = (request.data.get('email') or '').strip().lower()
+    order_number = (request.data.get('order_number') or '').strip()[:40]
+    message = (request.data.get('message') or '').strip()
+
+    if not email or not message:
+        return Response({'error': 'Email and message are required.'}, status=400)
+    try:
+        validate_email(email)
+    except ValidationError:
+        return Response({'error': 'Please enter a valid email address.'}, status=400)
+    if len(message) > 5000:
+        return Response({'error': 'Message is too long (5000 characters max).'}, status=400)
+
+    rl_key = f'rl:contact:{get_client_ip(request)}'
+    sent = cache.get(rl_key, 0)
+    if sent >= CONTACT_MAX_PER_HOUR:
+        return Response({'error': 'Too many messages. Please try again later.'}, status=429)
+    cache.set(rl_key, sent + 1, 3600)
+
+    user = request.user if request.user and request.user.is_authenticated else None
+    subject = f'Contact form: {order_number or name or email}'[:100]
+    content = (
+        f'From: {name or "(no name)"} <{email}>\n'
+        f'Order number: {order_number or "-"}\n'
+        f'Signed in as: {user.username if user else "guest"}\n\n'
+        f'{message}'
+    )
+    CustomerMessage.objects.create(
+        customer=user, subject=subject, content=content, message_from='Customer')
+
+    notify = getattr(settings, 'CONTACT_NOTIFY_EMAIL', '')
+    if notify:
+        try:
+            from django.core.mail import EmailMessage
+            EmailMessage(
+                subject=subject, body=content, from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[notify], reply_to=[email],
+            ).send()
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception('Failed to email contact message from %s', email)
+
+    return Response({'message': "Thanks! We've received your message and will reply by email."}, status=201)

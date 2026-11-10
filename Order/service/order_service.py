@@ -129,18 +129,45 @@ class OrderService:
         return lens_discount
 
     @staticmethod
-    def calculate_sub_total(order):
-        CompleteSet = apps.get_model('Order', 'CompleteSet')
-        complete_sets = CompleteSet.objects.filter(order=order)
-        total = 0
+    def calculate_order_discount(order, items_total):
+        """
+        The coupon's order-level discount, taken off the merchandise total
+        after any per-item (frame/lens) discounts. Never more than that total.
+        """
+        items_total = Decimal(str(items_total))
+        if not OrderService.is_coupon_applicable(order) or items_total <= 0:
+            return Decimal('0')
+        coupon = order.coupon_used
+        amount = Decimal(str(coupon.order_discount_amount or 0))
+        if amount <= 0:
+            return Decimal('0')
+        if coupon.order_discount_type == 'Percentage':
+            discount = items_total * amount / Decimal('100')
+        elif coupon.order_discount_type == 'Amount':
+            discount = amount
+        else:
+            return Decimal('0')
+        return min(items_total, discount).quantize(Decimal('0.01'))
+
+    @staticmethod
+    def calculate_items_total(order, complete_sets):
+        """Sum of item prices after per-item (frame/lens) coupon discounts."""
+        total = Decimal('0')
         for complete_set in complete_sets:
             frame_discount = OrderService.calculate_frame_discount(
                 order, complete_set)
             lens_discount = OrderService.calculate_lens_discount(
                 order, complete_set)
-            total += max(0, complete_set.sub_total -
-                         frame_discount - lens_discount)
+            total += max(Decimal('0'), Decimal(str(complete_set.sub_total)) -
+                         Decimal(str(frame_discount)) - Decimal(str(lens_discount)))
         return total
+
+    @staticmethod
+    def calculate_sub_total(order):
+        CompleteSet = apps.get_model('Order', 'CompleteSet')
+        complete_sets = CompleteSet.objects.filter(order=order)
+        total = OrderService.calculate_items_total(order, complete_sets)
+        return total - OrderService.calculate_order_discount(order, total)
 
     @staticmethod
     def normalize_shipping_method(country, shipping_method):

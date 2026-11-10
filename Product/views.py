@@ -207,6 +207,12 @@ def filterProduct(request):
             products = products.filter(frame_style__in=rims)
 
         search = filter_dict.get('Search', None)
+        # The storefront sends every facet as a list, Search included
+        # (["round"]); matching against the list itself searched for the text
+        # "['round']" and always returned nothing.
+        if isinstance(search, (list, tuple)):
+            search = ' '.join(str(v) for v in search if v is not None)
+        search = (search or '').strip() if isinstance(search, str) else ''
         if search:
             products = products.filter(
                 Q(name__icontains=search) | Q(model_number__icontains=search))

@@ -257,8 +257,8 @@ class PasswordResetCode(models.Model):
 
     @staticmethod
     def generate_code():
-        import random
-        return f"{random.randint(0, 999999):06d}"
+        import secrets
+        return f"{secrets.randbelow(1_000_000):06d}"
 
     @staticmethod
     def can_request(email):

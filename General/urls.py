@@ -7,4 +7,5 @@ urlpatterns = [
     path('faq', views.getFAQContents, name='faq'),
     path('page_image', views.getPageImage, name='page_image'),
     path('newsletter/subscribe', views.subscribe_newsletter, name='newsletter_subscribe'),
+    path('contact', views.contact_us, name='contact_us'),
 ]

@@ -66,3 +66,61 @@ class LaunchFAQTests(TestCase):
         response = self.client.get('/api/general/faq')
         self.assertEqual(response.status_code, 200)
         self.assertEqual([row['title'] for row in response.json()], titles)
+
+
+class ContactFormTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+
+    def test_message_is_stored_for_staff(self):
+        from rest_framework.test import APIClient
+        from Customer.models import CustomerMessage
+        res = APIClient().post('/api/general/contact', {
+            'name': 'QA', 'email': 'QA@Example.com', 'order_number': 'ELW-1',
+            'message': 'Where is my order?',
+        }, format='json')
+        self.assertEqual(res.status_code, 201, res.data)
+        msg = CustomerMessage.objects.get()
+        self.assertIsNone(msg.customer)
+        self.assertIn('qa@example.com', msg.content)
+        self.assertIn('ELW-1', msg.content)
+        self.assertIn('Where is my order?', msg.content)
+
+    def test_requires_valid_email_and_message(self):
+        from rest_framework.test import APIClient
+        client = APIClient()
+        self.assertEqual(client.post('/api/general/contact',
+                                     {'email': 'nope', 'message': 'hi'}, format='json').status_code, 400)
+        self.assertEqual(client.post('/api/general/contact',
+                                     {'email': 'a@example.com', 'message': ''}, format='json').status_code, 400)
+
+    def test_rate_limited_per_ip(self):
+        from rest_framework.test import APIClient
+        client = APIClient()
+        body = {'email': 'a@example.com', 'message': 'hi'}
+        for _ in range(5):
+            self.assertEqual(client.post('/api/general/contact', body, format='json').status_code, 201)
+        self.assertEqual(client.post('/api/general/contact', body, format='json').status_code, 429)
+
+
+class ProductSearchFilterTests(TestCase):
+    def test_search_sent_as_list_matches(self):
+        import json
+        from decimal import Decimal
+        from rest_framework.test import APIClient
+        from Product.models import ProductInfo, ProductInstance
+        product = ProductInfo.objects.create(
+            model_number='63027', name='Cosima', price=Decimal('35'), letter_size='M',
+            string_size='50-18-140', frame_weight=15, frame_width=133, lens_width=50,
+            bridge=18, temple_length=140, lens_height=42, upper_wearable_width=133,
+            lower_wearable_width=137, nose_pad='Adjustable', frame_style='Full-Rim')
+        ProductInstance.objects.create(product=product, sku='QA-SRCH-1', price=Decimal('35'),
+                                       color_base_name='red', color_display_name='Red', online=True)
+        client = APIClient()
+        for search in (['cos'], 'cos', ['COSIMA']):
+            res = client.get('/api/products/filter', {'filter': json.dumps({'Search': search})})
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.data['total_count'], 1, search)
+        res = client.get('/api/products/filter', {'filter': json.dumps({'Search': ['zzz']})})
+        self.assertEqual(res.data['total_count'], 0)

@@ -248,6 +248,10 @@ def _preview_coupon_discount(coupon, customer, complete_sets):
     for cs in complete_sets:
         total_discount += Decimal(str(OrderService.calculate_frame_discount(shell_order, cs)))
         total_discount += Decimal(str(OrderService.calculate_lens_discount(shell_order, cs)))
+    # Order-level discount comes off what is left after the item discounts,
+    # exactly as calculate_sub_total applies it.
+    items_total = OrderService.calculate_items_total(shell_order, complete_sets)
+    total_discount += OrderService.calculate_order_discount(shell_order, items_total)
     return total_discount
 
 
@@ -730,7 +734,11 @@ def createPendingOrder(request):
         if coupon:
             discount_amount = _preview_coupon_discount(
                 coupon, request.user, list(CompleteSet.objects.filter(order=order)),
-            ) + shipping_discount
+            ) + Decimal(str(shipping_discount))
+            discount_amount = Decimal(discount_amount).quantize(Decimal('0.01'))
+            # Stored for the order page/admin ("you saved"); totals above
+            # already include it.
+            OrderInfo.objects.filter(pk=order.pk).update(discount=discount_amount)
 
     return Response(
         {
@@ -1060,7 +1068,11 @@ def createPendingOrderGuest(request):
         if coupon:
             discount_amount = _preview_coupon_discount(
                 coupon, None, list(CompleteSet.objects.filter(order=order)),
-            ) + shipping_discount
+            ) + Decimal(str(shipping_discount))
+            discount_amount = Decimal(discount_amount).quantize(Decimal('0.01'))
+            # Stored for the order page/admin ("you saved"); totals above
+            # already include it.
+            OrderInfo.objects.filter(pk=order.pk).update(discount=discount_amount)
 
     # Track in session for ownership
     request.session['guest_pending_order_id'] = order.pk
