@@ -133,3 +133,7 @@ backup.sql
 *.sql
 *.tgz
 nginx/certbot/
+# Private shopper prescription uploads (never commit, never serve)
+private_media/
+# Local test/dev media uploads (never commit)
+media/

@@ -25,6 +25,18 @@ from Prescription.serializer import PrescriptionSerializer, PrescriptionUploadSe
 from Prescription.models import PrescriptionInfo, PrescriptionUpload
 
 
+def _attachable_prescription(request, rx_id):
+    """A typed prescription the caller may put on a cart item: their own, or
+    a signed-out one (customer NULL). Another account's Rx answers
+    DoesNotExist, so it can't be attached and then read back via the cart."""
+    rx = PrescriptionInfo.objects.get(id=rx_id)
+    user = getattr(request, 'user', None)
+    if rx.customer_id is not None and not (
+            user is not None and user.is_authenticated and user.pk == rx.customer_id):
+        raise PrescriptionInfo.DoesNotExist
+    return rx
+
+
 class _UploadField(serializers.PrimaryKeyRelatedField):
     """UUID string, or the read shape `{ "id": "<uuid>", ... }` sent back as is."""
 
@@ -81,13 +93,16 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         return obj.frame.sku
 
     def validate_prescription_upload(self, upload):
-        """An upload made while signed in belongs to that account only.
-        A guest upload (no customer) is attachable by whoever holds its UUID."""
-        if upload is None or upload.customer_id is None:
+        """Only the uploader (same account, or the same signed-out session)
+        may attach an upload. Re-sending the upload this item already has is
+        always fine (the Edit page sends it back unchanged)."""
+        if upload is None:
             return upload
+        if self.instance is not None and self.instance.prescription_upload_id == upload.pk:
+            return upload
+        from .ownership import caller_made_upload
         request = self.context.get('request')
-        user = getattr(request, 'user', None)
-        if user is None or not user.is_authenticated or user.pk != upload.customer_id:
+        if request is None or not caller_made_upload(request, upload):
             raise serializers.ValidationError('Prescription upload not found.')
         return upload
 
@@ -141,7 +156,10 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         frame_obj  = ProductInstance.objects.get(sku=frame_data['sku'])
 
         rx_data = request.data.get('prescription')
-        rx_obj  = PrescriptionInfo.objects.get(id=rx_data['id']) if rx_data else None
+        try:
+            rx_obj = _attachable_prescription(request, rx_data['id']) if rx_data else None
+        except PrescriptionInfo.DoesNotExist:
+            raise serializers.ValidationError({'prescription': 'Prescription not found'})
 
         # coatings is many-to-many — can't be passed into .create()'s
         # kwargs, needs .set() after the row exists.
@@ -207,7 +225,9 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             else:
                 try:
                     rx_id = rx_payload.get('id')
-                    instance.prescription = PrescriptionInfo.objects.get(id=rx_id)
+                    if rx_id != instance.prescription_id:
+                        instance.prescription = _attachable_prescription(
+                            self.context['request'], rx_id)
                 except (TypeError, KeyError):
                     raise serializers.ValidationError(
                         {'prescription': 'Expected object with { "id": <number> }'})

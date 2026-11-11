@@ -19,6 +19,7 @@ from rest_framework import status
 from Leoptique.authentication import AccessTokenAuthentication
 from .models import *
 from .serializer import CompleteSetSerializer, OrderSerializer, CompleteSetObjectSerializer
+from .ownership import caller_owns_complete_set, get_owned_complete_set, stamp_new_complete_set
 from .service.order_service import OrderService, get_complete_set_line_items
 from lens_workflow.pricing import LensNotOffered
 
@@ -39,31 +40,10 @@ def _reprice_linked_sets(complete_set_ids):
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _user_owns_complete_set(user, set_id):
-    """Check if a CompleteSet belongs to the user's cart or an order they own."""
-    cart = getattr(user, 'shopping_cart', None)
-    if cart and cart.eyeglasses_set.filter(id=set_id).exists():
-        return True
-    return CompleteSet.objects.filter(id=set_id, order__customer=user).exists()
-
-
 def _caller_owns_complete_set(request, set_id):
-    """
-    Ownership check that works for both authenticated users and guests.
-    - Authenticated: delegates to _user_owns_complete_set.
-    - Guest: checks if the CompleteSet is in the session's guest cart, OR
-      is unattached (just created, not yet linked to any order/cart).
-    """
-    if request.user and request.user.is_authenticated:
-        return _user_owns_complete_set(request.user, set_id)
-
-    from Customer.models import ShoppingCart as ShoppingCartModel
-    guest_cart_id = request.session.get('guest_cart_id')
-    if guest_cart_id and ShoppingCartModel.objects.filter(
-            pk=guest_cart_id, eyeglasses_set__id=set_id).exists():
-        return True
-    # Allow operating on unattached sets (just created, not in any cart/order yet)
-    return CompleteSet.objects.filter(id=set_id, order=None).exists()
+    """Signed-in owner, or this guest session; never "anything unordered".
+    See Order/ownership.py. Callers answer 404 when this is False."""
+    return caller_owns_complete_set(request, set_id)
 
 
 def generate_order_number():
@@ -369,11 +349,9 @@ def getCompleteSet(request):
 @authentication_classes(AUTH_CLASSES)
 @permission_classes([AllowAny])
 def deleteCompleteSet(request, set_id):
-    if not _caller_owns_complete_set(request, set_id):
-        return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
-    try:
-        complete_set = CompleteSet.objects.get(id=set_id)
-    except CompleteSet.DoesNotExist:
+    complete_set = get_owned_complete_set(request, set_id)
+    if complete_set is None:
+        # Same answer for "doesn't exist" and "not yours" (no id probing).
         return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
     complete_set.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
@@ -449,6 +427,7 @@ def createCompleteSet(request):
             data=request.data, context={'request': request})
         if serializer.is_valid():
             instance = serializer.save()
+            stamp_new_complete_set(request, instance)
             response_data = dict(serializer.data)
             response_data['price_check'] = build_price_check(request.data, instance)
             return Response(response_data, status=status.HTTP_201_CREATED)
@@ -459,11 +438,9 @@ def createCompleteSet(request):
 @authentication_classes(AUTH_CLASSES)
 @permission_classes([AllowAny])
 def getTargetCompleteSet(request, set_id):
-    if not _caller_owns_complete_set(request, set_id):
-        return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
-    try:
-        complete_set = CompleteSet.objects.get(id=set_id)
-    except CompleteSet.DoesNotExist:
+    complete_set = get_owned_complete_set(request, set_id)
+    if complete_set is None:
+        # Same answer for "doesn't exist" and "not yours" (no id probing).
         return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
     serializer = CompleteSetSerializer(complete_set, many=False)
     return Response(serializer.data)
@@ -473,11 +450,9 @@ def getTargetCompleteSet(request, set_id):
 @authentication_classes(AUTH_CLASSES)
 @permission_classes([AllowAny])
 def updateCompleteSet(request, set_id):
-    if not _caller_owns_complete_set(request, set_id):
-        return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
-    try:
-        complete_set = CompleteSet.objects.get(id=set_id)
-    except CompleteSet.DoesNotExist:
+    complete_set = get_owned_complete_set(request, set_id)
+    if complete_set is None:
+        # Same answer for "doesn't exist" and "not yours" (no id probing).
         return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
     serializer = CompleteSetSerializer(
         instance=complete_set, data=request.data, partial=True, context={'request': request}
@@ -516,11 +491,9 @@ def getTargetOrder(request, id):
 @authentication_classes(AUTH_CLASSES)
 @permission_classes([AllowAny])
 def getCompleteSetLoader(request, set_id):
-    if not _caller_owns_complete_set(request, set_id):
-        return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
-    try:
-        complete_set = CompleteSet.objects.get(id=set_id)
-    except CompleteSet.DoesNotExist:
+    complete_set = get_owned_complete_set(request, set_id)
+    if complete_set is None:
+        # Same answer for "doesn't exist" and "not yours" (no id probing).
         return Response({'error': 'Complete Set not found'}, status=status.HTTP_404_NOT_FOUND)
     serializer = CompleteSetObjectSerializer(complete_set, many=False)
     return Response(serializer.data)
@@ -618,7 +591,7 @@ def createPendingOrder(request):
     # Every requested item must actually belong to this customer — otherwise
     # Step 0a below (which cancels whatever UNPAID order currently holds a
     # requested item) could be pointed at a stranger's in-progress checkout.
-    if not all(_user_owns_complete_set(request.user, cs_id) for cs_id in complete_set_ids):
+    if not all(_caller_owns_complete_set(request, cs_id) for cs_id in complete_set_ids):
         return Response(
             {'error': 'One or more complete sets do not belong to you'},
             status=status.HTTP_403_FORBIDDEN,
@@ -928,11 +901,11 @@ def guestCart(request):
 
     if action == 'add':
         cs_id = request.data.get('complete_set_id')
-        # Only unattached items are claimable — same rule as the
-        # authenticated path (ShoppingCartSerializer.update), just without
-        # an "already my own order" exception since guests have no identity
-        # beyond this session.
-        if cs_id and CompleteSet.objects.filter(id=cs_id, order__isnull=True).exists():
+        # Only an item this session created (or already holds) and that is not
+        # on an order. Anything else is silently ignored, exactly like a
+        # missing id, so another shopper's item can't be pulled in by id.
+        if cs_id and CompleteSet.objects.filter(id=cs_id, order__isnull=True).exists() \
+                and _caller_owns_complete_set(request, cs_id):
             cart.eyeglasses_set.add(cs_id)
     elif action == 'remove':
         cs_id = request.data.get('complete_set_id')

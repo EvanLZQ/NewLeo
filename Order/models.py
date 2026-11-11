@@ -269,6 +269,15 @@ class CompleteSet(models.Model):
                   "on the lens page. Optional; the typed prescription above is "
                   "still what prices the lens.",
     )
+    # Who created this cart item (security fix 2026-11-11). Only the creator
+    # can claim it into a cart before it is in one; see Order/ownership.py.
+    created_by = models.ForeignKey(
+        'Customer.CustomerInfo', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='created_complete_sets', editable=False)
+    # Signed-out creator: random per-session token kept server-side in the
+    # Django session. Never returned by the API.
+    guest_token = models.CharField(
+        max_length=64, blank=True, default='', db_index=True, editable=False)
     saved_for_later = models.BooleanField(default=False)
     # max_digits=8: one pair can exceed $999.99 once the price sheet is in
     # use (high-index progressive photochromic cells reach $589.95 before

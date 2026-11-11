@@ -116,16 +116,18 @@ class PrescriptionSerializer(serializers.ModelSerializer):
 
 
 class PrescriptionUploadSerializer(serializers.ModelSerializer):
-    url = serializers.SerializerMethodField()
+    """Upload metadata. There is deliberately no public file URL: the file is
+    in private storage and `download_url` is the authenticated API view,
+    which re-checks ownership (owner, that guest session, or staff)."""
     is_pdf = serializers.BooleanField(read_only=True)
+    download_url = serializers.SerializerMethodField()
 
     class Meta:
         model = PrescriptionUpload
-        fields = ['id', 'original_name', 'content_type', 'size', 'is_pdf', 'url', 'created_at']
+        fields = ['id', 'original_name', 'content_type', 'size', 'is_pdf',
+                  'download_url', 'created_at']
         read_only_fields = fields
 
-    def get_url(self, obj):
-        from django.conf import settings
-        if not obj.file:
-            return None
-        return f"{settings.MEDIA_BASE_URL}{obj.file.url}"
+    def get_download_url(self, obj):
+        from django.urls import reverse
+        return reverse('prescription-upload-file', args=[obj.pk])

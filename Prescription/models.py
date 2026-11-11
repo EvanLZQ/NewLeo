@@ -1,6 +1,7 @@
 import os
 import uuid
 
+from django.core.files.storage import FileSystemStorage
 from django.db import models
 
 __all__ = ['PrescriptionInfo', 'PrescriptionPrism', 'PrescriptionUpload']
@@ -86,8 +87,41 @@ class PrescriptionPrism(models.Model):
         verbose_name_plural = 'Prism'
 
 
+class PrivateUploadStorage(FileSystemStorage):
+    """Files under settings.PRIVATE_MEDIA_ROOT, read at call time.
+
+    PRIVATE_MEDIA_ROOT is outside MEDIA_ROOT, nginx does not mount it, and
+    this storage has no URL (``url()`` raises), so a file here can only be
+    read through the authenticated download view
+    (Prescription.views.prescription_upload_file).
+    """
+
+    def __init__(self):
+        super().__init__(file_permissions_mode=0o600, directory_permissions_mode=0o700)
+
+    @property
+    def base_location(self):
+        from django.conf import settings
+        return settings.PRIVATE_MEDIA_ROOT
+
+    @property
+    def location(self):
+        return os.path.abspath(self.base_location)
+
+    @property
+    def base_url(self):
+        return None
+
+    def url(self, name):
+        raise ValueError("Prescription uploads are private and have no public URL.")
+
+
+def private_upload_storage():
+    return PrivateUploadStorage()
+
+
 def prescription_upload_path(instance, filename):
-    """media/prescription_uploads/YYYY/MM/<random hex>.<ext>
+    """<PRIVATE_MEDIA_ROOT>/prescription_uploads/YYYY/MM/<random hex>.<ext>
 
     The shopper's file name is kept in `original_name` only. The stored name
     is random so the URL can't be guessed from the upload id or the name.
@@ -101,14 +135,21 @@ class PrescriptionUpload(models.Model):
 
     Created before the cart item exists (the shopper uploads on the
     prescription step and adds to cart later), then linked from
-    CompleteSet.prescription_upload. The primary key is a UUID so a guest
-    upload can only be attached by a client that received it.
+    CompleteSet.prescription_upload. Only the uploader (same account, or the
+    same signed-out session) can attach it; it is stored privately and read
+    only through the authenticated download view.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     customer = models.ForeignKey(
         'Customer.CustomerInfo', on_delete=models.SET_NULL,
         related_name='prescription_uploads', null=True, blank=True)
-    file = models.FileField(upload_to=prescription_upload_path, max_length=255)
+    # Signed-out uploader: this browser session's owner token (server-side,
+    # never returned by the API). See Order/ownership.py.
+    guest_token = models.CharField(
+        max_length=64, blank=True, default='', db_index=True, editable=False)
+    file = models.FileField(
+        upload_to=prescription_upload_path, storage=private_upload_storage,
+        max_length=255)
     original_name = models.CharField(max_length=255, blank=True)
     content_type = models.CharField(max_length=100)
     size = models.PositiveIntegerField(help_text="Bytes")

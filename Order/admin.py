@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.urls import reverse
 from django.utils.html import format_html
 
 from .models import *
@@ -21,7 +22,8 @@ def _upload_link(upload):
     if upload is None or not upload.file:
         return "-"
     return format_html('<a href="{}" target="_blank" rel="noopener">{}</a>',
-                       upload.file.url, upload.original_name or "Prescription file")
+                       reverse('prescription-upload-file', args=[upload.pk]),
+                       upload.original_name or "Prescription file")
 
 
 @admin.register(CompleteSet)
@@ -30,7 +32,7 @@ class CompleteSetAdmin(admin.ModelAdmin):
                     'prescription_file', 'sub_total', 'created_at')
     list_select_related = ('frame', 'lens_type', 'order', 'prescription', 'prescription_upload')
     raw_id_fields = ('prescription_upload',)
-    readonly_fields = ('prescription_file',)
+    readonly_fields = ('prescription_file', 'created_by')
 
     @admin.display(description='Rx upload')
     def prescription_file(self, obj):

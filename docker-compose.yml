@@ -11,6 +11,9 @@ services:
       - .:/eyeloveware_backend_api
       - static_volume:/eyeloveware_backend_api/staticfiles
       - media_volume:/eyeloveware_backend_api/media
+      # Private prescription uploads. Backend only: do NOT add this volume
+      # to the nginx service, or the files become publicly servable.
+      - private_media_volume:/eyeloveware_backend_api/private_media
     command: >
       sh -c "python manage.py migrate &&
              gunicorn Leoptique.wsgi:application --config gunicorn.conf.py"
@@ -77,3 +80,4 @@ volumes:
   elw-db-data:
   static_volume:
   media_volume:
+  private_media_volume:

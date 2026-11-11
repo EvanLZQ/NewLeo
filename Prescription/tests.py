@@ -35,7 +35,9 @@ PDF = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
 class _MediaTmp(TestCase):
     def setUp(self):
         self._media = tempfile.mkdtemp(prefix="rx-upload-test-")
-        self._override = override_settings(MEDIA_ROOT=self._media)
+        self._private = tempfile.mkdtemp(prefix="rx-upload-private-")
+        self._override = override_settings(MEDIA_ROOT=self._media,
+                                           PRIVATE_MEDIA_ROOT=self._private)
         self._override.enable()
         self.client = APIClient(enforce_csrf_checks=False)
         self.client.defaults["HTTP_X_FORWARDED_PROTO"] = "https"
@@ -45,6 +47,7 @@ class _MediaTmp(TestCase):
     def tearDown(self):
         self._override.disable()
         shutil.rmtree(self._media, ignore_errors=True)
+        shutil.rmtree(self._private, ignore_errors=True)
 
     def _post(self, name, data, content_type="application/octet-stream"):
         return self.client.post(
