@@ -21,6 +21,8 @@ RUN adduser --disabled-password --no-create-home elw-user && \
     musl-dev && \
     /py/bin/pip install -r /tmp/requirements.txt && \
     mkdir -p /eyeloveware_backend_api/staticfiles && \
+    mkdir -p /eyeloveware_backend_api/private_media && \
+    chmod 700 /eyeloveware_backend_api/private_media && \
     chown -R elw-user:elw-user /eyeloveware_backend_api && \
     su elw-user -s /bin/sh -c "/py/bin/python manage.py collectstatic --noinput" && \
     rm -rf /tmp && \

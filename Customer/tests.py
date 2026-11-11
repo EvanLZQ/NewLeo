@@ -164,7 +164,13 @@ class GuestCartMergeTests(TestCase):
         self.frame = _frame()
 
     def _guest_add(self):
-        complete_set = CompleteSet.objects.create(frame=self.frame)
+        # Created through the API in this guest session, as the storefront
+        # does: an item with no recorded owner can no longer be claimed by id
+        # (2026-11-11 cart-enumeration fix).
+        res = self.client.post('/api/order/createcompleteset',
+                               {'frame': {'sku': self.frame.sku}}, format='json')
+        self.assertEqual(res.status_code, 201, res.content)
+        complete_set = CompleteSet.objects.get(id=res.data['id'])
         res = self.client.post('/api/order/guest_cart',
                                {'action': 'add', 'complete_set_id': complete_set.id}, format='json')
         self.assertEqual(res.status_code, 200)

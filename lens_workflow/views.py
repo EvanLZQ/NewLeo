@@ -252,13 +252,36 @@ def _priced_tier(index_options, recommended):
     return None
 
 
+def _owned_prescription(request, prescription_id):
+    """The Rx if this request may use it (owner account, the same signed-out
+    session, or staff; see Order/ownership.py), else None -- treated exactly
+    like an id that does not exist."""
+    from Order.ownership import get_owned_prescription
+    return get_owned_prescription(request, prescription_id)
+
+
 def _load_prescription(prescription_id):
+    """Only called with an id already checked by _owned_prescription."""
     if not prescription_id:
         return None
     try:
         return PrescriptionInfo.objects.get(id=prescription_id)
     except PrescriptionInfo.DoesNotExist:
         return None
+
+
+# A non-prescription lens has no power: every value is 0.00.
+_PLANO_PRESCRIPTION = SimpleNamespace(
+    sphere_r=Decimal("0"), sphere_l=Decimal("0"),
+    cylinder_r=Decimal("0"), cylinder_l=Decimal("0"),
+    add_r=Decimal("0"), add_l=Decimal("0"),
+    pd_r=Decimal("0"), pd_l=Decimal("0"),
+)
+
+
+def _is_non_rx_lens_type(lens_type):
+    return bool(lens_type is not None and not lens_type.is_prescription_required
+                and not lens_type.is_reader and lens_type.code != "READER")
 
 
 def _rx_decimal(value):
@@ -576,6 +599,10 @@ class LensWorkflowNextView(APIView):
         current_step_code = data["current_step_code"]
         selection_path = data["selection_path"]
         prescription_id = data.get("prescription_id")
+        if prescription_id and _owned_prescription(request, prescription_id) is None:
+            # Not this caller's Rx (or no such id): behave exactly like a
+            # missing id, so the recommendation can't leak someone's powers.
+            prescription_id = None
         current_step_index = data.get("current_step_index")
         total_steps = data.get("total_steps")
 
@@ -763,6 +790,13 @@ class LensWorkflowNextView(APIView):
             ]
 
         prescription = _load_prescription(prescription_id)
+        category = function_path.lens_type.index_recommendation_category
+        if _is_non_rx_lens_type(function_path.lens_type):
+            # Non-prescription lenses are plano: 0.00 on both eyes. Price and
+            # recommend them exactly like a 0.00 prescription, so unavailable
+            # indexes are hidden and 1.50 is recommended (2026-11-11).
+            prescription = _PLANO_PRESCRIPTION
+            category = category or "PLANO"
         if prescription is not None and price_table_loaded():
             index_options = [
                 io for io in index_options
@@ -770,7 +804,6 @@ class LensWorkflowNextView(APIView):
                     function_path, prescription, io, color_option))
             ]
 
-        category = function_path.lens_type.index_recommendation_category
         if prescription is None or not category:
             option_dicts = []
             for io in index_options:
@@ -1007,9 +1040,8 @@ def _summary_quote_request(request, lens_type, function_path, tint_type,
     prescription = None
     prescription_id = request.query_params.get("prescription_id")
     if prescription_id:
-        try:
-            prescription = PrescriptionInfo.objects.get(id=int(prescription_id))
-        except (TypeError, ValueError, PrescriptionInfo.DoesNotExist):
+        prescription = _owned_prescription(request, prescription_id)
+        if prescription is None:
             raise QuoteError(f"Prescription id {prescription_id} was not found.")
     sent_powers = any(
         request.query_params.get(key) is not None
@@ -1051,20 +1083,19 @@ class LensWorkflowRxQuoteView(APIView):
         if not serializer.is_valid():
             return Response({"detail": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            req = _rx_quote_request(serializer.validated_data)
+            req = _rx_quote_request(serializer.validated_data, request)
             result = quote(req, include_options=True, require_index=False)
         except QuoteError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(quote_to_dict(result), status=status.HTTP_200_OK)
 
 
-def _rx_quote_request(data):
+def _rx_quote_request(data, request):
     from decimal import Decimal as _D
     prescription = None
     if data.get("prescription_id"):
-        try:
-            prescription = PrescriptionInfo.objects.get(id=data["prescription_id"])
-        except PrescriptionInfo.DoesNotExist:
+        prescription = _owned_prescription(request, data["prescription_id"])
+        if prescription is None:
             raise QuoteError(f"Prescription id {data['prescription_id']} was not found.")
     if data.get("od"):
         od = Eye(

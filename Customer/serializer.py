@@ -120,30 +120,31 @@ class ShoppingCartSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         set_data = validated_data.pop('eyeglasses_set', [])
         request = self.context.get('request')
-        user = getattr(request, 'user', None) if request else None
 
-        instance.eyeglasses_set.clear()
+        # Security fix 2026-11-11: only items the caller already owns (in this
+        # cart, on their own order, or created by them / this session and
+        # not yet on an order) may be put in the cart. The old rule accepted
+        # any item not on an order, so any account could pull another
+        # shopper's item (and its prescription) into its cart by id.
+        # Unowned or missing ids are skipped silently, same as before.
+        from Order.ownership import owned_complete_sets
+        wanted_ids = []
         for item in set_data:
             set_id = item.get('id')
-            try:
-                complete_set_instance = CompleteSet.objects.get(id=set_id)
-            except CompleteSet.DoesNotExist:
-                continue
+            if isinstance(set_id, int) or (isinstance(set_id, str) and set_id.isdigit()):
+                wanted_ids.append(int(set_id))
+        if request is not None:
+            allowed = set(owned_complete_sets(request).filter(
+                id__in=wanted_ids).values_list('id', flat=True))
+        else:
+            allowed = set()
+        already_in_cart = set(instance.eyeglasses_set.filter(
+            id__in=wanted_ids).values_list('id', flat=True))
+        keep = [i for i in wanted_ids if i in allowed or i in already_in_cart]
 
-            # Only claimable if it's not attached to anyone's order yet, or
-            # it's already attached to one of THIS user's own orders — never
-            # someone else's (paid or otherwise). Silently skipped rather
-            # than erroring the whole request, same as a missing id above.
-            is_unclaimed = complete_set_instance.order_id is None
-            is_own = (
-                user is not None and getattr(user, 'is_authenticated', False)
-                and complete_set_instance.order_id is not None
-                and complete_set_instance.order.customer_id == user.pk
-            )
-            if not (is_unclaimed or is_own):
-                continue
-
-            instance.eyeglasses_set.add(complete_set_instance)
+        instance.eyeglasses_set.clear()
+        if keep:
+            instance.eyeglasses_set.add(*CompleteSet.objects.filter(id__in=keep))
 
         # Update other fields
         for attr, value in validated_data.items():

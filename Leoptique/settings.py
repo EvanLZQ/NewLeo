@@ -224,6 +224,11 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 # Media files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+# Shopper prescription uploads (photos/PDFs) live here, NOT under MEDIA_ROOT.
+# Never serve this directory from nginx; files are read only through
+# /api/prescriptions/upload/<uuid>/file (owner, that guest session, or staff).
+PRIVATE_MEDIA_ROOT = os.environ.get(
+    'PRIVATE_MEDIA_ROOT', os.path.join(BASE_DIR, 'private_media'))
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
