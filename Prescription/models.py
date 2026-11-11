@@ -10,6 +10,12 @@ __all__ = ['PrescriptionInfo', 'PrescriptionPrism', 'PrescriptionUpload']
 class PrescriptionInfo(models.Model):
     customer = models.ForeignKey('Customer.CustomerInfo', on_delete=models.CASCADE,
                                  related_name='prescription', null=True, blank=True)
+    # Signed-out author: this browser session's owner token (server-side in
+    # the Django session, never returned by the API). Rows with customer
+    # NULL and no token predate the 2026-11-11 ownership fix and are not
+    # readable by id except by staff. See Order/ownership.py.
+    guest_token = models.CharField(
+        max_length=64, blank=True, default='', db_index=True, editable=False)
     nickname = models.CharField(max_length=50, blank=True, null=True)
     pd_l = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     pd_r = models.DecimalField(max_digits=5, decimal_places=2, default=0)

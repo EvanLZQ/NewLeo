@@ -10,6 +10,7 @@ from django.core.management.color import no_style
 from django.db import connection
 from django.test import TestCase
 from rest_framework.test import APIClient
+from Prescription.testing import rx_via_api
 
 from General.models import Address
 from Order.models import CompleteSet
@@ -157,7 +158,7 @@ class IndexMenuTests(TestCase):
             sph_l = sph_r
         if cyl_l is None:
             cyl_l = cyl_r
-        rx = PrescriptionInfo.objects.create(
+        rx = rx_via_api(self.client, 
             sphere_r=D(str(sph_r)), cylinder_r=D(str(cyl_r)),
             sphere_l=D(str(sph_l)), cylinder_l=D(str(cyl_l)))
         started = self.client.get("/api/lens-workflow/next/", {
@@ -396,7 +397,7 @@ class UnpricedTierTests(TestCase):
                 option_label=label, price=D(price), is_active=True)
 
     def _menu(self):
-        rx = PrescriptionInfo.objects.create(
+        rx = rx_via_api(self.client, 
             sphere_r=D("0"), cylinder_r=D("0"),
             sphere_l=D("0"), cylinder_l=D("0"))
         started = self.client.get("/api/lens-workflow/next/", {
@@ -486,7 +487,7 @@ class UnpricedTierTests(TestCase):
         }))
         self.assertTrue(parsed.ok, [e.message for e in parsed.errors])
         pt.apply_import(parsed, filename="only150.xlsx", file_bytes=b"x")
-        rx = PrescriptionInfo.objects.create(
+        rx = rx_via_api(self.client, 
             sphere_r=D("-8.00"), cylinder_r=D("0"),
             sphere_l=D("-8.00"), cylinder_l=D("0"))
         started = self.client.get("/api/lens-workflow/next/", {
@@ -793,7 +794,7 @@ class RealSheetGapTests(TestCase):
             sph_l = sph_r
             cyl_l = cyl_r
         lens_type, function = self.catalog[code]
-        rx = PrescriptionInfo.objects.create(
+        rx = rx_via_api(self.client, 
             sphere_r=D(str(sph_r)), cylinder_r=D(str(cyl_r)),
             sphere_l=D(str(sph_l)), cylinder_l=D(str(cyl_l)))
         started = self.client.get("/api/lens-workflow/next/", {

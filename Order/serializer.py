@@ -26,13 +26,16 @@ from Prescription.models import PrescriptionInfo, PrescriptionUpload
 
 
 def _attachable_prescription(request, rx_id):
-    """A typed prescription the caller may put on a cart item: their own, or
-    a signed-out one (customer NULL). Another account's Rx answers
-    DoesNotExist, so it can't be attached and then read back via the cart."""
-    rx = PrescriptionInfo.objects.get(id=rx_id)
-    user = getattr(request, 'user', None)
-    if rx.customer_id is not None and not (
-            user is not None and user.is_authenticated and user.pk == rx.customer_id):
+    """A typed prescription the caller may put on a cart item: one this
+    request owns (its account, this signed-out session, or one already on a
+    cart item it owns; see Order/ownership.py). Anything else -- including
+    another guest's Rx -- answers DoesNotExist, so it can't be attached and
+    then read back via the cart. Staff get no bypass here."""
+    from .ownership import get_owned_prescription
+    rx = None
+    if request is not None:
+        rx = get_owned_prescription(request, rx_id, include_staff=False)
+    if rx is None:
         raise PrescriptionInfo.DoesNotExist
     return rx
 

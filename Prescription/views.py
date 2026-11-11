@@ -1,27 +1,27 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import Q
 from .models import PrescriptionInfo
 from .serializer import PrescriptionSerializer
 
 
-def _can_access_prescription(user, prescription):
-    """
-    Ownership check — a user may only access a prescription if:
-    • they are authenticated AND the prescription belongs to them, OR
-    • the prescription is a guest prescription (customer is NULL).
-    """
-    if prescription.customer is None:
-        return True
-    return user.is_authenticated and prescription.customer_id == user.pk
+# Security fix 2026-11-11: guest prescriptions (customer NULL) used to be
+# readable, editable and deletable by anyone who counted up the ids. Every
+# by-id access now goes through Order/ownership.py (owner account, the same
+# signed-out session, or staff); everything else is 404, exactly like an id
+# that does not exist.
+
+def _rx_not_found():
+    return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(['GET', 'POST'])
 def prescription_list_create(request):
+    from Order.ownership import prescription_owner_fields
     if request.method == 'GET':
+        # The signed-in customer's own saved prescriptions only (never all
+        # rows, not even for staff; staff use the admin).
         if request.user.is_authenticated:
-            # CustomerInfo IS the user model (AbstractUser) — filter directly
             prescriptions = PrescriptionInfo.objects.filter(
                 customer=request.user)
         else:
@@ -32,27 +32,21 @@ def prescription_list_create(request):
     elif request.method == 'POST':
         serializer = PrescriptionSerializer(data=request.data)
         if serializer.is_valid():
-            # Link to the logged-in customer so it appears in their GET list.
-            # Guest prescriptions (unauthenticated) are saved with customer=null
-            # and retrieved later via the batch endpoint using localStorage IDs.
-            if request.user.is_authenticated:
-                serializer.save(customer=request.user)
-            else:
-                serializer.save()
+            # Signed in: linked to the account. Signed out: bound to this
+            # browser session's server-side guest token, so only this session
+            # (or whoever owns the cart item it is put on) can read it back.
+            serializer.save(**prescription_owner_fields(request))
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['GET', 'PATCH', 'DELETE'])
 def prescription_detail(request, pk):
-    try:
-        prescription = PrescriptionInfo.objects.get(pk=pk)
-    except PrescriptionInfo.DoesNotExist:
-        return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    # Ownership guard: prevent cross-user access
-    if not _can_access_prescription(request.user, prescription):
-        return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+    from Order.ownership import get_owned_prescription
+    prescription = get_owned_prescription(request, pk)
+    if prescription is None:
+        # Same answer for "doesn't exist" and "not yours" (no id probing).
+        return _rx_not_found()
 
     if request.method == 'GET':
         serializer = PrescriptionSerializer(prescription)
@@ -73,6 +67,7 @@ def prescription_detail(request, pk):
 
 @api_view(['POST'])
 def fetch_prescriptions_by_ids_post(request):
+    from Order.ownership import owned_prescriptions
     ids = request.data.get('ids')
 
     if not ids or not isinstance(ids, list):
@@ -80,15 +75,16 @@ def fetch_prescriptions_by_ids_post(request):
             {"error": "'ids' must be a non-empty list."},
             status=status.HTTP_400_BAD_REQUEST
         )
+    clean_ids = []
+    for value in ids[:100]:
+        try:
+            clean_ids.append(int(value))
+        except (TypeError, ValueError):
+            continue
 
-    # Ownership filter: authenticated users see their own + guest prescriptions;
-    # unauthenticated users see only guest (customer=NULL) prescriptions.
-    qs = PrescriptionInfo.objects.filter(id__in=ids)
-    if request.user.is_authenticated:
-        qs = qs.filter(Q(customer=request.user) | Q(customer__isnull=True))
-    else:
-        qs = qs.filter(customer__isnull=True)
-
+    # Only rows this request owns (see Order/ownership.py); ids that are
+    # missing or not owned are silently left out, indistinguishably.
+    qs = owned_prescriptions(request).filter(id__in=clean_ids).order_by('id')
     serializer = PrescriptionSerializer(qs, many=True)
     return Response(serializer.data)
 

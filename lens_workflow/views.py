@@ -252,7 +252,16 @@ def _priced_tier(index_options, recommended):
     return None
 
 
+def _owned_prescription(request, prescription_id):
+    """The Rx if this request may use it (owner account, the same signed-out
+    session, or staff; see Order/ownership.py), else None -- treated exactly
+    like an id that does not exist."""
+    from Order.ownership import get_owned_prescription
+    return get_owned_prescription(request, prescription_id)
+
+
 def _load_prescription(prescription_id):
+    """Only called with an id already checked by _owned_prescription."""
     if not prescription_id:
         return None
     try:
@@ -590,6 +599,10 @@ class LensWorkflowNextView(APIView):
         current_step_code = data["current_step_code"]
         selection_path = data["selection_path"]
         prescription_id = data.get("prescription_id")
+        if prescription_id and _owned_prescription(request, prescription_id) is None:
+            # Not this caller's Rx (or no such id): behave exactly like a
+            # missing id, so the recommendation can't leak someone's powers.
+            prescription_id = None
         current_step_index = data.get("current_step_index")
         total_steps = data.get("total_steps")
 
@@ -1027,9 +1040,8 @@ def _summary_quote_request(request, lens_type, function_path, tint_type,
     prescription = None
     prescription_id = request.query_params.get("prescription_id")
     if prescription_id:
-        try:
-            prescription = PrescriptionInfo.objects.get(id=int(prescription_id))
-        except (TypeError, ValueError, PrescriptionInfo.DoesNotExist):
+        prescription = _owned_prescription(request, prescription_id)
+        if prescription is None:
             raise QuoteError(f"Prescription id {prescription_id} was not found.")
     sent_powers = any(
         request.query_params.get(key) is not None
@@ -1071,20 +1083,19 @@ class LensWorkflowRxQuoteView(APIView):
         if not serializer.is_valid():
             return Response({"detail": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            req = _rx_quote_request(serializer.validated_data)
+            req = _rx_quote_request(serializer.validated_data, request)
             result = quote(req, include_options=True, require_index=False)
         except QuoteError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(quote_to_dict(result), status=status.HTTP_200_OK)
 
 
-def _rx_quote_request(data):
+def _rx_quote_request(data, request):
     from decimal import Decimal as _D
     prescription = None
     if data.get("prescription_id"):
-        try:
-            prescription = PrescriptionInfo.objects.get(id=data["prescription_id"])
-        except PrescriptionInfo.DoesNotExist:
+        prescription = _owned_prescription(request, data["prescription_id"])
+        if prescription is None:
             raise QuoteError(f"Prescription id {data['prescription_id']} was not found.")
     if data.get("od"):
         od = Eye(

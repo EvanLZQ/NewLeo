@@ -24,6 +24,7 @@ from rest_framework.test import APIClient
 from Order.models import CompleteSet
 from Order.tests import _frame
 from Prescription.models import PrescriptionInfo, PrescriptionUpload
+from Prescription.testing import rx_via_api
 
 User = get_user_model()
 
@@ -75,8 +76,8 @@ class _OwnershipBase(TestCase):
         """Upload a file, type an Rx, create the cart item and put it in the
         cart, exactly as the lens page does."""
         upload_id = self._upload(client)
-        rx = PrescriptionInfo.objects.create(
-            customer=signed_in_user, sphere_l=-2.25, sphere_r=-2.0, pd_l=31.5, pd_r=31.5)
+        rx = rx_via_api(client, sphere_l=-2.25, sphere_r=-2.0, pd_l=31.5, pd_r=31.5)
+        self.assertEqual(rx.customer_id, signed_in_user.pk if signed_in_user else None)
         res = self._keep(client.post("/api/order/createcompleteset", {
             "frame": {"sku": self.frame.sku},
             "prescription": {"id": rx.id},

@@ -6,6 +6,7 @@ from pathlib import Path
 from django.core.management import call_command
 from django.test import TestCase
 from rest_framework.test import APIClient
+from Prescription.testing import rx_via_api
 
 from lens_workflow.models import LensFunctionPath, LensType
 
@@ -55,7 +56,7 @@ class NonRxClassicIndexTests(TestCase):
     def test_stray_prescription_id_is_ignored_for_non_rx(self):
         # A saved Rx left in the client state must not change a plano lens.
         from Prescription.models import PrescriptionInfo
-        rx = PrescriptionInfo.objects.create(
+        rx = rx_via_api(self.client, 
             sphere_r=Decimal("-5.00"), sphere_l=Decimal("-5.00"),
             cylinder_r=Decimal("0"), cylinder_l=Decimal("0"))
         options = self._index_step(prescription_id=rx.id)

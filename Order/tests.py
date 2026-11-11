@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
+from Prescription.testing import rx_via_api
 
 from General.models import Address
 from Order.models import CompleteSet, OrderInfo
@@ -543,7 +544,7 @@ class PlanoGuestCheckoutTests(TestCase):
         self.assertEqual(summary.status_code, 200, summary.content)
         self.assertEqual(summary.data['pricing_source'], 'price_table')
         self.assertEqual(summary.data['total_add_on_price'], '9.95')
-        rx = PrescriptionInfo.objects.create(
+        rx = rx_via_api(self.client, 
             sphere_r=Decimal(sphere), sphere_l=Decimal(sphere),
             cylinder_r=Decimal('0'), cylinder_l=Decimal('0'),
             pd_r=Decimal('32'), pd_l=Decimal('31.50'))

@@ -558,12 +558,26 @@ def getUserWishList(request):
     return Response(serializer.data)
 
 
+# Security fix 2026-11-11: these took any wish-list id with no check at all
+# (sequential ids; read, replace, delete). Now only the signed-in owner's
+# list, the list this signed-out session created, or staff; else 404.
+
+def _wish_list_not_found():
+    return Response({'error': 'WishList not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+def _owned_wish_list(request, list_id):
+    from Order.ownership import caller_owns_wish_list
+    if not caller_owns_wish_list(request, list_id):
+        return None
+    return WishList.objects.filter(id=list_id).first()
+
+
 @api_view(['GET'])
 def getTargetWishList(request, list_id):
-    try:
-        wish_list = WishList.objects.get(id=list_id)
-    except WishList.DoesNotExist:
-        return Response({'error': 'WishList not found'}, status=status.HTTP_404_NOT_FOUND)
+    wish_list = _owned_wish_list(request, list_id)
+    if wish_list is None:
+        return _wish_list_not_found()
 
     serializer = WishListSerializer(wish_list)
     return Response(serializer.data)
@@ -571,19 +585,26 @@ def getTargetWishList(request, list_id):
 
 @api_view(['POST'])
 def addWishList(request):
+    from Order.ownership import SESSION_WISH_LIST_KEY
+    if request.user.is_authenticated and request.user.wish_list_id:
+        # Already has one: hand it back rather than minting an orphan.
+        return Response(WishListSerializer(request.user.wish_list).data, status=200)
     serializer = WishListSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        wish_list = serializer.save()
+        if request.user.is_authenticated:
+            CustomerInfo.objects.filter(pk=request.user.pk).update(wish_list=wish_list)
+        else:
+            request.session[SESSION_WISH_LIST_KEY] = wish_list.pk
         return Response(serializer.data, status=201)
     return Response(serializer.errors, status=400)
 
 
 @api_view(['PATCH'])
 def updateWishList(request, list_id):
-    try:
-        wish_list = WishList.objects.get(id=list_id)
-    except WishList.DoesNotExist:
-        return Response({'error': 'WishList not found'}, status=status.HTTP_404_NOT_FOUND)
+    wish_list = _owned_wish_list(request, list_id)
+    if wish_list is None:
+        return _wish_list_not_found()
 
     serializer = WishListSerializer(
         instance=wish_list, data=request.data, partial=True)
@@ -595,10 +616,9 @@ def updateWishList(request, list_id):
 
 @api_view(['DELETE'])
 def deleteWishList(request, list_id):
-    try:
-        wish_list = WishList.objects.get(id=list_id)
-    except WishList.DoesNotExist:
-        return Response({'error': 'WishList not found'}, status=status.HTTP_404_NOT_FOUND)
+    wish_list = _owned_wish_list(request, list_id)
+    if wish_list is None:
+        return _wish_list_not_found()
 
     wish_list.delete()
     return Response(status=204)
