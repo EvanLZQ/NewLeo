@@ -24,6 +24,10 @@ The live catalog calls the MR-8 mid-index 1.61. The sheet labels that lens
 1.60. `CATALOG_INDEX_TO_SHEET` is the only alias; `lookup_price` itself
 stays exact. 1.59 and 1.71 are not on the sheet and are not aliased.
 
+Which index to offer is not decided here. The index step recommends from
+the absolute steep meridian, not from this sheet's Recommended SE column.
+Recommended SE is read only to spot the "Free Upgrade to 1.56" note.
+
 A pair is priced from both eyes. Each eye must have a cell. The pair price
 is the higher of the two (the sheet cell is already a pair price, matching
 the old $4.95 economic plano). Cylinder sign follows the sheet: minus for
@@ -61,6 +65,36 @@ MAX_CYL_MESSAGE = "Max CYL is 6.00D"
 CATALOG_INDEX_TO_SHEET = {
     Decimal("1.61"): Decimal("1.60"),
 }
+
+# Ladder the index step is allowed to show. 1.61 is the 1.60 rung.
+# 1.59 (Safety / polycarbonate) and 1.71 (Elite) are not on it.
+CANONICAL_INDEX_LADDER = (
+    Decimal("1.50"),
+    Decimal("1.56"),
+    Decimal("1.60"),
+    Decimal("1.67"),
+    Decimal("1.74"),
+)
+
+# Material and Abbe number from the recommendation table (slides 33–35).
+# 1.56 is only a budget neighbor, so it has no row there. The short
+# material name is NK55. That sheet does not give NK-55 an Abbe number.
+INDEX_PROFILES = {
+    Decimal("1.50"): ("CR-39", Decimal("58.0")),
+    Decimal("1.56"): ("NK55", None),
+    Decimal("1.60"): ("MR-8", Decimal("41.0")),
+    Decimal("1.67"): ("MR-7 / MR-10", Decimal("31.0")),
+    Decimal("1.74"): ("MR-174", Decimal("32.0")),
+}
+
+# Inclusive upper bound of the absolute steep meridian, then the sheet index.
+# 0.00–2.00 → 1.50, 2.25–4.00 → 1.60, 4.25–6.00 → 1.67, 6.25 and above → 1.74.
+STEEP_MERIDIAN_BRACKETS = (
+    (Decimal("2.00"), Decimal("1.50")),
+    (Decimal("4.00"), Decimal("1.60")),
+    (Decimal("6.00"), Decimal("1.67")),
+    (None, Decimal("1.74")),
+)
 
 LENS_TYPE_TO_PRESCRIPTION = {
     "SVD": "Single Vision Distance",
@@ -252,6 +286,76 @@ def sheet_index_for(catalog_index):
     """Catalog index -> sheet index. 1.61 is the MR-8 lens priced as 1.60."""
     idx = _dec(catalog_index)
     return CATALOG_INDEX_TO_SHEET.get(idx, idx)
+
+
+def canonical_index(value):
+    """Catalog or sheet index collapsed onto the ladder. 1.61 and 1.60 match."""
+    return sheet_index_for(value)
+
+
+def recommended_canonical_index(power):
+    """Sheet index for an absolute steep-meridian power (diopters)."""
+    power = abs(_dec(power))
+    for limit, index in STEEP_MERIDIAN_BRACKETS:
+        if limit is None or power <= limit:
+            return index
+    return Decimal("1.74")
+
+
+def neighbor_indexes(recommended):
+    """Tiers to show with this recommendation.
+
+    One step below and one step above, except 1.50, which also shows 1.60
+    (the upgrade) as well as 1.56 (the budget option).
+    """
+    ladder = CANONICAL_INDEX_LADDER
+    recommended = canonical_index(recommended)
+    position = ladder.index(recommended)
+    if recommended == Decimal("1.50"):
+        return [ladder[0], ladder[1], ladder[2]]
+    tiers = []
+    if position > 0:
+        tiers.append(ladder[position - 1])
+    tiers.append(ladder[position])
+    if position + 1 < len(ladder):
+        tiers.append(ladder[position + 1])
+    return tiers
+
+
+def next_higher_index(index):
+    """The next rung above `index`, or None at 1.74."""
+    ladder = CANONICAL_INDEX_LADDER
+    position = ladder.index(canonical_index(index))
+    if position + 1 >= len(ladder):
+        return None
+    return ladder[position + 1]
+
+
+def next_lower_index(index):
+    """The next rung below `index`, or None at 1.50."""
+    ladder = CANONICAL_INDEX_LADDER
+    position = ladder.index(canonical_index(index))
+    if position == 0:
+        return None
+    return ladder[position - 1]
+
+
+def index_profile(catalog_index):
+    """Return (material, abbe_number). abbe_number is a one-decimal string or None."""
+    material, abbe = INDEX_PROFILES.get(canonical_index(catalog_index), ("", None))
+    if abbe is None:
+        return material, None
+    return material, f"{abbe.quantize(Decimal('0.1'))}"
+
+
+def available_index_labels(recommended):
+    """Neighbor index strings, plus the catalog spelling 1.61 for the 1.60 rung."""
+    labels = []
+    for index in neighbor_indexes(recommended):
+        labels.append(f"{index.quantize(Decimal('0.01'))}")
+        if index == Decimal("1.60"):
+            labels.append("1.61")
+    return labels
 
 
 def _norm_color(text):
@@ -763,6 +867,29 @@ def quote(req, *, include_options=True, require_index=False):
     if not req.function_code:
         raise QuoteError("function_code or function_path_id is required.")
     return _sheet_quote(req, include_options=include_options, require_index=require_index)
+
+
+def catalog_index_available(req):
+    """True when `req.index_value` can be sold for this prescription.
+
+    An empty price table counts as available: checkout would use the catalog
+    add-on price. Otherwise both eyes need a real sheet cell. "N", a blank
+    color, and "Color Table" are not prices. Free Upgrade to 1.56 counts as
+    a price for 1.50, and catalog 1.61 is priced from the 1.60 cell.
+
+    This does not apply the CYL > 6.00 refusal. `quote` still blocks that
+    prescription with "Max CYL is 6.00D". A cylinder the sheet has no column
+    for simply comes back unavailable.
+    """
+    if req.index_value is None:
+        return False
+    if not price_table_loaded():
+        return True
+    try:
+        result = _sheet_quote(req, include_options=False, require_index=True)
+    except QuoteError:
+        return False
+    return bool(result.available)
 
 
 def _coatings_of(complete_set):

@@ -374,24 +374,18 @@ class LensReaderStrength(TimeStampedModel):
 
 class LensIndexRecommendationRule(TimeStampedModel):
     """
-    Maps a combined-power bracket to which index values are selectable and
-    which one is recommended, for the Index step's recommend-first /
-    expand-to-see-all UI.
+    Admin mirror of the steep-meridian index table.
 
-    Two different combined-power formulas apply depending on prescription
-    sign (see lens_workflow/views.py's _combined_power):
-      - Nearsighted (sphere < 0): |sphere| + |cylinder|
-      - Farsighted  (sphere >= 0): sphere + cylinder / 2
-    Source: the "折射率算法" sheet in Eyelovewear Pricing.xlsx. Bracket
-    thresholds/values here are admin-editable data; the formula choice
-    above is not — it's a real code branch.
+    The live recommendation is `views._combined_power` plus
+    `views._match_recommendation_rule`. It uses the larger of |S| and
+    |S+C| on the stronger eye, then the fixed brackets 1.50 / 1.60 /
+    1.67 / 1.74. These rows are rewritten by the data migration and by
+    `seed_shopping_flow_data` so the admin shows the same table. The
+    shopping flow does not read them, and it does not read the price
+    sheet's Recommended SE column.
 
-    direction lets a (category, bracket) combo be sign-specific — Single
-    Vision has real farsighted-specific bracket data from the pricing
-    sheet, so it gets separate NEARSIGHTED/FARSIGHTED rows. Bifocal/
-    Progressive has no farsighted-specific data in any source, so its rows
-    stay direction="" (blank = matches either sign) — see
-    _match_recommendation_rule's fallback for how blank rows are used.
+    `direction=""` means the row applies to both signs. The brackets are
+    the same either way.
     """
     class Category(models.TextChoices):
         SINGLE_VISION = "SINGLE_VISION", "Single Vision"
@@ -409,7 +403,8 @@ class LensIndexRecommendationRule(TimeStampedModel):
     )
     max_combined_power = models.DecimalField(
         max_digits=5, decimal_places=2, null=True, blank=True,
-        help_text="Upper bound in diopters for |sphere|+|cylinder| (worse eye). "
+        help_text="Upper bound in diopters for the absolute steep meridian "
+                  "(larger of |S| and |S+C| on the stronger eye). "
                   "Null means no upper bound (the last/highest bracket).",
     )
     available_index_values = models.JSONField(

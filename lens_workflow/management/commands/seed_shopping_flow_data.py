@@ -23,39 +23,31 @@ Known assumptions worth a business review (not mechanical/low-stakes):
      xlsx-based rebuild, remapped onto the new 4-tint structure (that
      source's "Solid" bucket split into today's Solid/Gradient, its
      "Polarized/Mirrored" bucket split into today's Polarized/Mirrored).
-  2. Index recommendation brackets are hand-derived from the "折射率算法"
-     sheet's descriptive, overlapping power ranges (with worked examples
-     and astigmatism caveats) into the clean non-overlapping cutoffs this
-     app's bracket model expects. Single Vision now has a real,
-     direction-specific farsighted bracket set from the same sheet (see
-     FARSIGHTED_SINGLE_VISION_BRACKETS below — confirmed with the business
-     owner, no longer a guess). Bifocal/Progressive still has no
-     farsighted-specific source data anywhere, so it keeps reusing its one
-     bracket table for both signs (LensIndexRecommendationRule.direction="").
-  3. Index 1.59 (the new polycarbonate safety lens) is included in the same
-     availability bracket as 1.60/1.61 but never set as the *recommended*
-     value — it reads as a lifestyle/safety choice (impact resistance for
-     kids/sports) rather than a purely power-driven pick, so the algorithm
-     doesn't default to it, but it's still selectable via "choose a
-     different index."
+  2. Index recommendation is the absolute steep meridian (the larger of
+     |S| and |S+C|, stronger eye wins), not spherical equivalent and not
+     the price sheet's Recommended SE column. The brackets are the same
+     for every lens category and both signs: 0.00–±2.00 → 1.50,
+     ±2.25–±4.00 → 1.60/1.61, ±4.25–±6.00 → 1.67, ±6.25 and above → 1.74.
+     The rows written below mirror that table for the admin. The shopping
+     flow reads the code table, not these rows.
+  3. Driving 1.61, Safety 1.59 (polycarbonate), and Elite 1.71 are not on
+     the price sheet. They are not seeded, and any row a previous seed
+     left behind is set inactive (orders may still point at it).
   4. Reader Strength and the Reader Index both default to Free — no price
      was given for either in any source.
 
 Eyelovewear Pricing(1).xlsx (v2, confirmed with the business owner — see
 the "镜片购买流程改造方案" plan doc for the full comparison):
-  - Every price already in this file matched the v2 sheet exactly except
-    two brand-new SVD-only index tiers (see INDEX_TIERS_SVD): "1.61
-    Driving" (same $19.95 as plain 1.61 — a distinct product/coating at
-    the same refractive index, not a price change) and "1.71" ($59.95,
-    between 1.67 and 1.74). Both SVD-only — the sheet's Reading and
-    Progressive tables don't list either row.
-  - v2 also drops Polarized from Reading's Sun tints entirely (every
-    index row reads N/A) — TINT_PRICING["READING"] reflects that; see
+  - v2 drops Polarized from Reading's Sun tints entirely (every index row
+    reads N/A) — TINT_PRICING["READING"] reflects that; see
     _seed_function_paths for how a None tint price deactivates any
     existing row instead of just skipping it.
   - v2's "EBD" column (a second price next to almost every Function/Tint
     cell) is a competitor's reference pricing, not Eyelovewear's own — not
     modeled here at all, confirmed not needed.
+  - Driving 1.61, Safety 1.59, and Elite 1.71 were seeded from an earlier
+    sheet and are not on the current price file. Re-running this command
+    does not recreate them as active options.
 """
 from decimal import Decimal
 
@@ -70,6 +62,7 @@ from lens_workflow.models import (
     LensIndexRecommendationRule,
     LensReaderStrength,
 )
+from lens_workflow.pricing import STEEP_MERIDIAN_BRACKETS, available_index_labels
 
 D = Decimal
 
@@ -131,74 +124,46 @@ TINT_PRICING = {
 }
 
 # ─────────────────────────────────────────────────────────────────────────
-# Index / Material. Single Vision types get the full 6-tier ladder;
-# Progressive/Bifocal deliberately only offer 4 (no 1.59 safety lens, no
-# 1.74 ultra-thin — confirmed, not an omission).
+# Index / Material. The ladder is 1.50, 1.56, 1.61 (sheet 1.60), 1.67, 1.74.
+# Driving 1.61, Safety 1.59, and Elite 1.71 are not on the price sheet and
+# are not seeded. Progressive and Bifocal include 1.74, which the premium
+# sheet does price.
 # ─────────────────────────────────────────────────────────────────────────
 INDEX_TIERS_FULL = [
     # index_value, price,     tier,        option_label
     ("1.50", D("4.95"),  "Basic",    "Basic - 1.50 Index"),
     ("1.56", D("6.95"),  "Standard", "Standard - 1.56 Index"),
-    ("1.59", D("19.95"), "Safety",   "Safety - 1.59 Index (Polycarbonate)"),
     ("1.61", D("19.95"), "Popular",  "Popular - 1.61 Index"),
     ("1.67", D("39.95"), "Advanced", "Advanced - 1.67 Index"),
     ("1.74", D("79.95"), "Premium",  "Premium - 1.74 Index"),
 ]
-INDEX_TIERS_NARROW = [row for row in INDEX_TIERS_FULL if row[0] in ("1.50", "1.56", "1.61", "1.67")]
+# Progressive and Bifocal include 1.74 because the premium sheet has cells
+# for it. The number here is the catalog add-on, the same one SVD uses.
+# The sheet cell is still the price at checkout.
+INDEX_TIERS_NARROW = [row for row in INDEX_TIERS_FULL if row[0] in ("1.50", "1.56", "1.61", "1.67", "1.74")]
+# Kept as its own list so an SVD-only tier can be added without coming back
+# through INDEX_TIERS_FULL. It matches FULL now that Driving / Safety / Elite
+# are gone.
+INDEX_TIERS_SVD = list(INDEX_TIERS_FULL)
 
-# SVD-only, pricing sheet v2 — two extra tiers, confirmed not offered for
-# any other Lens Type (Reading/Progressive's tables in the sheet don't list
-# either row). "1.61 Driving" shares its index_value with plain "1.61
-# Popular" on purpose — same refractive index, different product/coating —
-# distinguished by tier, not by index_value (see LensIndexOption's
-# uq_lens_index_option_type_value_tier constraint).
-INDEX_TIERS_SVD = [
-    ("1.50", D("4.95"),  "Basic",    "Basic - 1.50 Index"),
-    ("1.56", D("6.95"),  "Standard", "Standard - 1.56 Index"),
-    ("1.59", D("19.95"), "Safety",   "Safety - 1.59 Index (Polycarbonate)"),
-    ("1.61", D("19.95"), "Popular",  "Popular - 1.61 Index"),
-    ("1.61", D("19.95"), "Driving",  "Driving - 1.61 Index"),
-    ("1.67", D("39.95"), "Advanced", "Advanced - 1.67 Index"),
-    ("1.71", D("59.95"), "Elite",    "Elite - 1.71 Index"),
-    ("1.74", D("79.95"), "Premium",  "Premium - 1.74 Index"),
-]
+# Name + index of catalog rows that must stay inactive if a previous seed
+# created them. Matched in Python, not by primary key.
+RETIRED_INDEX_OPTIONS = (
+    (D("1.61"), ("driving",)),
+    (D("1.59"), ("safety", "polycarbonate")),
+    (D("1.71"), ("elite",)),
+)
 
-# Customer-facing "why this index" rationale, shown on the Index step next
-# to each option (LensIndexOption.notes -> _index_option_dict's
-# `description`). Keyed by index_value, not by tier/lens_type, since the
-# optical trade-off is a property of the index itself, not of which Lens
-# Type it's being sold under.
-#
-# 1.50/1.60/1.67/1.74's text is sourced from the "折射率算法" sheet in
-# Eyelovewear Pricing.xlsx (the same sheet _combined_power's docstring
-# cites for the bracket thresholds). 1.56/1.59/1.61 Driving/1.71 have no
-# equivalent line in that sheet — their copy below is written to fit the
-# same voice, not pulled from the source doc, and should get a once-over
-# before this ships. Deliberately framed around Abbe number (optical
-# clarity/color fringing), which IS in the source sheet — not light
-# transmittance, which isn't a figure we actually have measured for either
-# brand; swap this in once real numbers exist.
+# Shopper-facing notes on the index step (LensIndexOption.notes). Material
+# and Abbe are separate fields, so this copy does not repeat them and does
+# not mention the price sheet or how a tier was chosen.
 INDEX_RATIONALE = {
-    "1.50": ("The clearest optics and best value of any lens we offer — ideal for mild "
-             "prescriptions, where a higher index wouldn't make a visible difference in "
-             "edge thickness."),
-    "1.56": ("A noticeably thinner lens than 1.50 for a modest step up in price — the "
-             "right balance for mild-to-moderate prescriptions."),
-    "1.59": ("Impact-resistant polycarbonate, built for safety and sports eyewear — "
-             "chosen for durability, not primarily for thinness."),
-    "1.61": ("Our most recommended lens for moderate-to-strong prescriptions — it "
-             "balances edge thickness against optical clarity better than any other "
-             "index, which is why it's the one we reach for most in-store."),
-    "1.67": ("A thinner, lighter lens for stronger prescriptions. It has a lower Abbe "
-             "value than 1.50/1.56/1.61, so very large frames can show a little more "
-             "color fringing at the edge — worth keeping in mind if you're choosing a "
-             "bigger frame."),
-    "1.71": ("Sits between 1.67 and 1.74 in thinness and price — for prescriptions "
-             "where 1.67 isn't quite thin enough but 1.74 is more lens than you need."),
-    "1.74": ("Our thinnest lens, for strong prescriptions. It has the most light "
-             "dispersion of any index we offer, so we strongly recommend pairing it "
-             "with a smaller frame to keep edge thickness and color fringing to a "
-             "minimum."),
+    "1.50": ("Our clearest lens. A good choice for mild prescriptions, where a "
+             "thinner lens would not change how the glasses look."),
+    "1.56": ("A little thinner than our clearest lens, for a small step up in price."),
+    "1.61": ("Thinner and light, with clear vision for everyday wear."),
+    "1.67": ("A thinner, lighter lens for stronger prescriptions."),
+    "1.74": ("Our thinnest lens, for strong prescriptions. It looks best in a full frame."),
 }
 
 INDEX_TIERS_BY_LENS_TYPE = {
@@ -312,36 +277,8 @@ COATINGS = [
 # ─────────────────────────────────────────────────────────────────────────
 READER_STRENGTHS = [D(f"{n/100:.2f}") for n in range(25, 301, 25)]
 
-# ─────────────────────────────────────────────────────────────────────────
-# Index recommendation brackets — see assumptions #2/#3 above.
-# ─────────────────────────────────────────────────────────────────────────
-SINGLE_VISION_NEARSIGHTED_BRACKETS = [
-    # max_combined_power, available_index_values, recommended
-    (D("2.00"), ["1.50", "1.56"], "1.50"),
-    (D("4.00"), ["1.50", "1.56", "1.59", "1.61"], "1.56"),
-    (D("6.00"), ["1.56", "1.59", "1.61", "1.67"], "1.61"),
-    (D("8.00"), ["1.61", "1.67", "1.74"], "1.67"),
-    (None,      ["1.67", "1.74"], "1.74"),
-]
-
-# Farsighted-specific — the "折射率算法" sheet gives a separate, coarser
-# table for farsighted prescriptions (max index it ever suggests is 1.67 —
-# 1.59/1.71/1.74 never come up). Confirmed real data, not a guess.
-SINGLE_VISION_FARSIGHTED_BRACKETS = [
-    (D("2.00"), ["1.50", "1.56"], "1.50"),
-    (D("4.00"), ["1.50", "1.56", "1.61"], "1.56"),
-    (None,      ["1.56", "1.61", "1.67"], "1.67"),
-]
-
-# No farsighted-specific source data exists for Bifocal/Progressive
-# anywhere — direction stays "" (applies to either sign) on these, unlike
-# Single Vision above.
-BIFOCAL_PROGRESSIVE_BRACKETS = [
-    (D("3.00"), ["1.50", "1.56"], "1.50"),
-    (D("5.00"), ["1.50", "1.56", "1.61"], "1.56"),
-    (D("6.00"), ["1.56", "1.61"], "1.61"),
-    (None,      ["1.61", "1.67"], "1.67"),
-]
+# Recommendation rows are built from STEEP_MERIDIAN_BRACKETS in pricing.py
+# so a re-seed cannot put the old spherical-equivalent brackets back.
 
 
 class Command(BaseCommand):
@@ -463,22 +400,12 @@ class Command(BaseCommand):
         for lt_code, tiers in INDEX_TIERS_BY_LENS_TYPE.items():
             lens_type = lens_types[lt_code]
             for sort_idx, (index_value, price, tier, label) in enumerate(tiers, start=10):
-                # tier is part of the lookup key (not just a default) — see
-                # INDEX_TIERS_SVD's "1.61 Driving" sharing index_value with
-                # "1.61 Popular"; without tier here the second row would
-                # overwrite the first instead of creating a sibling.
-                # "1.61 Driving" is the one tier whose rationale shouldn't
-                # just be the plain 1.61 text (it's a specialty product,
-                # not "our most recommended") — override by tier name.
-                notes = (
-                    "Same 1.61 index as our Popular lens, with a treatment tuned to "
-                    "reduce glare from oncoming headlights at night."
-                    if tier == "Driving" else
-                    INDEX_RATIONALE.get(index_value, "")
-                )
+                # tier stays in the lookup key: the unique constraint is
+                # (lens_type, index_value, tier), so two rows can share an index.
                 LensIndexOption.objects.update_or_create(
                     lens_type=lens_type, index_value=Decimal(index_value), tier=tier,
-                    defaults=dict(option_label=label, price=price, notes=notes,
+                    defaults=dict(option_label=label, price=price,
+                                  notes=INDEX_RATIONALE.get(index_value, ""),
                                   sort_order=sort_idx * 10, is_active=True),
                 )
 
@@ -488,6 +415,21 @@ class Command(BaseCommand):
             defaults=dict(option_label="Reader Index", price=D("0"),
                           sort_order=10, is_active=True),
         )
+        self._deactivate_retired_index_options()
+
+    def _deactivate_retired_index_options(self):
+        """Turn Driving 1.61, Safety 1.59, and Elite 1.71 back off.
+
+        Removing them from INDEX_TIERS_* stops a re-seed from creating them.
+        This also catches a row an older seed already created, matched by
+        name and index rather than by id. The row is kept for old orders.
+        """
+        for index_value, needles in RETIRED_INDEX_OPTIONS:
+            for row in LensIndexOption.objects.filter(index_value=index_value, is_active=True):
+                blob = f"{row.tier} {row.option_label}".lower()
+                if any(needle in blob for needle in needles):
+                    row.is_active = False
+                    row.save(update_fields=["is_active"])
 
     # ---------- Colors ----------
 
@@ -537,9 +479,7 @@ class Command(BaseCommand):
         restriction. NOT an empty list — an empty list would mean
         'available at zero index values' to the workflow API, the
         opposite of what's intended here."""
-        # dict.fromkeys dedupes while keeping order — SVD now has two rows
-        # sharing index_value "1.61" (Popular/Driving), which would
-        # otherwise appear twice in this list for no reason.
+        # dict.fromkeys dedupes while keeping order, in case two tiers share an index.
         return list(dict.fromkeys(
             str(v) for v in
             LensIndexOption.objects.filter(lens_type=lens_type, is_active=True)
@@ -573,31 +513,28 @@ class Command(BaseCommand):
 
     def _seed_recommendation_rules(self):
         self.stdout.write("Seeding Index Recommendation Rules...")
-        Direction = LensIndexRecommendationRule.Direction
-
-        # Pre-migration, every Single Vision rule had direction="" (the
-        # field didn't exist). Now that Single Vision has real
-        # direction-specific data, those blank rows are dead — nothing
-        # matches them any more (see _match_recommendation_rule: a
-        # direction-specific query always finds rows below for this
-        # category, so it never falls through to blank ones). Clear them
-        # instead of leaving unreachable rows sitting in the admin.
+        # Replace every stored bracket, including the old sign-specific
+        # spherical-equivalent rows. The live step does not read these;
+        # they mirror the steep-meridian table for the admin.
         LensIndexRecommendationRule.objects.filter(
-            category=LensIndexRecommendationRule.Category.SINGLE_VISION, direction="",
+            category__in=[
+                LensIndexRecommendationRule.Category.SINGLE_VISION,
+                LensIndexRecommendationRule.Category.BIFOCAL_PROGRESSIVE,
+            ],
         ).delete()
-
-        for category, direction, brackets in [
-            (LensIndexRecommendationRule.Category.SINGLE_VISION, Direction.NEARSIGHTED,
-             SINGLE_VISION_NEARSIGHTED_BRACKETS),
-            (LensIndexRecommendationRule.Category.SINGLE_VISION, Direction.FARSIGHTED,
-             SINGLE_VISION_FARSIGHTED_BRACKETS),
-            (LensIndexRecommendationRule.Category.BIFOCAL_PROGRESSIVE, "",
-             BIFOCAL_PROGRESSIVE_BRACKETS),
-        ]:
-            for sort_idx, (max_power, available, recommended) in enumerate(brackets, start=10):
-                LensIndexRecommendationRule.objects.update_or_create(
-                    category=category, direction=direction, sort_order=sort_idx,
-                    defaults=dict(max_combined_power=max_power,
-                                  available_index_values=available,
-                                  recommended_index_value=recommended),
+        categories = [
+            LensIndexRecommendationRule.Category.SINGLE_VISION,
+            LensIndexRecommendationRule.Category.BIFOCAL_PROGRESSIVE,
+        ]
+        for category in categories:
+            for sort_idx, (limit, canonical) in enumerate(STEEP_MERIDIAN_BRACKETS, start=1):
+                recommended = "1.61" if canonical == D("1.60") else f"{canonical:.2f}"
+                LensIndexRecommendationRule.objects.create(
+                    category=category,
+                    direction="",
+                    sort_order=sort_idx * 10,
+                    max_combined_power=limit,
+                    available_index_values=available_index_labels(canonical),
+                    recommended_index_value=recommended,
+                    notes="Absolute steep meridian. Recommended SE is not used.",
                 )
