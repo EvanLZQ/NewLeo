@@ -27,6 +27,7 @@ from lens_workflow.pricing import (
     index_profile,
     neighbor_indexes,
     next_higher_index,
+    next_lower_index,
     price_table_loaded,
     prism_requested,
     quote,
@@ -228,6 +229,29 @@ def _match_recommendation_rule(category, combined_power, direction):
     )
 
 
+def _priced_tier(index_options, recommended):
+    """Nearest priced rung at or above `recommended`, else the nearest below.
+
+    A high prescription whose 1.74 cell is missing still gets 1.67 when
+    that cell exists. Walking only upward used to return an empty menu
+    even though a lower index was on the sheet.
+    """
+    def has(tier):
+        return any(canonical_index(io.index_value) == tier for io in index_options)
+
+    tier = recommended
+    while tier is not None:
+        if has(tier):
+            return tier
+        tier = next_higher_index(tier)
+    tier = next_lower_index(recommended)
+    while tier is not None:
+        if has(tier):
+            return tier
+        tier = next_lower_index(tier)
+    return None
+
+
 def _load_prescription(prescription_id):
     if not prescription_id:
         return None
@@ -337,10 +361,21 @@ def _reader_strength_option(strength):
     )
 
 
+# Shown on the index step when the price sheet has no cell for this
+# prescription at any index we sell. A blank option list is not enough
+# for the shopper to understand why.
+INDEX_UNAVAILABLE_REASON = (
+    "This prescription isn't available online yet. Please contact us."
+)
+
+
 def _step_response(step_code, option_dicts, selection_path, is_complete=False,
-                    step_index=None, total_steps=None):
-    return Response({
-        "current_step": None if is_complete else _step_dict(step_code),
+                    step_index=None, total_steps=None, unavailable_reason=None):
+    current = None if is_complete else _step_dict(step_code)
+    if current is not None and unavailable_reason:
+        current["description"] = unavailable_reason
+    body = {
+        "current_step": current,
         "options": [] if is_complete else option_dicts,
         "selection_path": selection_path,
         "is_complete": is_complete,
@@ -349,7 +384,10 @@ def _step_response(step_code, option_dicts, selection_path, is_complete=False,
         # is_complete, since there's no next step left to show progress for.
         "step_index": None if is_complete else step_index,
         "total_steps": None if is_complete else total_steps,
-    }, status=status.HTTP_200_OK)
+    }
+    if unavailable_reason:
+        body["unavailable_reason"] = unavailable_reason
+    return Response(body, status=status.HTTP_200_OK)
 
 
 class LensWorkflowStartView(APIView):
@@ -625,17 +663,12 @@ class LensWorkflowNextView(APIView):
 
         power, direction = _combined_power(prescription)
         rule = _match_recommendation_rule(category, power, direction)
-        tier = rule.recommended_canonical
-        chosen = None
-        while tier is not None:
-            if any(canonical_index(io.index_value) == tier for io in index_options):
-                chosen = tier
-                break
-            tier = next_higher_index(tier)
+        chosen = _priced_tier(index_options, rule.recommended_canonical)
 
         if chosen is None:
             return _step_response(
-                "INDEX", [], path, step_index=step_index, total_steps=total_steps)
+                "INDEX", [], path, step_index=step_index, total_steps=total_steps,
+                unavailable_reason=INDEX_UNAVAILABLE_REASON)
 
         visible = set(neighbor_indexes(chosen))
         shown = [

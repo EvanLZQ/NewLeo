@@ -1,8 +1,10 @@
 """Steep-meridian index recommendation, neighbor tiers, and blue-light exclusivity."""
 import importlib
 from decimal import Decimal
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -12,6 +14,7 @@ from Order.tests import _address_fields, _frame
 from Prescription.models import PrescriptionInfo
 from lens_workflow import price_table as pt
 from lens_workflow.management.commands.seed_shopping_flow_data import (
+    INDEX_RATIONALE,
     INDEX_TIERS_FULL,
     INDEX_TIERS_NARROW,
     INDEX_TIERS_SVD,
@@ -221,7 +224,7 @@ class IndexMenuTests(TestCase):
         self.assertEqual(mild[0]["group"], "recommended")
         self.assertEqual(mild[1]["group"], "other_available")
         self.assertEqual(mild[2]["group"], "other_available")
-        self.assertEqual(mild[1]["material"], "NK55 modified hybrid thiocarbamate")
+        self.assertEqual(mild[1]["material"], "NK55")
         self.assertIsNone(mild[1]["abbe_number"])
         self.assertFalse(mild[1]["recommended"])
         self.assertNotIn("1.67", [opt["metadata"]["index_value"] for opt in mild])
@@ -460,8 +463,8 @@ class UnpricedTierTests(TestCase):
         self.assertTrue(summary.data["quote"]["selection"]["free_upgrade"])
 
     def test_nothing_higher_means_the_index_step_is_empty(self):
-        # Plano is priced at 1.50 only. A -8.00 Rx wants 1.74, and every
-        # higher rung is missing, so there is nothing to recommend.
+        # Plano is priced at 1.50 only. Sphere -8.00 is on none of the
+        # rungs, so the step explains that instead of returning a blank list.
         parsed = pt.parse_workbook(workbook({
             "Premium Lens": [["Premium Lens (Conant)"], []] + block(index=1.5),
         }))
@@ -483,6 +486,12 @@ class UnpricedTierTests(TestCase):
         self.assertEqual(menu.status_code, 200, menu.content)
         self.assertEqual(menu.data["current_step"]["code"], "INDEX")
         self.assertEqual(menu.data["options"], [])
+        self.assertEqual(
+            menu.data["unavailable_reason"],
+            "This prescription isn't available online yet. Please contact us.")
+        self.assertEqual(
+            menu.data["current_step"]["description"],
+            menu.data["unavailable_reason"])
 
 
 class RetiredIndexTests(TestCase):
@@ -678,3 +687,264 @@ class BlueLightCoatingTests(TestCase):
         })
         self.assertEqual(accepted.status_code, 200, accepted.content)
         self.assertTrue(accepted.data["is_complete"])
+
+
+def _priced_block(index, rx, spheres, cyls, priced):
+    """One clear block. `priced` is a set of (sphere, cylinder) Decimals."""
+    rows = [HEADER + [float(cyl) for cyl in cyls]]
+    for n, sph in enumerate(spheres):
+        if n == 0:
+            meta = ["", "", "", None, rx, "Clear", "N", "N", "N", float(index), "material"]
+        else:
+            meta = [None] * 11
+        cells = [
+            9.95 if (sph, cyl) in priced else "N"
+            for cyl in cyls
+        ]
+        rows.append(meta + [float(sph)] + cells)
+    return rows
+
+
+# Mirrors price2_fixed.xlsx: distance/bifocal/progressive spheres are minus
+# only, high indexes omit mild powers, and plus power exists only on Reading.
+_SVD_SPHERES = [D(v) for v in ("0", "-0.25", "-2.00", "-3.00", "-5.00", "-6.25", "-8.00")]
+_SVD_CYLS = [D(v) for v in ("0", "-1.25", "-3.50")]
+_SVD_PRICED = {
+    D("1.50"): {(D("0"), D("0")), (D("-0.25"), D("0"))},
+    D("1.56"): {(D("0"), D("0")), (D("-0.25"), D("0")), (D("-2.00"), D("0"))},
+    D("1.60"): {
+        (D("0"), D("0")), (D("-0.25"), D("0")), (D("-2.00"), D("0")),
+        (D("-3.00"), D("0")), (D("-5.00"), D("0")), (D("-5.00"), D("-1.25")),
+    },
+    D("1.67"): {
+        (D("-2.00"), D("0")), (D("-5.00"), D("0")), (D("-5.00"), D("-1.25")),
+        (D("-6.25"), D("0")), (D("-8.00"), D("0")),
+    },
+    D("1.74"): {
+        (D("-5.00"), D("-1.25")), (D("-6.25"), D("0")), (D("-8.00"), D("0")),
+    },
+}
+
+
+def _shaped_like_the_real_sheet():
+    rows = [["Premium Lens (Conant)"], []]
+    for rx in ("Single Vision Distance", "Bifocal", "Progressive"):
+        for index, priced in _SVD_PRICED.items():
+            rows += _priced_block(index, rx, _SVD_SPHERES, _SVD_CYLS, priced)
+    rows += _priced_block(
+        D("1.60"), "Reading",
+        [D("0"), D("1.00"), D("2.50")],
+        [D("0"), D("3.50")],
+        {(D("1.00"), D("0")), (D("2.50"), D("0"))},
+    )
+    parsed = pt.parse_workbook(workbook({"Premium Lens": rows}))
+    if not parsed.ok:
+        raise AssertionError([error.message for error in parsed.errors])
+    pt.apply_import(parsed, filename="shaped.xlsx", file_bytes=b"x")
+
+
+class RealSheetGapTests(TestCase):
+    """Holes in the real price sheet: plus power, mixed eyes, high progressive."""
+
+    @classmethod
+    def setUpTestData(cls):
+        _shaped_like_the_real_sheet()
+        cls.catalog = {}
+        for code, category in (
+            ("SVD", "SINGLE_VISION"),
+            ("READING", "SINGLE_VISION"),
+            ("PROGRESSIVE", "BIFOCAL_PROGRESSIVE"),
+            ("BIFOCAL", "BIFOCAL_PROGRESSIVE"),
+        ):
+            lens_type = LensType.objects.create(
+                code=code, label=code, is_prescription_required=True,
+                index_recommendation_category=category, is_active=True)
+            function = LensFunctionPath.objects.create(
+                lens_type=lens_type, function_code="CLEAR", function_label="Classic",
+                extra_price=D("0"), is_active=True)
+            for index_value, price, tier, label in CATALOG:
+                LensIndexOption.objects.create(
+                    lens_type=lens_type, index_value=D(index_value), tier=tier,
+                    option_label=label, price=D(price), is_active=True)
+            cls.catalog[code] = (lens_type, function)
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.defaults["HTTP_X_FORWARDED_PROTO"] = "https"
+
+    def _menu(self, code, *, sph_r, cyl_r=0, sph_l=None, cyl_l=0):
+        if sph_l is None:
+            sph_l = sph_r
+            cyl_l = cyl_r
+        lens_type, function = self.catalog[code]
+        rx = PrescriptionInfo.objects.create(
+            sphere_r=D(str(sph_r)), cylinder_r=D(str(cyl_r)),
+            sphere_l=D(str(sph_l)), cylinder_l=D(str(cyl_l)))
+        started = self.client.get("/api/lens-workflow/next/", {
+            "current_step_code": "LENS_TYPE",
+            "selected_option_id": lens_type.id,
+        })
+        menu = self.client.get("/api/lens-workflow/next/", {
+            "current_step_code": "FUNCTION",
+            "selected_option_id": function.id,
+            "selection_path": str(started.data["selection_path"][0]),
+            "prescription_id": rx.id,
+        })
+        self.assertEqual(menu.status_code, 200, menu.content)
+        self.assertEqual(menu.data["current_step"]["code"], "INDEX")
+        return menu
+
+    def _indexes(self, menu):
+        return [opt["metadata"]["index_value"] for opt in menu.data["options"]]
+
+    def _assert_unavailable(self, menu):
+        self.assertEqual(menu.data["options"], [])
+        self.assertEqual(
+            menu.data["unavailable_reason"],
+            "This prescription isn't available online yet. Please contact us.")
+        self.assertEqual(
+            menu.data["current_step"]["description"],
+            menu.data["unavailable_reason"])
+
+    def test_plus_power_svd_is_absent_from_the_real_sheet(self):
+        # The lookup asks for Single Vision Distance. The file has plus
+        # spheres only on Reading / Clear, so this is not a sign-mapping bug.
+        with Path("lens_workflow/data/price2_fixed.xlsx").open("rb") as handle:
+            parsed = pt.parse_workbook(handle)
+        self.assertTrue(parsed.ok, [error.message for error in parsed.errors])
+        for blocks in parsed.blocks.values():
+            for block_data in blocks:
+                if block_data.prescription_type != "Single Vision Distance":
+                    continue
+                self.assertFalse(
+                    any(sphere > 0 for sphere in block_data.sphere_axis),
+                    block_data.label())
+        reading_plus = [
+            block_data for blocks in parsed.blocks.values() for block_data in blocks
+            if block_data.prescription_type == "Reading"
+            and block_data.lens_type == "Clear"
+            and block_data.lens_index == D("1.60")
+            and (D("1.00"), D("0")) in block_data.prices
+            and (D("2.50"), D("0")) in block_data.prices
+        ]
+        self.assertTrue(reading_plus)
+
+    def test_plus_power_svd_explains_the_empty_menu(self):
+        for power in ("1.00", "2.50"):
+            menu = self._menu("SVD", sph_r=power)
+            self._assert_unavailable(menu)
+        # The same plus powers are priced when the lens type is Reading.
+        reading = self._menu("READING", sph_r="1.00")
+        self.assertEqual(
+            [opt["metadata"]["index_value"] for opt in reading.data["options"]
+             if opt["recommended"]],
+            ["1.61"])
+
+    def test_mixed_sign_plus_sphere_is_not_on_the_distance_grid(self):
+        # S +1.00 C -3.50 keeps sphere +1.00. Distance grids have no plus row.
+        menu = self._menu("SVD", sph_r="1.00", cyl_r="-3.50")
+        self._assert_unavailable(menu)
+
+    def test_higher_eye_walks_down_to_the_index_that_prices_both_eyes(self):
+        # OS steep meridian is 6.25, which asks for 1.74. 1.74 and 1.67 have
+        # no cell at OD -0.25. 1.60 prices both eyes.
+        menu = self._menu(
+            "SVD", sph_r="-0.25", cyl_r="0", sph_l="-5.00", cyl_l="-1.25")
+        self.assertEqual(self._indexes(menu), ["1.61"])
+        self.assertTrue(menu.data["options"][0]["recommended"])
+        self.assertNotIn("unavailable_reason", menu.data)
+
+    def test_progressive_and_bifocal_high_power_offer_174(self):
+        self.assertIn("1.74", [row[0] for row in INDEX_TIERS_NARROW])
+        for code in ("PROGRESSIVE", "BIFOCAL"):
+            for power in ("-6.25", "-8.00"):
+                menu = self._menu(code, sph_r=power)
+                self.assertEqual(self._indexes(menu), ["1.67", "1.74"], f"{code} {power}")
+                winner = next(opt for opt in menu.data["options"] if opt["recommended"])
+                self.assertEqual(winner["metadata"]["index_value"], "1.74")
+
+    def test_blank_eye_is_plano(self):
+        created = self.client.post("/api/prescriptions/", {
+            "sphere_r": "-3.00",
+            "sphere_l": None,
+            "cylinder_l": "",
+        }, format="json")
+        self.assertEqual(created.status_code, 201, created.content)
+        self.assertEqual(created.data["sphere_l"], "0.00")
+        self.assertEqual(created.data["cylinder_l"], "0.00")
+        lens_type, function = self.catalog["SVD"]
+        started = self.client.get("/api/lens-workflow/next/", {
+            "current_step_code": "LENS_TYPE",
+            "selected_option_id": lens_type.id,
+        })
+        menu = self.client.get("/api/lens-workflow/next/", {
+            "current_step_code": "FUNCTION",
+            "selected_option_id": function.id,
+            "selection_path": str(started.data["selection_path"][0]),
+            "prescription_id": created.data["id"],
+        })
+        self.assertEqual(menu.status_code, 200, menu.content)
+        self.assertEqual(self._indexes(menu), ["1.61"])
+        self.assertTrue(menu.data["options"][0]["recommended"])
+
+
+class ShopperCopyTests(TestCase):
+    def test_seed_copy_has_no_internal_wording(self):
+        banned = (
+            "sheet", "priced as", "abbe", "cr-39", "mr-8", "mr-7", "mr-174",
+            "tier below", "recommendation",
+        )
+        for text in INDEX_RATIONALE.values():
+            lowered = text.lower()
+            for word in banned:
+                self.assertNotIn(word, lowered, text)
+        notes = importlib.import_module(
+            "lens_workflow.migrations.0015_shopper_notes_and_high_index"
+        ).SHOPPER_NOTES
+        self.assertEqual(notes, dict(INDEX_RATIONALE))
+
+    def test_migration_rewrites_notes_and_adds_174(self):
+        progressive = LensType.objects.create(
+            code="PROGRESSIVE", label="Progressives", is_prescription_required=True,
+            index_recommendation_category="BIFOCAL_PROGRESSIVE", is_active=True)
+        bifocal = LensType.objects.create(
+            code="BIFOCAL", label="Bifocals", is_prescription_required=True,
+            index_recommendation_category="BIFOCAL_PROGRESSIVE", is_active=True)
+        svd = LensType.objects.create(
+            code="SVD", label="Single Vision Distance", is_prescription_required=True,
+            index_recommendation_category="SINGLE_VISION", is_active=True)
+        LensIndexOption.objects.create(
+            lens_type=svd, tier="Premium", option_label="Premium - 1.74 Index",
+            index_value=D("1.74"), price=D("79.95"),
+            notes="MR-174, Abbe 32. The sheet prices this lens as 1.74.",
+            is_active=True)
+        LensIndexOption.objects.create(
+            lens_type=progressive, tier="Popular", option_label="Popular - 1.61 Index",
+            index_value=D("1.61"), price=D("19.95"),
+            notes="The sheet prices this lens as 1.60.",
+            is_active=True)
+        migration = importlib.import_module(
+            "lens_workflow.migrations.0015_shopper_notes_and_high_index")
+        from django.apps import apps
+        migration.rewrite_index_notes(apps, None)
+        migration.add_progressive_and_bifocal_174(apps, None)
+        popular = LensIndexOption.objects.get(lens_type=progressive, index_value=D("1.61"))
+        self.assertEqual(popular.notes, INDEX_RATIONALE["1.61"])
+        self.assertNotIn("sheet", popular.notes.lower())
+        for lens_type in (progressive, bifocal):
+            row = LensIndexOption.objects.get(
+                lens_type=lens_type, index_value=D("1.74"), tier="Premium")
+            self.assertTrue(row.is_active)
+            self.assertEqual(row.price, D("79.95"))
+            self.assertEqual(row.notes, INDEX_RATIONALE["1.74"])
+
+    def test_reseed_writes_shopper_copy(self):
+        call_command("seed_shopping_flow_data")
+        notes = list(LensIndexOption.objects.filter(is_active=True).values_list("notes", flat=True))
+        self.assertTrue(notes)
+        for note in notes:
+            lowered = (note or "").lower()
+            self.assertNotIn("sheet", lowered)
+            self.assertNotIn("priced as", lowered)
+            self.assertNotIn("abbe", lowered)
+            self.assertNotIn("tier below", lowered)

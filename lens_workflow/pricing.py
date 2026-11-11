@@ -77,12 +77,11 @@ CANONICAL_INDEX_LADDER = (
 )
 
 # Material and Abbe number from the recommendation table (slides 33–35).
-# 1.56 is only a budget neighbor, so it has no row there. Its material is
-# the price sheet's Material cell ("NK55 modified hybrid thiocarbamate").
-# That sheet does not give NK-55 an Abbe number.
+# 1.56 is only a budget neighbor, so it has no row there. The short
+# material name is NK55. That sheet does not give NK-55 an Abbe number.
 INDEX_PROFILES = {
     Decimal("1.50"): ("CR-39", Decimal("58.0")),
-    Decimal("1.56"): ("NK55 modified hybrid thiocarbamate", None),
+    Decimal("1.56"): ("NK55", None),
     Decimal("1.60"): ("MR-8", Decimal("41.0")),
     Decimal("1.67"): ("MR-7 / MR-10", Decimal("31.0")),
     Decimal("1.74"): ("MR-174", Decimal("32.0")),
@@ -330,6 +329,15 @@ def next_higher_index(index):
     if position + 1 >= len(ladder):
         return None
     return ladder[position + 1]
+
+
+def next_lower_index(index):
+    """The next rung below `index`, or None at 1.50."""
+    ladder = CANONICAL_INDEX_LADDER
+    position = ladder.index(canonical_index(index))
+    if position == 0:
+        return None
+    return ladder[position - 1]
 
 
 def index_profile(catalog_index):

@@ -32,6 +32,13 @@ _PRISM_WRITABLE_FIELDS = [
 ]
 
 
+# A blank eye from the form is plano. The columns are NOT NULL, so null
+# must become 0 before it is written.
+_PLANO_IF_BLANK = (
+    "sphere_l", "sphere_r", "cylinder_l", "cylinder_r", "add_l", "add_r",
+)
+
+
 class PrescriptionSerializer(serializers.ModelSerializer):
     # many=True/read_only=True on the OUTPUT side only (matches
     # PrescriptionPrism's FK-per-row shape) — DRF can't auto-write a nested
@@ -61,6 +68,16 @@ class PrescriptionSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
+
+    def to_internal_value(self, data):
+        if hasattr(data, "copy"):
+            data = data.copy()
+        else:
+            data = dict(data)
+        for key in _PLANO_IF_BLANK:
+            if key in data and data[key] in (None, ""):
+                data[key] = "0"
+        return super().to_internal_value(data)
 
     def _sync_prism(self, prescription, prism_data):
         """

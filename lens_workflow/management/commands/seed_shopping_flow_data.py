@@ -126,7 +126,8 @@ TINT_PRICING = {
 # ─────────────────────────────────────────────────────────────────────────
 # Index / Material. The ladder is 1.50, 1.56, 1.61 (sheet 1.60), 1.67, 1.74.
 # Driving 1.61, Safety 1.59, and Elite 1.71 are not on the price sheet and
-# are not seeded. Progressive/Bifocal still omit 1.74.
+# are not seeded. Progressive and Bifocal include 1.74, which the premium
+# sheet does price.
 # ─────────────────────────────────────────────────────────────────────────
 INDEX_TIERS_FULL = [
     # index_value, price,     tier,        option_label
@@ -136,7 +137,10 @@ INDEX_TIERS_FULL = [
     ("1.67", D("39.95"), "Advanced", "Advanced - 1.67 Index"),
     ("1.74", D("79.95"), "Premium",  "Premium - 1.74 Index"),
 ]
-INDEX_TIERS_NARROW = [row for row in INDEX_TIERS_FULL if row[0] in ("1.50", "1.56", "1.61", "1.67")]
+# Progressive and Bifocal include 1.74 because the premium sheet has cells
+# for it. The number here is the catalog add-on, the same one SVD uses.
+# The sheet cell is still the price at checkout.
+INDEX_TIERS_NARROW = [row for row in INDEX_TIERS_FULL if row[0] in ("1.50", "1.56", "1.61", "1.67", "1.74")]
 # Kept as its own list so an SVD-only tier can be added without coming back
 # through INDEX_TIERS_FULL. It matches FULL now that Driving / Safety / Elite
 # are gone.
@@ -150,25 +154,16 @@ RETIRED_INDEX_OPTIONS = (
     (D("1.71"), ("elite",)),
 )
 
-# Customer-facing "why this index" rationale, shown on the Index step next
-# to each option (LensIndexOption.notes -> _index_option_dict's
-# `description`). Keyed by index_value, not by tier/lens_type, since the
-# optical trade-off is a property of the index itself, not of which Lens
-# Type it's being sold under.
-#
-# Customer-facing notes. 1.50 / 1.60 / 1.67 / 1.74 follow the recommendation
-# table (CR-39 Abbe 58, MR-8 Abbe 41, MR-7 / MR-10 Abbe 31, MR-174 Abbe 32).
+# Shopper-facing notes on the index step (LensIndexOption.notes). Material
+# and Abbe are separate fields, so this copy does not repeat them and does
+# not mention the price sheet or how a tier was chosen.
 INDEX_RATIONALE = {
-    "1.50": ("The clearest optics and best value of any lens we offer — ideal for mild "
-             "prescriptions, where a higher index wouldn't make a visible difference in "
-             "edge thickness. CR-39, Abbe 58."),
-    "1.56": ("A budget step up from 1.50. Shown next to a 1.50 recommendation, and as "
-             "the tier below 1.60."),
-    "1.61": ("MR-8, Abbe 41. The sheet prices this lens as 1.60. All-round choice for "
-             "moderate prescriptions."),
-    "1.67": ("MR-7 / MR-10, Abbe 31. A thinner lens for stronger prescriptions."),
-    "1.74": ("MR-174, Abbe 32. Our thinnest standard lens, for strong prescriptions. "
-             "Full-frame is preferred."),
+    "1.50": ("Our clearest lens. A good choice for mild prescriptions, where a "
+             "thinner lens would not change how the glasses look."),
+    "1.56": ("A little thinner than our clearest lens, for a small step up in price."),
+    "1.61": ("Thinner and light, with clear vision for everyday wear."),
+    "1.67": ("A thinner, lighter lens for stronger prescriptions."),
+    "1.74": ("Our thinnest lens, for strong prescriptions. It looks best in a full frame."),
 }
 
 INDEX_TIERS_BY_LENS_TYPE = {
