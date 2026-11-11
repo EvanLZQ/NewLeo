@@ -261,6 +261,14 @@ class CompleteSet(models.Model):
         null=True,
         blank=True
     )
+    prescription_upload = models.ForeignKey(
+        'Prescription.PrescriptionUpload',
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='complete_sets',
+        help_text="Photo or PDF of the shopper's paper prescription, uploaded "
+                  "on the lens page. Optional; the typed prescription above is "
+                  "still what prices the lens.",
+    )
     saved_for_later = models.BooleanField(default=False)
     # max_digits=8: one pair can exceed $999.99 once the price sheet is in
     # use (high-index progressive photochromic cells reach $589.95 before

@@ -1,6 +1,9 @@
+import os
+import uuid
+
 from django.db import models
 
-__all__ = ['PrescriptionInfo', 'PrescriptionPrism']
+__all__ = ['PrescriptionInfo', 'PrescriptionPrism', 'PrescriptionUpload']
 
 
 class PrescriptionInfo(models.Model):
@@ -81,3 +84,49 @@ class PrescriptionPrism(models.Model):
     class Meta:
         verbose_name = 'Prism'
         verbose_name_plural = 'Prism'
+
+
+def prescription_upload_path(instance, filename):
+    """media/prescription_uploads/YYYY/MM/<random hex>.<ext>
+
+    The shopper's file name is kept in `original_name` only. The stored name
+    is random so the URL can't be guessed from the upload id or the name.
+    """
+    ext = os.path.splitext(filename)[1].lower()
+    return f"prescription_uploads/{instance.uploaded_at_path()}/{uuid.uuid4().hex}{ext}"
+
+
+class PrescriptionUpload(models.Model):
+    """A photo or PDF of a paper prescription, uploaded on the lens page.
+
+    Created before the cart item exists (the shopper uploads on the
+    prescription step and adds to cart later), then linked from
+    CompleteSet.prescription_upload. The primary key is a UUID so a guest
+    upload can only be attached by a client that received it.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    customer = models.ForeignKey(
+        'Customer.CustomerInfo', on_delete=models.SET_NULL,
+        related_name='prescription_uploads', null=True, blank=True)
+    file = models.FileField(upload_to=prescription_upload_path, max_length=255)
+    original_name = models.CharField(max_length=255, blank=True)
+    content_type = models.CharField(max_length=100)
+    size = models.PositiveIntegerField(help_text="Bytes")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def uploaded_at_path(self):
+        from django.utils import timezone
+        now = self.created_at or timezone.now()
+        return now.strftime("%Y/%m")
+
+    @property
+    def is_pdf(self):
+        return self.content_type == "application/pdf"
+
+    def __str__(self):
+        return self.original_name or str(self.id)
+
+    class Meta:
+        verbose_name = 'Prescription upload'
+        verbose_name_plural = 'Prescription uploads'
+        ordering = ['-created_at']

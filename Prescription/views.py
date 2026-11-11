@@ -91,3 +91,48 @@ def fetch_prescriptions_by_ids_post(request):
 
     serializer = PrescriptionSerializer(qs, many=True)
     return Response(serializer.data)
+
+
+# ── Prescription photo / PDF upload (2026-11-11 QA, issue 1) ─────────────────
+
+from rest_framework.decorators import parser_classes, throttle_classes  # noqa: E402
+from rest_framework.parsers import MultiPartParser, FormParser  # noqa: E402
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle  # noqa: E402
+
+from .models import PrescriptionUpload  # noqa: E402
+from .serializer import PrescriptionUploadSerializer  # noqa: E402
+from .uploads import UploadRejected, validate_upload  # noqa: E402
+
+
+class _AnonUploadThrottle(AnonRateThrottle):
+    scope = "prescription_upload_anon"
+    rate = "30/hour"
+
+
+class _UserUploadThrottle(UserRateThrottle):
+    scope = "prescription_upload_user"
+    rate = "60/hour"
+
+
+@api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
+@throttle_classes([_AnonUploadThrottle, _UserUploadThrottle])
+def prescription_upload(request):
+    """POST multipart `file` → the stored upload (id, url, name, type, size).
+
+    The id is what the cart item sends back as `prescription_upload`.
+    """
+    upload = request.FILES.get('file')
+    try:
+        content_type = validate_upload(upload)
+    except UploadRejected as exc:
+        return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    record = PrescriptionUpload(
+        customer=request.user if request.user.is_authenticated else None,
+        original_name=(upload.name or "")[:255],
+        content_type=content_type,
+        size=upload.size,
+    )
+    record.file.save(upload.name, upload, save=False)
+    record.save()
+    return Response(PrescriptionUploadSerializer(record).data, status=status.HTTP_201_CREATED)

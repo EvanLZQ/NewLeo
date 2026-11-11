@@ -261,6 +261,20 @@ def _load_prescription(prescription_id):
         return None
 
 
+# A non-prescription lens has no power: every value is 0.00.
+_PLANO_PRESCRIPTION = SimpleNamespace(
+    sphere_r=Decimal("0"), sphere_l=Decimal("0"),
+    cylinder_r=Decimal("0"), cylinder_l=Decimal("0"),
+    add_r=Decimal("0"), add_l=Decimal("0"),
+    pd_r=Decimal("0"), pd_l=Decimal("0"),
+)
+
+
+def _is_non_rx_lens_type(lens_type):
+    return bool(lens_type is not None and not lens_type.is_prescription_required
+                and not lens_type.is_reader and lens_type.code != "READER")
+
+
 def _rx_decimal(value):
     # Decimal("0") is falsy, so `value or 0` would turn a real zero into an
     # int and then break Decimal arithmetic. None is the only empty value.
@@ -763,6 +777,13 @@ class LensWorkflowNextView(APIView):
             ]
 
         prescription = _load_prescription(prescription_id)
+        category = function_path.lens_type.index_recommendation_category
+        if _is_non_rx_lens_type(function_path.lens_type):
+            # Non-prescription lenses are plano: 0.00 on both eyes. Price and
+            # recommend them exactly like a 0.00 prescription, so unavailable
+            # indexes are hidden and 1.50 is recommended (2026-11-11).
+            prescription = _PLANO_PRESCRIPTION
+            category = category or "PLANO"
         if prescription is not None and price_table_loaded():
             index_options = [
                 io for io in index_options
@@ -770,7 +791,6 @@ class LensWorkflowNextView(APIView):
                     function_path, prescription, io, color_option))
             ]
 
-        category = function_path.lens_type.index_recommendation_category
         if prescription is None or not category:
             option_dicts = []
             for io in index_options:

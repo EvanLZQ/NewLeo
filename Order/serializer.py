@@ -21,8 +21,17 @@ from lens_workflow.serializers import (
 from Product.serializer import ProductInstanceSerializer
 from Product.models import ProductInstance
 from General.serializer import AddressSerializer
-from Prescription.serializer import PrescriptionSerializer
-from Prescription.models import PrescriptionInfo
+from Prescription.serializer import PrescriptionSerializer, PrescriptionUploadSerializer
+from Prescription.models import PrescriptionInfo, PrescriptionUpload
+
+
+class _UploadField(serializers.PrimaryKeyRelatedField):
+    """UUID string, or the read shape `{ "id": "<uuid>", ... }` sent back as is."""
+
+    def to_internal_value(self, data):
+        if isinstance(data, dict):
+            data = data.get('id')
+        return super().to_internal_value(data)
 
 
 class CompleteSetSerializer(serializers.ModelSerializer):
@@ -43,6 +52,9 @@ class CompleteSetSerializer(serializers.ModelSerializer):
     # Exposes the raw FK integer (or null) so the frontend can tell whether
     # this item is currently attached to a pending (UNPAID) order.
     order_id = serializers.IntegerField(read_only=True, allow_null=True)
+    # Write: the upload's UUID (or null to detach). Read: the upload object.
+    prescription_upload = _UploadField(
+        queryset=PrescriptionUpload.objects.all(), required=False, allow_null=True)
 
     class Meta:
         model = CompleteSet
@@ -58,6 +70,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
             'reader_strength',
             'density',
             'prescription',
+            'prescription_upload',
             'sub_color',
             'sub_total',
             'saved_for_later',
@@ -66,6 +79,17 @@ class CompleteSetSerializer(serializers.ModelSerializer):
 
     def get_frame(self, obj):
         return obj.frame.sku
+
+    def validate_prescription_upload(self, upload):
+        """An upload made while signed in belongs to that account only.
+        A guest upload (no customer) is attachable by whoever holds its UUID."""
+        if upload is None or upload.customer_id is None:
+            return upload
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if user is None or not user.is_authenticated or user.pk != upload.customer_id:
+            raise serializers.ValidationError('Prescription upload not found.')
+        return upload
 
     def to_representation(self, obj):
         rep = super().to_representation(obj)
@@ -82,6 +106,9 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         rep['color_option']  = obj.color_option.color_name if obj.color_option else None
         rep['coatings']      = [c.label for c in obj.coatings.all()]
         rep['reader_strength'] = obj.reader_strength.label if obj.reader_strength else None
+        rep['prescription_upload'] = (
+            PrescriptionUploadSerializer(obj.prescription_upload).data
+            if obj.prescription_upload_id else None)
         # Per-lens-feature prices for cart/order itemization (frame excluded —
         # rep['frame'] above already carries its own price).
         rep['price_breakdown'] = get_complete_set_line_items(obj)
@@ -133,6 +160,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
                     reader_strength=validated_data.get('reader_strength'),
                     density=validated_data.get('density'),
                     prescription=rx_obj,
+                    prescription_upload=validated_data.get('prescription_upload'),
                     sub_color=validated_data.get('sub_color'),
                     saved_for_later=validated_data.get('saved_for_later', False),
                     sub_total=validated_data.get('sub_total', 0),
@@ -163,7 +191,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         instance.sub_total       = validated_data.get('sub_total',       instance.sub_total)
         instance.saved_for_later = validated_data.get('saved_for_later', instance.saved_for_later)
 
-        for field in ('lens_type', 'function_path', 'tint_type', 'index_option', 'color_option', 'reader_strength', 'density'):
+        for field in ('lens_type', 'function_path', 'tint_type', 'index_option', 'color_option', 'reader_strength', 'density', 'prescription_upload'):
             if field in validated_data:
                 setattr(instance, field, validated_data.get(field))
         if 'frame' in validated_data:
@@ -251,6 +279,7 @@ class CompleteSetObjectSerializer(serializers.ModelSerializer):
     frame    = serializers.SerializerMethodField()
     density  = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
     prescription = PrescriptionSerializer(allow_null=True)
+    prescription_upload = PrescriptionUploadSerializer(allow_null=True, read_only=True)
 
     class Meta:
         model = CompleteSet
@@ -269,6 +298,7 @@ class CompleteSetObjectSerializer(serializers.ModelSerializer):
             'sub_total',
             'saved_for_later',
             'prescription',
+            'prescription_upload',
         ]
 
     def get_frame(self, obj):

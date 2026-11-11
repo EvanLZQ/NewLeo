@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from .models import *
 
-__all__ = ['PrescriptionSerializer', 'PrismSerializer']
+__all__ = ['PrescriptionSerializer', 'PrismSerializer', 'PrescriptionUploadSerializer']
 
 
 class PrismSerializer(serializers.ModelSerializer):
@@ -113,3 +113,19 @@ class PrescriptionSerializer(serializers.ModelSerializer):
         if 'prism' in self.initial_data:
             self._sync_prism(instance, self.initial_data.get('prism'))
         return instance
+
+
+class PrescriptionUploadSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+    is_pdf = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = PrescriptionUpload
+        fields = ['id', 'original_name', 'content_type', 'size', 'is_pdf', 'url', 'created_at']
+        read_only_fields = fields
+
+    def get_url(self, obj):
+        from django.conf import settings
+        if not obj.file:
+            return None
+        return f"{settings.MEDIA_BASE_URL}{obj.file.url}"

@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils.html import format_html
 
 from .models import *
 from .models import OrderStatusEvent  # not in models.__all__
@@ -16,6 +17,43 @@ class OrderStatusEventInline(admin.TabularInline):
         return False
 
 
+def _upload_link(upload):
+    if upload is None or not upload.file:
+        return "-"
+    return format_html('<a href="{}" target="_blank" rel="noopener">{}</a>',
+                       upload.file.url, upload.original_name or "Prescription file")
+
+
+@admin.register(CompleteSet)
+class CompleteSetAdmin(admin.ModelAdmin):
+    list_display = ('id', 'frame', 'lens_type', 'order', 'prescription',
+                    'prescription_file', 'sub_total', 'created_at')
+    list_select_related = ('frame', 'lens_type', 'order', 'prescription', 'prescription_upload')
+    raw_id_fields = ('prescription_upload',)
+    readonly_fields = ('prescription_file',)
+
+    @admin.display(description='Rx upload')
+    def prescription_file(self, obj):
+        return _upload_link(obj.prescription_upload)
+
+
+class CompleteSetInline(admin.TabularInline):
+    """Pairs on this order, with the uploaded prescription file if any."""
+    model = CompleteSet
+    extra = 0
+    can_delete = False
+    fields = ('id', 'frame', 'lens_type', 'prescription', 'prescription_file', 'sub_total')
+    readonly_fields = fields
+    show_change_link = True
+
+    @admin.display(description='Rx upload')
+    def prescription_file(self, obj):
+        return _upload_link(obj.prescription_upload)
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(OrderInfo)
 class OrderInfoAdmin(admin.ModelAdmin):
     list_display = ('order_number', 'email', 'order_status', 'payment_status',
@@ -25,7 +63,7 @@ class OrderInfoAdmin(admin.ModelAdmin):
     search_fields = ('order_number', 'email', 'tracking_number')
     date_hierarchy = 'created_at'
     ordering = ('-created_at',)
-    inlines = [OrderStatusEventInline]
+    inlines = [CompleteSetInline, OrderStatusEventInline]
 
 
 @admin.register(OrderPayment)
@@ -55,4 +93,4 @@ class OrderPaymentAdmin(admin.ModelAdmin):
 
 admin.site.register(OrderImage)
 admin.site.register(OrderUpdates)
-admin.site.register(CompleteSet)
+
