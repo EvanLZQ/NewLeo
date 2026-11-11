@@ -1,4 +1,5 @@
 from decimal import Decimal
+from types import SimpleNamespace
 
 from rest_framework import status
 from rest_framework.response import Response
@@ -16,13 +17,24 @@ from .models import (
 from .serializers import NextStepRequestSerializer, RxQuoteRequestSerializer
 from Prescription.models import PrescriptionInfo
 from lens_workflow.pricing import (
+    CANONICAL_INDEX_LADDER,
     Eye,
     QuoteError,
     QuoteRequest,
+    available_index_labels,
+    canonical_index,
+    catalog_index_available,
+    index_profile,
+    neighbor_indexes,
+    next_higher_index,
+    price_table_loaded,
+    prism_requested,
     quote,
     quote_to_dict,
-    prism_requested,
+    recommended_canonical_index,
 )
+
+_LADDER = set(CANONICAL_INDEX_LADDER)
 
 STEP_LABELS = {
     "LENS_TYPE": "What kind of glasses are you looking for today?",
@@ -124,103 +136,173 @@ def _tint_type_option(function_path):
     )
 
 
-def _index_option_dict(index_option, is_recommended=False):
-    return _option_dict(
+def _index_option_dict(index_option, is_recommended=False, group=None,
+                       material=None, abbe_number=None):
+    metadata = {
+        "tier": index_option.tier,
+        "index_value": str(index_option.index_value),
+        "is_recommended": bool(is_recommended),
+    }
+    # Index-step contract. `group` is set only for that menu; summary rows
+    # stay the older shape. The same keys are copied into metadata so a
+    # client reading either place sees one recommendation.
+    extra = {}
+    if group is not None:
+        extra = {
+            "recommended": bool(is_recommended),
+            "group": group,
+            "material": material or "",
+            "abbe_number": abbe_number,
+        }
+        metadata.update(extra)
+    payload = _option_dict(
         id=index_option.id, code=index_option.option_label, name=index_option.option_label,
         option_type="INDEX", price=index_option.price,
-        # Customer-facing "why this index" copy — e.g. explaining that
-        # 1.56 actually transmits more light than 1.74 even though 1.74
-        # is thinner. Sourced from the "折射率算法"/"推荐的理由" sheets in
-        # Eyelovewear Pricing.xlsx (see seed_shopping_flow_data.py's
-        # INDEX_TIERS_FULL notes column) — previously the notes field
-        # existed on the model but nothing ever set or surfaced it.
         description=index_option.notes,
-        metadata={
-            "tier": index_option.tier,
-            "index_value": str(index_option.index_value),
-            "is_recommended": is_recommended,
-        },
+        metadata=metadata,
     )
+    payload.update(extra)
+    return payload
+
+
+def _meridian_power(sphere, cylinder):
+    """Largest absolute meridian of one eye. The meridians are S and S+C."""
+    sphere = sphere if sphere is not None else Decimal("0")
+    cylinder = cylinder if cylinder is not None else Decimal("0")
+    return max(abs(sphere), abs(sphere + cylinder))
 
 
 def _combined_power(prescription):
-    """
-    Spherical Equivalent (SE) per eye, worse (larger-magnitude) eye wins —
-    matches the bracket thresholds in LensIndexRecommendationRule. Returns
-    (combined_power, direction) — direction is whichever eye's formula
-    produced the winning value, so the caller can pick a direction-specific
-    bracket set (see LensIndexRecommendationRule.direction).
+    """Absolute steep meridian, and which eye produced it.
 
-    SE = sphere + cylinder / 2, the standard ophthalmic formula, used for
-    BOTH signs — confirmed by the "折射率算法" sheet in Eyelovewear
-    Pricing.xlsx ("远视散光同样用等效度数：等效 = 球镜 + ½柱镜", i.e. "farsighted
-    astigmatism uses the same equivalent-power formula: SE = sphere + ½
-    cylinder") and re-stated in the boss's lens-flow redesign deck. A
-    previous version of this function used |sphere| + |cylinder| (no /2)
-    for nearsighted eyes specifically — a real bug, not an intentional
-    second formula: it could recommend a different index tier than SE
-    does for the same prescription (e.g. S-3.00 C-2.00 scores 5.00 under
-    the old formula vs SE -4.00, landing in different brackets).
-    direction still comes from the eye's own sphere sign — correctly
-    handles the rare case of one nearsighted eye and one farsighted eye —
-    and nearsighted SE is reported as a magnitude (abs) so it compares
-    against the brackets the same way the farsighted branch's naturally-
-    positive SE does.
-    """
-    def per_eye(sphere, cylinder):
-        # `or 0` (the previous form) turns an exact Decimal("0") into a
-        # plain int 0, since Decimal("0") is falsy — then `0 / 2` true-
-        # divides two plain ints into a float, and Decimal + float raises
-        # TypeError. None-checks keep both values Decimal so the
-        # arithmetic stays Decimal throughout — hits on any prescription
-        # with exactly zero astigmatism, which is common, not an edge case.
-        sphere = sphere if sphere is not None else Decimal("0")
-        cylinder = cylinder if cylinder is not None else Decimal("0")
-        se = sphere + cylinder / 2
-        if sphere < 0:
-            return abs(se), LensIndexRecommendationRule.Direction.NEARSIGHTED
-        return se, LensIndexRecommendationRule.Direction.FARSIGHTED
+    Each eye contributes two meridians, S and S+C. The power is the larger
+    absolute value. The eye with the higher power decides, so a mild eye
+    cannot pull the recommendation down. Returns (power, direction).
+    Direction is the winning eye's sphere sign. The brackets themselves
+    are the same for both signs; direction is kept so callers that still
+    pass it do not change.
 
-    left_power, left_dir = per_eye(prescription.sphere_l, prescription.cylinder_l)
-    right_power, right_dir = per_eye(prescription.sphere_r, prescription.cylinder_r)
+    This is not spherical equivalent, and it does not read the price
+    sheet's Recommended SE column. Cylinder above 6.00D is still refused
+    by quote/checkout ("Max CYL is 6.00D"), not by this function.
+    """
+    left_power = _meridian_power(prescription.sphere_l, prescription.cylinder_l)
+    right_power = _meridian_power(prescription.sphere_r, prescription.cylinder_r)
     if right_power > left_power:
-        return right_power, right_dir
-    return left_power, left_dir
+        power = right_power
+        sphere = prescription.sphere_r
+    else:
+        power = left_power
+        sphere = prescription.sphere_l
+    sphere = sphere if sphere is not None else Decimal("0")
+    if sphere < 0:
+        direction = LensIndexRecommendationRule.Direction.NEARSIGHTED
+    else:
+        direction = LensIndexRecommendationRule.Direction.FARSIGHTED
+    return power, direction
 
 
 def _match_recommendation_rule(category, combined_power, direction):
-    """Direction-specific rules take priority; if this category has none
-    for the given direction, fall back to its direction="" rows (which
-    apply to either sign — see the model docstring). This is per-category:
-    Single Vision has direction-specific rows for both signs, so it never
-    falls back; Bifocal/Progressive has none, so it always falls back to
-    its blank rows regardless of sign."""
-    rules = LensIndexRecommendationRule.objects.filter(
-        category=category, direction=direction).order_by("sort_order")
-    if not rules.exists():
-        rules = LensIndexRecommendationRule.objects.filter(
-            category=category, direction="").order_by("sort_order")
-    for rule in rules:
-        if rule.max_combined_power is None or combined_power <= rule.max_combined_power:
-            return rule
-    return None
+    """Map a steep-meridian power to one recommended index and its neighbors.
+
+    `direction` does not change the bracket. The same table is used for
+    every lens category and both signs:
+
+        0.00 to ±2.00 → 1.50
+        ±2.25 to ±4.00 → 1.60 (catalog 1.61)
+        ±4.25 to ±6.00 → 1.67
+        ±6.25 and above → 1.74
+
+    Stored LensIndexRecommendationRule rows mirror this table for the
+    admin. They are not read: a stale Recommended SE bracket must not
+    win. Returns None when the lens type has no recommendation category.
+    """
+    del direction
+    if not category:
+        return None
+    recommended = recommended_canonical_index(combined_power)
+    return SimpleNamespace(
+        recommended_canonical=recommended,
+        recommended_index_value=f"{recommended.quantize(Decimal('0.01'))}",
+        available_index_values=available_index_labels(recommended),
+    )
+
+
+def _load_prescription(prescription_id):
+    if not prescription_id:
+        return None
+    try:
+        return PrescriptionInfo.objects.get(id=prescription_id)
+    except PrescriptionInfo.DoesNotExist:
+        return None
+
+
+def _rx_decimal(value):
+    # Decimal("0") is falsy, so `value or 0` would turn a real zero into an
+    # int and then break Decimal arithmetic. None is the only empty value.
+    return value if value is not None else Decimal("0")
+
+
+def _index_quote_request(function_path, prescription, index_option, color_option):
+    """QuoteRequest for one index, using the same eyes checkout will price."""
+    lens_type = function_path.lens_type
+    sun_type = function_path.sun_type or ""
+    is_reader = bool(lens_type.is_reader or lens_type.code == "READER")
+    is_non_rx = bool(not lens_type.is_prescription_required and not is_reader)
+    return QuoteRequest(
+        od=Eye(
+            sph=_rx_decimal(prescription.sphere_r), cyl=_rx_decimal(prescription.cylinder_r),
+            add=_rx_decimal(prescription.add_r), pd=_rx_decimal(prescription.pd_r)),
+        os=Eye(
+            sph=_rx_decimal(prescription.sphere_l), cyl=_rx_decimal(prescription.cylinder_l),
+            add=_rx_decimal(prescription.add_l), pd=_rx_decimal(prescription.pd_l)),
+        lens_type_code=lens_type.code,
+        function_code=function_path.function_code,
+        sun_type=sun_type,
+        color_name=color_option.color_name if color_option is not None else "",
+        index_value=index_option.index_value,
+        lens_type=lens_type,
+        function_path=function_path,
+        tint_type=function_path if sun_type else None,
+        color_option=color_option,
+        index_option=index_option,
+        is_reader=is_reader,
+        is_non_rx=is_non_rx,
+    )
 
 
 def _rx_recommendation_rule(lens_type, prescription_id):
-    """The LensIndexRecommendationRule matching this lens_type + prescription,
-    or None when no filtering applies (Non-Rx, no category configured on this
-    lens_type, or no prescription supplied/found). Shared by the COLOR step
-    (to pre-filter by availability) and the INDEX step (to narrow + flag the
-    recommended option) so both agree on the same allowed bracket."""
+    """Steep-meridian bracket for this lens type and prescription, or None.
+
+    None means no filtering (Non-Rx, no category, or no prescription).
+    The COLOR step uses `available_index_values` (the neighbor tiers,
+    including the 1.61 spelling of 1.60) so a color that exists only at a
+    hidden index is not offered.
+    """
     category = lens_type.index_recommendation_category
     if not category or not prescription_id:
         return None
-    try:
-        prescription = PrescriptionInfo.objects.get(id=prescription_id)
-    except PrescriptionInfo.DoesNotExist:
+    prescription = _load_prescription(prescription_id)
+    if prescription is None:
         return None
     combined_power, direction = _combined_power(prescription)
     return _match_recommendation_rule(category, combined_power, direction)
+
+
+def _blue_light_function_selected(path_ids):
+    """True when step 3 was the Blue Light function.
+
+    `selection_path` is [lens type id, function id, ...]. The function id
+    is the second entry the client echoes back; looking up every id in the
+    path would collide with lens-type and color ids.
+    """
+    if not path_ids or len(path_ids) < 2:
+        return False
+    function = LensFunctionPath.objects.filter(pk=path_ids[1]).first()
+    return (
+        function is not None
+        and function.function_code == LensFunctionPath.FunctionCode.BLUE_LIGHT_FILTERING
+    )
 
 
 def _color_option_dict(color_option):
@@ -348,7 +430,11 @@ class LensWorkflowNextView(APIView):
             selected_ids = data.get("selected_option_ids") or []
             updated_path = selection_path + [
                 i for i in selected_ids if i not in selection_path]
-            return self._after_coating(selected_ids, updated_path)
+            # Keep the pre-coating path for the blue-light check. A coating
+            # id can equal a function id, and appending it would make path[1]
+            # look like the Blue Light function.
+            return self._after_coating(
+                selected_ids, updated_path, function_path=selection_path)
 
         selected_option_id = data["selected_option_id"]
         updated_path = (
@@ -488,44 +574,98 @@ class LensWorkflowNextView(APIView):
             id=selected_option_id, is_active=True)
         return self._enter_index_step(
             color_option.function_path, path, prescription_id,
+            color_option=color_option,
             color_available_index_values=color_option.available_index_values,
             step_index=current_step_index + 1, total_steps=total_steps,
         )
 
     def _enter_index_step(self, function_path, path, prescription_id,
                            color_available_index_values=None,
+                           color_option=None,
                            step_index=None, total_steps=None):
         # Index/Material is scoped to Lens Type, not Function Path — the
-        # same list and prices apply no matter which Function got picked.
-        index_options = list(
-            LensIndexOption.objects.filter(
+        # same list applies no matter which Function got picked. Prices for
+        # "is this cell on the sheet" come from the selected function and,
+        # when there is one, the selected color.
+        index_options = [
+            io for io in LensIndexOption.objects.filter(
                 lens_type=function_path.lens_type, is_active=True
             ).order_by("price", "sort_order", "id")
-        )
-
-        rule = _rx_recommendation_rule(function_path.lens_type, prescription_id)
-        allowed = set(rule.available_index_values) if rule is not None else None
-        recommended_value = rule.recommended_index_value if rule is not None else None
-
-        if color_available_index_values is not None:
-            # Narrow further to whichever index values the chosen color is
-            # actually offered at (e.g. picking Polarized Green means only
-            # 1.56/1.61 remain, even if the prescription bracket also allows
-            # 1.67).
-            color_allowed = set(color_available_index_values)
-            allowed = color_allowed if allowed is None else (allowed & color_allowed)
-
-        if allowed is not None:
-            index_options = [
-                io for io in index_options if str(io.index_value) in allowed]
-
-        option_dicts = [
-            _index_option_dict(
-                io, is_recommended=(recommended_value is not None
-                                     and str(io.index_value) == recommended_value))
-            for io in index_options
+            if canonical_index(io.index_value) in _LADDER
         ]
 
+        if color_available_index_values is not None:
+            # A color that is only made at some indexes (Polarized Green at
+            # 1.56/1.61, for example) cannot offer the others.
+            color_allowed = {canonical_index(value) for value in color_available_index_values}
+            index_options = [
+                io for io in index_options
+                if canonical_index(io.index_value) in color_allowed
+            ]
+
+        prescription = _load_prescription(prescription_id)
+        if prescription is not None and price_table_loaded():
+            index_options = [
+                io for io in index_options
+                if catalog_index_available(_index_quote_request(
+                    function_path, prescription, io, color_option))
+            ]
+
+        category = function_path.lens_type.index_recommendation_category
+        if prescription is None or not category:
+            option_dicts = []
+            for io in index_options:
+                material, abbe = index_profile(io.index_value)
+                option_dicts.append(_index_option_dict(
+                    io, is_recommended=False, group="other_available",
+                    material=material, abbe_number=abbe,
+                ))
+            return _step_response(
+                "INDEX", option_dicts, path, step_index=step_index, total_steps=total_steps)
+
+        power, direction = _combined_power(prescription)
+        rule = _match_recommendation_rule(category, power, direction)
+        tier = rule.recommended_canonical
+        chosen = None
+        while tier is not None:
+            if any(canonical_index(io.index_value) == tier for io in index_options):
+                chosen = tier
+                break
+            tier = next_higher_index(tier)
+
+        if chosen is None:
+            return _step_response(
+                "INDEX", [], path, step_index=step_index, total_steps=total_steps)
+
+        visible = set(neighbor_indexes(chosen))
+        shown = [
+            io for io in index_options
+            if canonical_index(io.index_value) in visible
+        ]
+        at_tier = [io for io in shown if canonical_index(io.index_value) == chosen]
+        # Two catalog rows can share the rung (Popular 1.61 and Driving 1.61).
+        # Recommend the cheaper one, and do not list the other as a neighbor.
+        winner = min(at_tier, key=lambda io: (io.price, io.sort_order, io.id))
+        shown = [
+            io for io in shown
+            if io.id == winner.id or canonical_index(io.index_value) != chosen
+        ]
+        shown.sort(key=lambda io: (
+            CANONICAL_INDEX_LADDER.index(canonical_index(io.index_value)),
+            io.price, io.sort_order, io.id,
+        ))
+
+        option_dicts = []
+        for io in shown:
+            material, abbe = index_profile(io.index_value)
+            recommended = io.id == winner.id
+            option_dicts.append(_index_option_dict(
+                io,
+                is_recommended=recommended,
+                group="recommended" if recommended else "other_available",
+                material=material,
+                abbe_number=abbe,
+            ))
         return _step_response(
             "INDEX", option_dicts, path, step_index=step_index, total_steps=total_steps)
 
@@ -544,13 +684,19 @@ class LensWorkflowNextView(APIView):
         # included ones are shown as static "already included" text, not a
         # choice — see _after_coating for the corresponding server-side
         # rejection if one is submitted as if it were a selection.
+        #
+        # Blue Light Filtering is already the step-3 function when that
+        # was picked, so it is not offered again here. Classic, Sun/Tint,
+        # and Photochromic still get it as a coating.
         coatings = LensCoating.objects.filter(
             is_active=True).order_by("price", "sort_order", "id")
+        if _blue_light_function_selected(path):
+            coatings = coatings.exclude(code=LensCoating.Code.BLUE_LIGHT_FILTERING)
         return _step_response(
             "COATING", [_coating_option_dict(c) for c in coatings], path,
             step_index=step_index, total_steps=total_steps)
 
-    def _after_coating(self, selected_ids, path):
+    def _after_coating(self, selected_ids, path, function_path=None):
         selected_ids = list(dict.fromkeys(selected_ids))  # de-dupe, keep order
         coatings = list(LensCoating.objects.filter(
             id__in=selected_ids, is_active=True))
@@ -568,6 +714,14 @@ class LensWorkflowNextView(APIView):
                 return Response(
                     {"detail": f"'{c.label}' is already included with every lens — "
                                "it can't be submitted as a selection."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if (c.code == LensCoating.Code.BLUE_LIGHT_FILTERING
+                    and _blue_light_function_selected(
+                        path if function_path is None else function_path)):
+                return Response(
+                    {"detail": "Blue Light Filtering is already part of the Blue Light "
+                               "lens and can't be selected again."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
