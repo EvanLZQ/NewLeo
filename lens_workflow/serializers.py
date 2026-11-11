@@ -82,15 +82,26 @@ class NextStepRequestSerializer(serializers.Serializer):
     {
       "current_step_code": "FUNCTION",
       "selected_option_id": 12,
-      "selection_path": [3, 12],
+      "selection_path": [
+        {"step": "LENS_TYPE", "id": 3},
+        {"step": "FUNCTION", "id": 12}
+      ],
       "prescription_id": 7
     }
+
+    The query-string form of that path is ``LENS_TYPE:3,FUNCTION:12``.
+    Each entry names the step that produced the id. The same number can
+    be a lens type and a function; the step code is what tells them apart.
 
     Example (COATING):
     {
       "current_step_code": "COATING",
       "selected_option_ids": [21, 23],
-      "selection_path": [3, 12, 15, 18],
+      "selection_path": [
+        {"step": "LENS_TYPE", "id": 3},
+        {"step": "FUNCTION", "id": 12},
+        {"step": "INDEX", "id": 18}
+      ],
       "prescription_id": 7
     }
     """
@@ -105,7 +116,7 @@ class NextStepRequestSerializer(serializers.Serializer):
         default=list,
     )
     selection_path = serializers.ListField(
-        child=serializers.IntegerField(),
+        child=serializers.DictField(),
         required=False,
         allow_empty=True,
         default=list,

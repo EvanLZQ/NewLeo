@@ -5,6 +5,8 @@ from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.core.management.color import no_style
+from django.db import connection
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -27,7 +29,9 @@ from lens_workflow.models import (
     LensColorOption,
     LensFunctionPath,
     LensIndexOption,
+    LensIndexRecommendationRule,
     LensPriceCell,
+    LensReaderStrength,
     LensType,
 )
 from lens_workflow.tests import HEADER, block, workbook
@@ -35,6 +39,18 @@ from lens_workflow.views import _combined_power
 
 D = Decimal
 User = get_user_model()
+
+
+def _selection_query(path):
+    """Query-string form of a selection_path the API just returned."""
+    parts = []
+    for item in path or []:
+        if isinstance(item, dict):
+            step = item.get("step") or ""
+            parts.append(f"{step}:{item['id']}" if step else str(item["id"]))
+        else:
+            parts.append(str(item))
+    return ",".join(parts)
 
 SPHERES = [
     0, -0.25, 0.25, -0.5, 0.5, -1, 1, -2, 2, -2.25, 2.25,
@@ -152,7 +168,7 @@ class IndexMenuTests(TestCase):
         menu = self.client.get("/api/lens-workflow/next/", {
             "current_step_code": "FUNCTION",
             "selected_option_id": self.classic.id,
-            "selection_path": ",".join(str(i) for i in started.data["selection_path"]),
+            "selection_path": _selection_query(started.data["selection_path"]),
             "prescription_id": rx.id,
         })
         self.assertEqual(menu.status_code, 200, menu.content)
@@ -390,7 +406,7 @@ class UnpricedTierTests(TestCase):
         menu = self.client.get("/api/lens-workflow/next/", {
             "current_step_code": "FUNCTION",
             "selected_option_id": self.classic.id,
-            "selection_path": str(started.data["selection_path"][0]),
+            "selection_path": _selection_query(started.data["selection_path"]),
             "prescription_id": rx.id,
         })
         self.assertEqual(menu.status_code, 200, menu.content)
@@ -480,7 +496,7 @@ class UnpricedTierTests(TestCase):
         menu = self.client.get("/api/lens-workflow/next/", {
             "current_step_code": "FUNCTION",
             "selected_option_id": self.classic.id,
-            "selection_path": str(started.data["selection_path"][0]),
+            "selection_path": _selection_query(started.data["selection_path"]),
             "prescription_id": rx.id,
         })
         self.assertEqual(menu.status_code, 200, menu.content)
@@ -514,7 +530,7 @@ class RetiredIndexTests(TestCase):
         menu = self.client.get("/api/lens-workflow/next/", {
             "current_step_code": "FUNCTION",
             "selected_option_id": self.classic.id,
-            "selection_path": str(started.data["selection_path"][0]),
+            "selection_path": _selection_query(started.data["selection_path"]),
         })
         self.assertEqual(menu.status_code, 200, menu.content)
         return [opt["name"] for opt in menu.data["options"]]
@@ -628,7 +644,7 @@ class BlueLightCoatingTests(TestCase):
         params = {
             "current_step_code": step,
             "selected_option_id": selected,
-            "selection_path": ",".join(str(i) for i in path),
+            "selection_path": _selection_query(path),
         }
         if previous is not None and previous.data.get("total_steps") is not None:
             params["current_step_index"] = previous.data["step_index"]
@@ -675,7 +691,7 @@ class BlueLightCoatingTests(TestCase):
         rejected = self.client.get("/api/lens-workflow/next/", {
             "current_step_code": "COATING",
             "selected_option_ids": str(self.blue_coat.id),
-            "selection_path": ",".join(str(i) for i in blue.data["selection_path"]),
+            "selection_path": _selection_query(blue.data["selection_path"]),
         })
         self.assertEqual(rejected.status_code, 400, rejected.content)
         self.assertIn("can't be selected again", rejected.data["detail"])
@@ -683,7 +699,7 @@ class BlueLightCoatingTests(TestCase):
         accepted = self.client.get("/api/lens-workflow/next/", {
             "current_step_code": "COATING",
             "selected_option_ids": str(self.blue_coat.id),
-            "selection_path": ",".join(str(i) for i in classic.data["selection_path"]),
+            "selection_path": _selection_query(classic.data["selection_path"]),
         })
         self.assertEqual(accepted.status_code, 200, accepted.content)
         self.assertTrue(accepted.data["is_complete"])
@@ -787,7 +803,7 @@ class RealSheetGapTests(TestCase):
         menu = self.client.get("/api/lens-workflow/next/", {
             "current_step_code": "FUNCTION",
             "selected_option_id": function.id,
-            "selection_path": str(started.data["selection_path"][0]),
+            "selection_path": _selection_query(started.data["selection_path"]),
             "prescription_id": rx.id,
         })
         self.assertEqual(menu.status_code, 200, menu.content)
@@ -880,7 +896,7 @@ class RealSheetGapTests(TestCase):
         menu = self.client.get("/api/lens-workflow/next/", {
             "current_step_code": "FUNCTION",
             "selected_option_id": function.id,
-            "selection_path": str(started.data["selection_path"][0]),
+            "selection_path": _selection_query(started.data["selection_path"]),
             "prescription_id": created.data["id"],
         })
         self.assertEqual(menu.status_code, 200, menu.content)
@@ -948,3 +964,124 @@ class ShopperCopyTests(TestCase):
             self.assertNotIn("priced as", lowered)
             self.assertNotIn("abbe", lowered)
             self.assertNotIn("tier below", lowered)
+
+
+class SeededIdCollisionTests(TestCase):
+    """Fresh seed: lens type 1, Classic function 1, and an index sharing the Blue Light id."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.defaults["HTTP_X_FORWARDED_PROTO"] = "https"
+        for model in (
+            LensColorOption, LensIndexOption, LensFunctionPath, LensCoating,
+            LensIndexRecommendationRule, LensReaderStrength, LensType,
+        ):
+            model.objects.all().delete()
+        statements = connection.ops.sequence_reset_sql(no_style(), [
+            LensType, LensFunctionPath, LensIndexOption, LensColorOption,
+            LensCoating, LensReaderStrength, LensIndexRecommendationRule,
+        ])
+        with connection.cursor() as cursor:
+            for statement in statements:
+                cursor.execute(statement)
+        call_command("seed_shopping_flow_data")
+
+    def _next(self, step, selected, previous=None, *, step_index=None, total_steps=None):
+        params = {
+            "current_step_code": step,
+            "selected_option_id": selected,
+            "selection_path": _selection_query(
+                [] if previous is None else previous.data["selection_path"]),
+        }
+        if step_index is not None:
+            params["current_step_index"] = step_index
+            params["total_steps"] = total_steps
+        elif previous is not None and previous.data.get("total_steps") is not None:
+            params["current_step_index"] = previous.data["step_index"]
+            params["total_steps"] = previous.data["total_steps"]
+        response = self.client.get("/api/lens-workflow/next/", params)
+        self.assertEqual(response.status_code, 200, response.content)
+        return response
+
+    def _coating(self, function, *, tint=None, color=None, index_id=None):
+        step = self._next("LENS_TYPE", function.lens_type_id)
+        self.assertEqual(step.data["selection_path"], [
+            {"step": "LENS_TYPE", "id": function.lens_type_id},
+        ])
+        step = self._next("FUNCTION", function.id, step)
+        self.assertIn(
+            {"step": "FUNCTION", "id": function.id},
+            step.data["selection_path"])
+        if tint is not None:
+            self.assertEqual(step.data["current_step"]["code"], "TINT_TYPE")
+            step = self._next("TINT_TYPE", tint.id, step)
+        if color is not None:
+            self.assertEqual(step.data["current_step"]["code"], "COLOR")
+            step = self._next("COLOR", color.id, step)
+        self.assertEqual(step.data["current_step"]["code"], "INDEX")
+        if index_id is None:
+            index_id = step.data["options"][0]["id"]
+        else:
+            self.assertIn(index_id, [opt["id"] for opt in step.data["options"]])
+        step = self._next("INDEX", index_id, step)
+        self.assertEqual(step.data["current_step"]["code"], "COATING")
+        return step
+
+    def test_classic_keeps_blue_light_when_ids_collide(self):
+        svd = LensType.objects.get(code="SVD")
+        classic = LensFunctionPath.objects.get(
+            lens_type=svd, function_code="CLEAR", sun_type="")
+        blue = LensFunctionPath.objects.get(
+            lens_type=svd, function_code="BLUE_LIGHT_FILTERING", sun_type="")
+        photo = LensFunctionPath.objects.get(
+            lens_type=svd, function_code="PHOTOCHROMIC", sun_type="")
+        sun = LensFunctionPath.objects.get(
+            lens_type=svd, function_code="SUN", sun_type="")
+        solid = LensFunctionPath.objects.get(
+            lens_type=svd, function_code="SUN", sun_type="SOLID")
+        # The collision a fresh database actually produces.
+        self.assertEqual(svd.id, classic.id)
+        colliding_index = LensIndexOption.objects.get(pk=blue.id, lens_type=svd)
+        self.assertNotEqual(colliding_index.id, classic.id)
+
+        classic_step = self._coating(classic, index_id=colliding_index.id)
+        codes = [opt["code"] for opt in classic_step.data["options"]]
+        self.assertIn("BLUE_LIGHT_FILTERING", codes)
+        self.assertIn(
+            {"step": "FUNCTION", "id": classic.id},
+            classic_step.data["selection_path"])
+        self.assertIn(
+            {"step": "INDEX", "id": colliding_index.id},
+            classic_step.data["selection_path"])
+        blue_coat = LensCoating.objects.get(code="BLUE_LIGHT_FILTERING")
+        accepted = self.client.get("/api/lens-workflow/next/", {
+            "current_step_code": "COATING",
+            "selected_option_ids": str(blue_coat.id),
+            "selection_path": _selection_query(classic_step.data["selection_path"]),
+        })
+        self.assertEqual(accepted.status_code, 200, accepted.content)
+        self.assertTrue(accepted.data["is_complete"])
+
+        photo_color = LensColorOption.objects.filter(function_path=photo).first()
+        photo_step = self._coating(photo, color=photo_color)
+        self.assertIn(
+            "BLUE_LIGHT_FILTERING",
+            [opt["code"] for opt in photo_step.data["options"]])
+
+        sun_color = LensColorOption.objects.filter(function_path=solid).first()
+        sun_step = self._coating(sun, tint=solid, color=sun_color)
+        self.assertIn(
+            "BLUE_LIGHT_FILTERING",
+            [opt["code"] for opt in sun_step.data["options"]])
+
+        blue_step = self._coating(blue, index_id=colliding_index.id)
+        self.assertNotIn(
+            "BLUE_LIGHT_FILTERING",
+            [opt["code"] for opt in blue_step.data["options"]])
+        rejected = self.client.get("/api/lens-workflow/next/", {
+            "current_step_code": "COATING",
+            "selected_option_ids": str(blue_coat.id),
+            "selection_path": _selection_query(blue_step.data["selection_path"]),
+        })
+        self.assertEqual(rejected.status_code, 400, rejected.content)
+        self.assertIn("can't be selected again", rejected.data["detail"])

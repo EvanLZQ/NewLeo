@@ -313,20 +313,66 @@ def _rx_recommendation_rule(lens_type, prescription_id):
     return _match_recommendation_rule(category, combined_power, direction)
 
 
-def _blue_light_function_selected(path_ids):
-    """True when step 3 was the Blue Light function.
+_SELECTION_STEPS = {
+    "LENS_TYPE", "FUNCTION", "TINT_TYPE", "COLOR", "INDEX",
+    "COATING", "READER_STRENGTH",
+}
 
-    `selection_path` is [lens type id, function id, ...]. The function id
-    is the second entry the client echoes back; looking up every id in the
-    path would collide with lens-type and color ids.
+
+def _parse_selection_path(raw_value):
+    """``STEP:id`` tokens, comma-separated.
+
+    A bare integer is accepted from older clients and stored with an empty
+    step. An empty step is never treated as the FUNCTION choice: the same
+    number is a lens type, a function, and an index on a fresh database.
     """
-    if not path_ids or len(path_ids) < 2:
+    if not raw_value:
+        return []
+    entries = []
+    for part in str(raw_value).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if ":" in part:
+            step, _, id_text = part.partition(":")
+            step = step.strip().upper()
+            if step not in _SELECTION_STEPS:
+                raise ValueError(f"Unknown selection step '{step}'.")
+        else:
+            step, id_text = "", part
+        try:
+            option_id = int(id_text)
+        except ValueError:
+            raise ValueError(f"Invalid selection path entry '{part}'.")
+        entries.append({"step": step, "id": option_id})
+    return entries
+
+
+def _append_selection(path, step, option_id):
+    """Record which step produced this id.
+
+    The same number may already be in the path for a different step
+    (lens type 1 and Classic function 1). That is a different choice.
+    """
+    if any(entry["step"] == step and entry["id"] == option_id for entry in path):
+        return list(path)
+    return [*path, {"step": step, "id": option_id}]
+
+
+def _blue_light_function_selected(path):
+    """True when the FUNCTION step was Blue Light Filtering.
+
+    Only entries tagged ``step == "FUNCTION"`` are read. An index id that
+    happens to equal the Blue Light function's id is an INDEX entry and
+    is not consulted.
+    """
+    function_ids = [entry["id"] for entry in path if entry.get("step") == "FUNCTION"]
+    if not function_ids:
         return False
-    function = LensFunctionPath.objects.filter(pk=path_ids[1]).first()
-    return (
-        function is not None
-        and function.function_code == LensFunctionPath.FunctionCode.BLUE_LIGHT_FILTERING
-    )
+    return LensFunctionPath.objects.filter(
+        pk__in=function_ids,
+        function_code=LensFunctionPath.FunctionCode.BLUE_LIGHT_FILTERING,
+    ).exists()
 
 
 def _color_option_dict(color_option):
@@ -437,7 +483,10 @@ class LensWorkflowNextView(APIView):
       - selected_option_ids: comma-separated ints — COATING only. May be
                             empty (picking none of the optional add-ons is
                             valid).
-      - selection_path: comma-separated ids (optional)
+      - selection_path: comma-separated ``STEP:id`` tokens (optional).
+                        Example: ``LENS_TYPE:1,FUNCTION:1,INDEX:2``.
+                        The step code is required to tell a function from
+                        another row that happens to use the same id.
       - prescription_id: int (optional; only used when transitioning into INDEX)
       - current_step_index / total_steps: int (optional; progress-indicator
         state echoed back from the previous response — see
@@ -445,11 +494,16 @@ class LensWorkflowNextView(APIView):
     """
 
     def get(self, request):
+        try:
+            selection_path = _parse_selection_path(
+                request.query_params.get("selection_path", ""))
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         serializer = NextStepRequestSerializer(data={
             "current_step_code": request.query_params.get("current_step_code"),
             "selected_option_id": request.query_params.get("selected_option_id"),
             "selected_option_ids": _safe_parse(request.query_params.get("selected_option_ids", "")),
-            "selection_path": _safe_parse(request.query_params.get("selection_path", "")),
+            "selection_path": selection_path,
             "prescription_id": request.query_params.get("prescription_id") or None,
             "current_step_index": request.query_params.get("current_step_index") or None,
             "total_steps": request.query_params.get("total_steps") or None,
@@ -466,19 +520,14 @@ class LensWorkflowNextView(APIView):
 
         if current_step_code == "COATING":
             selected_ids = data.get("selected_option_ids") or []
-            updated_path = selection_path + [
-                i for i in selected_ids if i not in selection_path]
-            # Keep the pre-coating path for the blue-light check. A coating
-            # id can equal a function id, and appending it would make path[1]
-            # look like the Blue Light function.
-            return self._after_coating(
-                selected_ids, updated_path, function_path=selection_path)
+            updated_path = list(selection_path)
+            for coating_id in selected_ids:
+                updated_path = _append_selection(updated_path, "COATING", coating_id)
+            return self._after_coating(selected_ids, updated_path)
 
         selected_option_id = data["selected_option_id"]
-        updated_path = (
-            selection_path if selected_option_id in selection_path
-            else [*selection_path, selected_option_id]
-        )
+        updated_path = _append_selection(
+            selection_path, current_step_code, selected_option_id)
 
         handler = {
             "LENS_TYPE": self._after_lens_type,
@@ -729,7 +778,7 @@ class LensWorkflowNextView(APIView):
             "COATING", [_coating_option_dict(c) for c in coatings], path,
             step_index=step_index, total_steps=total_steps)
 
-    def _after_coating(self, selected_ids, path, function_path=None):
+    def _after_coating(self, selected_ids, path):
         selected_ids = list(dict.fromkeys(selected_ids))  # de-dupe, keep order
         coatings = list(LensCoating.objects.filter(
             id__in=selected_ids, is_active=True))
@@ -750,8 +799,7 @@ class LensWorkflowNextView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             if (c.code == LensCoating.Code.BLUE_LIGHT_FILTERING
-                    and _blue_light_function_selected(
-                        path if function_path is None else function_path)):
+                    and _blue_light_function_selected(path)):
                 return Response(
                     {"detail": "Blue Light Filtering is already part of the Blue Light "
                                "lens and can't be selected again."},
