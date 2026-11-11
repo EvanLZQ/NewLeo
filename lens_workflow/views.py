@@ -320,57 +320,110 @@ _SELECTION_STEPS = {
 
 
 def _parse_selection_path(raw_value):
-    """``STEP:id`` tokens, comma-separated.
+    """Parse the ``selection_path`` query param.
 
-    A bare integer is accepted from older clients and stored with an empty
-    step. An empty step is never treated as the FUNCTION choice: the same
-    number is a lens type, a function, and an index on a fresh database.
+    The wire format is plain comma-separated ids (``"1,2,3"``), the same
+    as the live frontend sends with ``selection_path.join(",")``. Tagged
+    tokens (``"LENS_TYPE:1,FUNCTION:2"``) are also accepted.
+
+    Returns ``(ids, tags)``: ``ids`` is the plain integer path, ``tags``
+    is ``{position: step_code}`` for the tokens that carried one. The
+    tags are only checked against the server's own step order; the ids
+    are what gets stored and returned.
     """
+    ids, tags = [], {}
     if not raw_value:
-        return []
-    entries = []
+        return ids, tags
     for part in str(raw_value).split(","):
         part = part.strip()
         if not part:
             continue
+        step = ""
+        id_text = part
         if ":" in part:
             step, _, id_text = part.partition(":")
             step = step.strip().upper()
             if step not in _SELECTION_STEPS:
                 raise ValueError(f"Unknown selection step '{step}'.")
-        else:
-            step, id_text = "", part
         try:
-            option_id = int(id_text)
+            option_id = int(id_text.strip())
         except ValueError:
             raise ValueError(f"Invalid selection path entry '{part}'.")
-        entries.append({"step": step, "id": option_id})
-    return entries
+        if step:
+            tags[len(ids)] = step
+        ids.append(option_id)
+    return ids, tags
 
 
-def _append_selection(path, step, option_id):
-    """Record which step produced this id.
+def _selection_steps(path_ids):
+    """Which step produced each id in a plain integer ``selection_path``.
 
-    The same number may already be in the path for a different step
-    (lens type 1 and Classic function 1). That is a different choice.
+    Worked out from the workflow's own step order, not from the ids:
+    position 0 is the lens type; position 1 is READER_STRENGTH for a
+    reader lens type and FUNCTION otherwise. The FUNCTION row then decides
+    the rest (Sun: TINT_TYPE, COLOR, INDEX; color_required: COLOR, INDEX;
+    otherwise INDEX). Anything after INDEX is a coating.
+
+    Each id is looked up only in its own step's table. A fresh seed gives
+    lens type 1 and Classic function 1, and an index id can equal the
+    Blue Light function id; a bare id is never compared across tables.
+
+    An id whose row is gone leaves the steps after it unknown (``""``).
     """
-    if any(entry["step"] == step and entry["id"] == option_id for entry in path):
-        return list(path)
-    return [*path, {"step": step, "id": option_id}]
+    if not path_ids:
+        return []
+    steps = ["LENS_TYPE"]
+    if len(path_ids) == 1:
+        return steps
+    lens_type = LensType.objects.filter(pk=path_ids[0]).first()
+    if lens_type is not None and lens_type.is_reader:
+        sequence = ["READER_STRENGTH"]
+    else:
+        function = LensFunctionPath.objects.filter(pk=path_ids[1]).first()
+        if function is None:
+            sequence = ["FUNCTION"]
+        elif function.function_code == LensFunctionPath.FunctionCode.SUN:
+            sequence = ["FUNCTION", "TINT_TYPE", "COLOR", "INDEX", "COATING"]
+        elif function.color_required:
+            sequence = ["FUNCTION", "COLOR", "INDEX", "COATING"]
+        else:
+            sequence = ["FUNCTION", "INDEX", "COATING"]
+    for position in range(1, len(path_ids)):
+        if position - 1 < len(sequence):
+            steps.append(sequence[position - 1])
+        elif sequence[-1] == "COATING":
+            steps.append("COATING")
+        else:
+            steps.append("")
+    return steps
 
 
-def _blue_light_function_selected(path):
+def _path_before_step(path_ids, steps, step_code):
+    """The path as it stood before ``step_code`` was answered.
+
+    The frontend sends the path from the previous response, so the step
+    being answered is normally not in it yet. If it is (a replay, or the
+    shopper went back), drop it and everything after it so the new answer
+    replaces the old one instead of being appended twice.
+    """
+    if step_code in steps:
+        return list(path_ids[:steps.index(step_code)])
+    return list(path_ids)
+
+
+def _blue_light_function_selected(path_ids):
     """True when the FUNCTION step was Blue Light Filtering.
 
-    Only entries tagged ``step == "FUNCTION"`` are read. An index id that
-    happens to equal the Blue Light function's id is an INDEX entry and
-    is not consulted.
+    ``path_ids`` is the plain integer path. Only the id at the FUNCTION
+    position (see `_selection_steps`) is looked up, and only in
+    LensFunctionPath.
     """
-    function_ids = [entry["id"] for entry in path if entry.get("step") == "FUNCTION"]
-    if not function_ids:
+    steps = _selection_steps(path_ids)
+    if "FUNCTION" not in steps:
         return False
+    function_id = path_ids[steps.index("FUNCTION")]
     return LensFunctionPath.objects.filter(
-        pk__in=function_ids,
+        pk=function_id,
         function_code=LensFunctionPath.FunctionCode.BLUE_LIGHT_FILTERING,
     ).exists()
 
@@ -423,7 +476,12 @@ def _step_response(step_code, option_dicts, selection_path, is_complete=False,
     body = {
         "current_step": current,
         "options": [] if is_complete else option_dicts,
-        "selection_path": selection_path,
+        # Plain list of ids, same shape as before. The live frontend
+        # echoes it back with join(","); it must never contain objects.
+        "selection_path": list(selection_path),
+        # Additive, informational: the step code for each selection_path
+        # entry, same order. Clients don't need to send it back.
+        "selection_steps": _selection_steps(selection_path),
         "is_complete": is_complete,
         # Progress-indicator hints — null until the path is determined (see
         # NextStepRequestSerializer's docstring). Omitted entirely when
@@ -451,6 +509,7 @@ class LensWorkflowStartView(APIView):
             "current_step": _step_dict("LENS_TYPE"),
             "options": [_lens_type_option(lt) for lt in lens_types],
             "selection_path": [],
+            "selection_steps": [],
         }, status=status.HTTP_200_OK)
 
 
@@ -483,10 +542,12 @@ class LensWorkflowNextView(APIView):
       - selected_option_ids: comma-separated ints — COATING only. May be
                             empty (picking none of the optional add-ons is
                             valid).
-      - selection_path: comma-separated ``STEP:id`` tokens (optional).
-                        Example: ``LENS_TYPE:1,FUNCTION:1,INDEX:2``.
-                        The step code is required to tell a function from
-                        another row that happens to use the same id.
+      - selection_path: comma-separated ids (optional), echoed back from
+                        the previous response, e.g. ``1,1,2``. The server
+                        works out which step each id belongs to from the
+                        workflow order. Tagged tokens such as
+                        ``LENS_TYPE:1,FUNCTION:1`` are also accepted; a tag
+                        that disagrees with the workflow order is a 400.
       - prescription_id: int (optional; only used when transitioning into INDEX)
       - current_step_index / total_steps: int (optional; progress-indicator
         state echoed back from the previous response — see
@@ -495,7 +556,7 @@ class LensWorkflowNextView(APIView):
 
     def get(self, request):
         try:
-            selection_path = _parse_selection_path(
+            path_ids, path_tags = _parse_selection_path(
                 request.query_params.get("selection_path", ""))
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -503,7 +564,7 @@ class LensWorkflowNextView(APIView):
             "current_step_code": request.query_params.get("current_step_code"),
             "selected_option_id": request.query_params.get("selected_option_id"),
             "selected_option_ids": _safe_parse(request.query_params.get("selected_option_ids", "")),
-            "selection_path": selection_path,
+            "selection_path": path_ids,
             "prescription_id": request.query_params.get("prescription_id") or None,
             "current_step_index": request.query_params.get("current_step_index") or None,
             "total_steps": request.query_params.get("total_steps") or None,
@@ -518,16 +579,27 @@ class LensWorkflowNextView(APIView):
         current_step_index = data.get("current_step_index")
         total_steps = data.get("total_steps")
 
+        steps = _selection_steps(selection_path)
+        for position, tag in path_tags.items():
+            if steps[position] != tag:
+                return Response(
+                    {"detail": f"selection_path entry {position} is a "
+                               f"{steps[position] or 'unknown'} choice, not {tag}."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        base_path = _path_before_step(selection_path, steps, current_step_code)
+
         if current_step_code == "COATING":
             selected_ids = data.get("selected_option_ids") or []
-            updated_path = list(selection_path)
-            for coating_id in selected_ids:
-                updated_path = _append_selection(updated_path, "COATING", coating_id)
+            # Coating ids go after the index, one per distinct coating. They
+            # are not compared with earlier ids: those come from other tables.
+            updated_path = base_path + list(dict.fromkeys(selected_ids))
             return self._after_coating(selected_ids, updated_path)
 
         selected_option_id = data["selected_option_id"]
-        updated_path = _append_selection(
-            selection_path, current_step_code, selected_option_id)
+        # Always appended. A bare id equal to an earlier one (lens type 1,
+        # Classic function 1) is a different table's row, not a repeat.
+        updated_path = [*base_path, selected_option_id]
 
         handler = {
             "LENS_TYPE": self._after_lens_type,
