@@ -20,7 +20,7 @@ from Leoptique.authentication import AccessTokenAuthentication
 from .models import *
 from .serializer import CompleteSetSerializer, OrderSerializer, CompleteSetObjectSerializer
 from .ownership import caller_owns_complete_set, get_owned_complete_set, stamp_new_complete_set
-from .service.order_service import OrderService, get_complete_set_line_items
+from .service.order_service import OrderService, get_complete_set_line_items, money
 from lens_workflow.pricing import LensNotOffered
 
 AUTH_CLASSES = [SessionAuthentication, AccessTokenAuthentication]
@@ -261,6 +261,11 @@ PAYPAL_API_BASE = (
 )
 
 
+# Currency every order is priced and charged in (PayPalButton.tsx sends
+# currency_code "USD"; OrderPayment.currency defaults to 'USD').
+ORDER_CURRENCY = 'USD'
+
+
 def _get_paypal_access_token():
     resp = requests.post(
         f'{PAYPAL_API_BASE}/v1/oauth2/token',
@@ -317,9 +322,15 @@ def _verify_and_extract_capture(paypal_order_id, expected_minimum_total):
     try:
         capture = paypal_order['purchase_units'][0]['payments']['captures'][0]
         captured_amount = Decimal(capture['amount']['value'])
+        captured_currency = capture['amount']['currency_code']
         capture_id = capture['id']
     except (KeyError, IndexError, InvalidOperation, TypeError):
         return None, None, 'Unexpected PayPal response shape'
+
+    # The PayPal order is created in the browser, so the same number in a
+    # cheaper currency must not pass. Every order is priced in USD.
+    if captured_currency != ORDER_CURRENCY:
+        return None, None, 'Captured currency does not match the order currency'
 
     if captured_amount < expected_minimum_total:
         return None, None, 'Captured amount is less than the order total'
@@ -710,9 +721,9 @@ def createPendingOrder(request):
             CompleteSet.objects.filter(order=order).count(),
         )
         shipping_discount   = OrderService.calculate_shipping_discount(order, order.shipping_cost)
-        order.shipping_cost = max(Decimal('0'), order.shipping_cost - shipping_discount)
+        order.shipping_cost = money(max(Decimal('0'), order.shipping_cost - shipping_discount))
         order.customs_fee   = OrderService.calculate_customs_fee(country, order.sub_total)
-        order.total_amount  = order.sub_total + order.shipping_cost + order.customs_fee
+        order.total_amount  = money(order.sub_total + order.shipping_cost + order.customs_fee)
 
         OrderInfo.objects.filter(pk=order.pk).update(
             sub_total=order.sub_total,
@@ -737,10 +748,10 @@ def createPendingOrder(request):
         {
             'order_id':         order.pk,
             'order_number':     order.order_number,
-            'sub_total':        str(order.sub_total),
-            'shipping_cost':    str(order.shipping_cost),
-            'customs_fee':      str(order.customs_fee),
-            'total_amount':     str(order.total_amount),
+            'sub_total':        str(money(order.sub_total)),
+            'shipping_cost':    str(money(order.shipping_cost)),
+            'customs_fee':      str(money(order.customs_fee)),
+            'total_amount':     str(money(order.total_amount)),
             'coupon_code':      coupon.code if coupon else None,
             'discount_amount':  str(discount_amount),
         },
@@ -1050,9 +1061,9 @@ def createPendingOrderGuest(request):
             country, float(order.sub_total), shipping_method,
             CompleteSet.objects.filter(order=order).count())
         shipping_discount = OrderService.calculate_shipping_discount(order, order.shipping_cost)
-        order.shipping_cost = max(Decimal('0'), order.shipping_cost - shipping_discount)
+        order.shipping_cost = money(max(Decimal('0'), order.shipping_cost - shipping_discount))
         order.customs_fee = OrderService.calculate_customs_fee(country, order.sub_total)
-        order.total_amount = order.sub_total + order.shipping_cost + order.customs_fee
+        order.total_amount = money(order.sub_total + order.shipping_cost + order.customs_fee)
 
         OrderInfo.objects.filter(pk=order.pk).update(
             sub_total=order.sub_total,
@@ -1077,10 +1088,10 @@ def createPendingOrderGuest(request):
     return Response({
         'order_id':         order.pk,
         'order_number':     order.order_number,
-        'sub_total':        str(order.sub_total),
-        'shipping_cost':    str(order.shipping_cost),
-        'customs_fee':      str(order.customs_fee),
-        'total_amount':     str(order.total_amount),
+        'sub_total':        str(money(order.sub_total)),
+        'shipping_cost':    str(money(order.shipping_cost)),
+        'customs_fee':      str(money(order.customs_fee)),
+        'total_amount':     str(money(order.total_amount)),
         'coupon_code':      coupon.code if coupon else None,
         'discount_amount':  str(discount_amount),
     }, status=status.HTTP_201_CREATED)
