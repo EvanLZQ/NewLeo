@@ -1,5 +1,5 @@
 # your_app/services/order_service.py
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from django.db.models import Sum
 from django.apps import apps
 
@@ -9,6 +9,17 @@ from django.apps import apps
 # the Prescription, not on any CompleteSet FK), so it isn't in the loop
 # below — added explicitly wherever line items/sub_total are built instead.
 PRISM_SURCHARGE = Decimal("27.00")
+
+
+def money(value):
+    """Round a money amount to the cent, half up (12.015 -> 12.02).
+
+    Every amount we store or compare against a PayPal capture goes through
+    this, so the number the browser sends to PayPal, the numeric(…, 2)
+    column and the confirm_payment check are the same to the cent.
+    Matches UserSite helper.ts previewCustomsFee (Math.round on cents).
+    """
+    return Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
 # Shipping. Priority Shipping (7-15 business days) is free for orders of at
@@ -119,7 +130,7 @@ class OrderService:
                 elif order.coupon_used.frame_discount_type == 'Amount':
                     frame_discount = order.coupon_used.frame_discount_amount
 
-        return frame_discount
+        return money(frame_discount)
 
     @staticmethod
     def calculate_lens_discount(order, complete_set):
@@ -134,7 +145,7 @@ class OrderService:
             elif order.coupon_used.lens_discount_type == 'Amount':
                 lens_discount = order.coupon_used.lens_discount_amount
 
-        return lens_discount
+        return money(lens_discount)
 
     @staticmethod
     def calculate_order_discount(order, items_total):
@@ -155,7 +166,7 @@ class OrderService:
             discount = amount
         else:
             return Decimal('0')
-        return min(items_total, discount).quantize(Decimal('0.01'))
+        return money(min(items_total, discount))
 
     @staticmethod
     def calculate_items_total(order, complete_sets):
@@ -190,7 +201,7 @@ class OrderService:
     def calculate_sub_total(order):
         complete_sets = OrderService.complete_sets_for_order(order)
         total = OrderService.calculate_items_total(order, complete_sets)
-        return total - OrderService.calculate_order_discount(order, total)
+        return money(total - OrderService.calculate_order_discount(order, total))
 
     @staticmethod
     def normalize_shipping_method(country, shipping_method):
@@ -231,16 +242,16 @@ class OrderService:
         # createPendingOrder/createPendingOrderGuest).
         if country != "United States":
             return Decimal('0')
-        return max(sub_total * Decimal('0.15'), Decimal('9'))
+        return money(max(Decimal(str(sub_total)) * Decimal('0.15'), Decimal('9')))
 
     @staticmethod
     def calculate_shipping_discount(order, shipping_cost):
         if order.coupon_used:
             if order.coupon_used.shipping_discount_type == 'Percentage':
-                return shipping_cost * (order.coupon_used.shipping_discount_amount / 100)
+                return money(shipping_cost * (order.coupon_used.shipping_discount_amount / 100))
             elif order.coupon_used.shipping_discount_type == 'Amount':
-                return min(shipping_cost, order.coupon_used.shipping_discount_amount)
-        return 0
+                return money(min(shipping_cost, order.coupon_used.shipping_discount_amount))
+        return Decimal('0')
 
     @staticmethod
     def update_order_totals(order):
@@ -258,7 +269,7 @@ class OrderService:
                 country, order.sub_total, order.shipping_company, pairs)
             shipping_discount = OrderService.calculate_shipping_discount(
                 order, shipping_cost)
-            order.shipping_cost = max(0, shipping_cost - shipping_discount)
+            order.shipping_cost = money(max(0, shipping_cost - shipping_discount))
             order.customs_fee = OrderService.calculate_customs_fee(
                 country, order.sub_total)
         else:
@@ -266,7 +277,8 @@ class OrderService:
             order.customs_fee = 0
 
         # Calculate total_amount
-        order.total_amount = order.sub_total + order.shipping_cost + order.customs_fee
+        order.total_amount = money(
+            order.sub_total + order.shipping_cost + order.customs_fee)
 
     @staticmethod
     def calculate_complete_set_sub_total(complete_set):
