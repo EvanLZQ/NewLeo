@@ -4,7 +4,24 @@ from .models import *
 
 __all__ = ['ProductSerializer', 'ProductInstanceSerializer',
            'ProductImageSerializer', 'ProductReviewSerializer', 'ProductPromotionSerializer',
-           'TargetInstanceSerializer', 'SKUtoModelSerializer']
+           'TargetInstanceSerializer', 'SKUtoModelSerializer',
+           'TryOnFrameSerializer', 'first_tryon_url']
+
+
+def first_tryon_url(instance):
+    """URL of the colour's try-on cut-out, or None if it has none.
+
+    Same tolerance as mask_img: several rows -> the lowest id wins. Reads
+    the (usually prefetched) productImage relation, so no extra queries.
+    """
+    rows = sorted(
+        (img for img in instance.productImage.all()
+         if img.image_type == 'tryon' and img.image),
+        key=lambda img: img.id,
+    )
+    if not rows:
+        return None
+    return f'{settings.MEDIA_BASE_URL}{rows[0].image.url}'
 
 
 class ProductReviewSerializer(serializers.ModelSerializer):
@@ -66,6 +83,7 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
     carousel_img = serializers.SerializerMethodField()
     detail_img = serializers.SerializerMethodField()
     mask_img = serializers.SerializerMethodField()
+    tryon_img = serializers.SerializerMethodField()
     color_img_url = serializers.SerializerMethodField()
     product_name = serializers.SerializerMethodField()
     model_number = serializers.SerializerMethodField()
@@ -110,6 +128,11 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
             return None
         return f'{settings.MEDIA_BASE_URL}{masks[0].image.url}'
 
+    def get_tryon_img(self, obj):
+        # Transparent frame cut-out for the photo try-on. None means "this
+        # colour has no try-on image" and the storefront hides the button.
+        return first_tryon_url(obj)
+
     def get_color_img_url(self, obj):
         img_url = obj.color_img.color_img.url if obj.color_img else ''
         return f'{settings.MEDIA_BASE_URL}{img_url}'
@@ -141,6 +164,7 @@ class ProductInstanceSerializer(serializers.ModelSerializer):
                   'carousel_img',
                   'detail_img',
                   'mask_img',
+                  'tryon_img',
                   'color_img_url',
                   'color_base_name',
                   'color_display_name',
@@ -311,3 +335,43 @@ class SKUtoModelSerializer(serializers.ModelSerializer):
             'name',
             'price',
         ]
+
+
+class TryOnFrameSerializer(serializers.ModelSerializer):
+    """Slim per-product payload for the try-on "switch frame" strip.
+
+    Only online colours that have a try-on image are listed; the view drops
+    products left with none. Expects productInstance__productImage and
+    productInstance__color_img to be prefetched.
+    """
+    colors = serializers.SerializerMethodField()
+
+    def get_colors(self, obj):
+        out = []
+        for inst in sorted(obj.productInstance.all(), key=lambda i: i.id):
+            if not inst.online:
+                continue
+            url = first_tryon_url(inst)
+            if not url:
+                continue
+            carousel = sorted(
+                (img for img in inst.productImage.all()
+                 if img.image_type == 'carousel' and img.image),
+                key=lambda img: img.id,
+            )
+            out.append({
+                'sku': inst.sku,
+                'color_display_name': inst.color_display_name,
+                'color_img_url': (
+                    f'{settings.MEDIA_BASE_URL}{inst.color_img.color_img.url}'
+                    if inst.color_img and inst.color_img.color_img else ''),
+                'thumbnail': (f'{settings.MEDIA_BASE_URL}{carousel[0].image.url}'
+                              if carousel else None),
+                'tryon_img': url,
+            })
+        return out
+
+    class Meta:
+        model = ProductInfo
+        fields = ['model_number', 'name', 'price', 'frame_width', 'lens_width',
+                  'bridge', 'lens_height', 'colors']

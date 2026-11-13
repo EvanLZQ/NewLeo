@@ -140,6 +140,10 @@ class ProductImage(models.Model):
     alt = models.CharField(max_length=100)
     image_type = models.CharField(max_length=20, choices=[
         ('carousel', 'Carousel'), ('detail', 'Detail'), ('mask', 'Mask'),
+        # Transparent front-view frame cut-out (PNG/WebP with alpha, lens
+        # openings knocked out, cropped to the frame) for the storefront's
+        # photo try-on. One per colour; see `import_tryon_images`.
+        ('tryon', 'Try-on'),
     ], default='carousel')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

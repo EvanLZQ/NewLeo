@@ -54,6 +54,12 @@ class ProductImageInline(admin.StackedInline):
         if not obj or not obj.image:  # 没有图片就显示占位
             return "-"  # 占位
         # 用 obj.image.url 更稳
+        if obj.image_type == 'tryon':
+            # 试戴图是透明 PNG/WebP：放在棋盘格上，方便看出透明区域和残留底色
+            checker = ('background:repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) '
+                       '50% / 16px 16px;')
+            return mark_safe(f'<img src="{obj.image.url}" style="max-width: 300px; '
+                             f'margin: 5px; {checker}">')
         return mark_safe(f'<img src="{obj.image.url}" style="max-width: 300px; margin: 5px;">')
 
     image_preview.short_description = "Preview"  # 列名
