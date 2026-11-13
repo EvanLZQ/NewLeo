@@ -323,3 +323,23 @@ def getSearchProducts(request):
         return Response(serializer.data)
     else:
         return Response([])
+
+
+@api_view(['GET'])
+def getTryOnFrames(request):
+    """Frames (and colours) that can be tried on: online, with a try-on image."""
+    products = (
+        ProductInfo.objects.filter(
+            productInstance__online=True,
+            productInstance__productImage__image_type='tryon',
+        )
+        .prefetch_related(
+            'productInstance__color_img',
+            'productInstance__productImage',
+        )
+        .distinct()
+        .order_by('model_number')
+    )
+    data = [row for row in TryOnFrameSerializer(products, many=True).data
+            if row['colors']]
+    return Response(data)

@@ -13,4 +13,5 @@ urlpatterns = [
     path('getShapeList', views.getAllShapes, name='get_shape_list'),
     path('getMaterialList', views.getAllMaterials, name='get_material_list'),
     path('search', views.getSearchProducts, name='get_search_products'),
+    path('tryon', views.getTryOnFrames, name='tryon_frames'),
 ]
