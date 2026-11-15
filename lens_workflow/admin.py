@@ -283,3 +283,70 @@ class LensPriceImportAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+# ---------- Lens pricing v2 ----------
+from .models import LensLine, PriceTableVersion, PriceBlock, LensPricingSettings  # noqa: E402
+from .pricing_v2 import importer as v2_importer  # noqa: E402
+
+
+@admin.register(LensLine)
+class LensLineAdmin(admin.ModelAdmin):
+    list_display = ("code", "display_name", "sheet_name", "sort_order", "is_active")
+    list_editable = ("sort_order", "is_active")
+
+
+@admin.register(PriceTableVersion)
+class PriceTableVersionAdmin(admin.ModelAdmin):
+    """Versions are imported with `manage.py import_lens_prices_v2` (MVP: no
+    web upload). Admin can activate a version (= switch or roll back);
+    nothing can be deleted."""
+    list_display = ("id", "label", "status", "created_at", "imported_by", "activated_at", "activated_by")
+    list_filter = ("status",)
+    readonly_fields = ("label", "source_filename", "file_sha256", "overrides", "status", "imported_by",
+                       "activated_at", "activated_by", "report", "created_at", "updated_at")
+    fields = ("label", "notes") + readonly_fields[1:]
+    actions = ["activate_version"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.action(description="Activate the selected version (switch / roll back prices)")
+    def activate_version(self, request, queryset):
+        if queryset.count() != 1:
+            self.message_user(request, "Select exactly one version.", messages.ERROR)
+            return
+        v = v2_importer.activate(queryset.first(), user=request.user.get_username())
+        self.message_user(request, f"Version {v.pk} ({v.label}) is now active.", messages.SUCCESS)
+
+
+@admin.register(PriceBlock)
+class PriceBlockAdmin(admin.ModelAdmin):
+    list_display = ("version", "line", "sheet", "source_row", "rx_type", "lens_type", "color_group",
+                    "depths_key", "coating", "lens_index", "material")
+    list_filter = ("version", "line", "rx_type", "lens_type", "coating", "lens_index")
+    search_fields = ("color_group", "material", "sheet")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(LensPricingSettings)
+class LensPricingSettingsAdmin(admin.ModelAdmin):
+    """The one row of lens-pricing settings. Blank fields use the defaults in
+    lens_workflow/pricing_v2/config.py."""
+
+    def has_add_permission(self, request):
+        return not LensPricingSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False

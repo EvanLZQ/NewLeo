@@ -945,9 +945,35 @@ def quote_for_complete_set(complete_set):
     return quote(req, include_options=False, require_index=not req.is_reader)
 
 
+def _v2_price(complete_set):
+    """Pricing v2 (lens_selection set): (lens price incl. prism, items)."""
+    from lens_workflow.pricing_v2 import cart
+    try:
+        result = cart.price(complete_set)
+    except cart.LensUnavailable as exc:
+        raise LensNotOffered(exc.message) from exc
+    snap = result["snapshot"]
+    if result.get("frozen") and snap.get("lens_total") is not None:
+        # Paid order: exactly what was charged, prism included.
+        return _dec(snap["lens_total"]), [dict(i) for i in snap.get("all_items", snap.get("items", []))]
+    items = [dict(i) for i in result["items"]]
+    total = Decimal(result["lens_price"])
+    if _has_prism_row(complete_set):
+        prism = _prism_surcharge()
+        total += prism
+        items.append({"component": "prism", "label": "Prism", "price": float(prism)})
+    if not result.get("frozen"):
+        snap["lens_total"] = str(_dec(total))
+        snap["all_items"] = items
+        cart.apply_snapshot(complete_set, result)
+    return _dec(total), items
+
+
 def lens_total_for_complete_set(complete_set):
     """Lens portion of a CompleteSet (no frame). Raises `LensNotOffered`
     when the sheet is loaded and this configuration cannot be made."""
+    if getattr(complete_set, "lens_selection", None):
+        return _v2_price(complete_set)[0]
     if complete_set.lens_type_id is None and complete_set.function_path_id is None \
             and complete_set.index_option_id is None and complete_set.reader_strength_id is None:
         return Decimal("0.00")
@@ -970,6 +996,11 @@ def line_items_for_complete_set(complete_set):
     An unavailable sheet lens returns one zero-dollar row so a cart GET does
     not 500; checkout still refuses to charge it.
     """
+    if getattr(complete_set, "lens_selection", None):
+        try:
+            return _v2_price(complete_set)[1]
+        except LensNotOffered as exc:
+            return [{"component": "lens", "label": exc.message, "price": 0.0, "unavailable": True}]
     if complete_set.lens_type_id is None and complete_set.function_path_id is None \
             and complete_set.index_option_id is None:
         return None
