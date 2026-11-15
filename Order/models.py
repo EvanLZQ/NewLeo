@@ -279,6 +279,24 @@ class CompleteSet(models.Model):
     guest_token = models.CharField(
         max_length=64, blank=True, default='', db_index=True, editable=False)
     saved_for_later = models.BooleanField(default=False)
+    # ── Lens pricing v2 ─────────────────────────────────────────────────────
+    # A cart item made by the v2 lens flow stores its choice here instead of
+    # the legacy step FKs above, e.g. {"category": "SINGLE_VISION",
+    # "lens_type": "SUN", "tint": "GRADIENT", "color": "gray", "depth": 50,
+    # "coating": "N", "line": "economic", "index": "1.60"} or, for Readers,
+    # {"category": "READERS", "power": "1.25", "coating": "BLUE"}.
+    # Priced by lens_workflow.pricing_v2.cart with the ACTIVE price version
+    # while the item is in an open cart (boss Q15=A); the snapshot fields
+    # below record what was charged.
+    lens_selection = models.JSONField(null=True, blank=True)
+    lens_line = models.CharField(max_length=40, blank=True, default='')
+    price_version = models.ForeignKey(
+        'lens_workflow.PriceTableVersion', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='complete_sets')
+    # Prescription after minus-cylinder transposition + per-eye table, used
+    # for pricing only. The lab still gets the original `prescription`.
+    pricing_rx = models.JSONField(null=True, blank=True)
+    price_snapshot = models.JSONField(null=True, blank=True)
     # max_digits=8: one pair can exceed $999.99 once the price sheet is in
     # use (high-index progressive photochromic cells reach $589.95 before
     # the frame, prism, and any coating the sheet does not include).

@@ -12,6 +12,10 @@ __all__ = [
     "LensPriceBlock",
     "LensPriceCell",
     "LensPriceImport",
+    "LensLine",
+    "PriceTableVersion",
+    "PriceBlock",
+    "LensPricingSettings",
 ]
 
 
@@ -522,3 +526,158 @@ class LensPriceImport(TimeStampedModel):
 
     def __str__(self):
         return f"{self.original_filename} ({self.created_at:%Y-%m-%d %H:%M})"
+
+
+# ── Lens pricing v2 (price_v2.xlsx and later) ────────────────────────────────
+# Versioned copy of the whole price file. Exactly one version is ACTIVE; the
+# storefront and checkout read only that one. Importing creates a DRAFT;
+# activating archives the previous ACTIVE (never deletes it), so rolling back
+# is activating an older version again. See lens_workflow/pricing_v2/.
+# The legacy LensPriceBlock / LensPriceCell tables above are left untouched
+# (no longer read once a v2 version is active).
+
+class LensLine(TimeStampedModel):
+    """A product line = one sheet of the price file = one card on the
+    storefront (Economic, Premium (Conant), later more)."""
+    code = models.SlugField(max_length=40, unique=True)
+    display_name = models.CharField(max_length=100)
+    sheet_name = models.CharField(
+        max_length=100, unique=True,
+        help_text='Worksheet name in the price file, e.g. "Economic Lens".')
+    description = models.TextField(blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(
+        default=True, help_text="Inactive lines are imported but never shown or sold.")
+
+    class Meta:
+        db_table = "LensLine"
+        ordering = ["sort_order", "id"]
+        verbose_name = "Lens line (price sheet)"
+        verbose_name_plural = "Lens lines (price sheets)"
+
+    def __str__(self):
+        return f"{self.display_name} ({self.code})"
+
+
+class PriceTableVersion(TimeStampedModel):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        ACTIVE = "active", "Active"
+        ARCHIVED = "archived", "Archived"
+
+    label = models.CharField(max_length=200)
+    source_filename = models.CharField(max_length=255)
+    file_sha256 = models.CharField(max_length=64)
+    overrides = models.JSONField(
+        default=list, blank=True, help_text="Cell overrides applied at import (with their source).")
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.DRAFT, db_index=True)
+    imported_by = models.CharField(max_length=150, blank=True)
+    activated_at = models.DateTimeField(null=True, blank=True)
+    activated_by = models.CharField(max_length=150, blank=True)
+    report = models.JSONField(default=dict, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "PriceTableVersion"
+        ordering = ["-id"]
+        verbose_name = "Price table version"
+        verbose_name_plural = "Price table versions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["status"], condition=models.Q(status="active"),
+                name="one_active_price_table_version"),
+        ]
+
+    def __str__(self):
+        return f"v{self.pk} {self.label} [{self.status}]"
+
+
+class PriceBlock(models.Model):
+    """One block of the price file, already parsed: product key, index,
+    steep-meridian rows (range + limitation + label) and the price grid."""
+    version = models.ForeignKey(
+        PriceTableVersion, on_delete=models.CASCADE, related_name="blocks")
+    line = models.ForeignKey(LensLine, on_delete=models.PROTECT, related_name="blocks")
+    sheet = models.CharField(max_length=100)
+    source_row = models.PositiveIntegerField(help_text="Header row of the block in the sheet.")
+    position = models.PositiveIntegerField(default=0)
+
+    rx_type = models.CharField(max_length=20)          # SV_NEAR / SV_FAR / BIFOCAL / PROGRESSIVE
+    lens_type = models.CharField(max_length=20)        # CLEAR / PHOTOCHROMIC / SUN
+    color_group = models.CharField(max_length=100)     # normalised colour text, e.g. "gray, brown"
+    colors = models.JSONField(default=list)            # colour codes in the group
+    is_generic_color = models.BooleanField(default=False)
+    depths = models.JSONField(default=list)            # e.g. [30, 50]; [] = no depth
+    depths_key = models.CharField(max_length=40, blank=True)
+    coating = models.CharField(max_length=20)          # N / BLUE / POLARIZED / MIRRORED
+    lens_index = models.DecimalField(max_digits=3, decimal_places=2)
+    material = models.CharField(max_length=150, blank=True)
+    rationale = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+    raw = models.JSONField(default=dict, help_text="Original sheet texts of the key columns.")
+    rows = models.JSONField(
+        default=list, help_text="[{steep_min, steep_max, s_min, s_max, c_min, c_max, c_gt, label, upgrade_to, raw}]")
+    grid = models.JSONField(default=dict, help_text='{"|S||C|": "price"} e.g. {"1.25|0.50": "24.95"}')
+
+    class Meta:
+        db_table = "PriceBlock"
+        ordering = ["version", "line__sort_order", "position"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["version", "line", "rx_type", "lens_type", "color_group",
+                        "depths_key", "coating", "lens_index"],
+                name="uniq_price_block_product"),
+        ]
+        indexes = [models.Index(fields=["version", "line", "rx_type", "lens_type", "coating"])]
+
+    def __str__(self):
+        return (f"{self.sheet}!row {self.source_row}: {self.rx_type}/{self.lens_type}/"
+                f"{self.color_group}/{self.depths_key or 'N'}/{self.coating}/{self.lens_index}")
+
+
+class LensPricingSettings(models.Model):
+    """The one settings row. Fields left blank fall back to
+    lens_workflow/pricing_v2/config.py DEFAULTS; `overrides` may override any
+    other key of DEFAULTS (colour groups, labels, swatches ...)."""
+    enforce_limitation = models.BooleanField(
+        default=True,
+        help_text="On: a price outside the block's Limitation S/C is not sold (boss Q3). "
+                  "Off: any priced grid cell is sold.")
+    max_cyl = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    neighbor_count = models.PositiveSmallIntegerField(null=True, blank=True)
+    add_min = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    add_max = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    add_step = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    reader_min = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    reader_max = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    reader_step = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    reader_line = models.CharField(
+        max_length=40, blank=True, help_text='LensLine code used for Readers (default "economic").')
+    reader_coatings = models.JSONField(
+        null=True, blank=True,
+        help_text='Readers price buttons, e.g. [{"code": "N", "label": "Clear"}, '
+                  '{"code": "BLUE", "label": "Blue Light Filtering"}].')
+    gradient_ignore_dedicated_depths = models.JSONField(
+        null=True, blank=True,
+        help_text="Depths (e.g. [80]) at which a gradient ignores separately priced colour blocks "
+                  "and uses the general Sun & Tint price. [] = gradient priced like solid.")
+    overrides = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "LensPricingSettings"
+        verbose_name = "Lens pricing settings"
+        verbose_name_plural = "Lens pricing settings"
+
+    def __str__(self):
+        return "Lens pricing settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
