@@ -17,11 +17,15 @@ def _rx_not_found():
 
 @api_view(['GET', 'POST'])
 def prescription_list_create(request):
-    from Order.ownership import prescription_owner_fields
+    from Order.ownership import claim_guest_prescriptions, prescription_owner_fields
     if request.method == 'GET':
         # The signed-in customer's own saved prescriptions only (never all
         # rows, not even for staff; staff use the admin).
         if request.user.is_authenticated:
+            # Prescriptions this browser saved while signed out join the
+            # account first (like the guest cart merge), so a guest who
+            # signs in or signs up still finds them here.
+            claim_guest_prescriptions(request)
             prescriptions = PrescriptionInfo.objects.filter(
                 customer=request.user)
         else:

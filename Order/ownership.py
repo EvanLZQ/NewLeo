@@ -20,7 +20,22 @@ A guest (signed-out) session owns S when
 There is deliberately no "anything not on an order" fallback any more.
 Callers must answer 404 for anything not owned, so an id can't be
 confirmed by counting.
+
+Guest token, 2026-11-15 (guest "Saved prescriptions" vanished on refresh):
+the token used to live only in the Django session. A brand-new visitor's
+first requests often run concurrently (e.g. the storefront's guest-cart
+fetch and "Save prescription"); with no session cookie yet, each of them
+created its own session and the browser kept whichever Set-Cookie came
+last, so rows stamped with the losing session's token were orphaned. The
+storefront now also creates a random per-browser token itself (synchronously,
+before any request, kept in localStorage) and sends it in the ``elw_guest``
+cookie. When present and well-formed, that token is what new guest rows are
+stamped with (stored as its SHA-256, never in the clear) and it is accepted
+alongside the session token for ownership, so it no longer matters which
+session cookie won. Without the cookie everything works exactly as before.
 """
+import hashlib
+import re
 import secrets
 
 from django.db.models import Q
@@ -33,9 +48,26 @@ def _is_authenticated(request):
     return bool(user is not None and user.is_authenticated)
 
 
-def get_guest_token(request, create=False):
-    """This browser session's random owner token (never sent to the client;
-    it lives server-side in the Django session). ``create=True`` mints one."""
+# Storefront-generated per-browser guest token (see module docstring).
+BROWSER_TOKEN_COOKIE = 'elw_guest'
+# 32+ random URL-safe characters (the storefront sends 43: 32 random bytes,
+# base64url). Anything else is ignored, so a short or guessable value can
+# never become an owner token.
+_BROWSER_TOKEN_RE = re.compile(r'^[A-Za-z0-9_-]{32,128}$')
+
+
+def _browser_token(request):
+    """Owner token derived from the ``elw_guest`` cookie, or None. Stored and
+    compared as a SHA-256 hex digest (64 chars, fits the guest_token
+    columns), so a database copy never contains the cookie value itself."""
+    cookies = getattr(request, 'COOKIES', None) or {}
+    raw = cookies.get(BROWSER_TOKEN_COOKIE) or ''
+    if not _BROWSER_TOKEN_RE.match(raw):
+        return None
+    return hashlib.sha256(raw.encode('ascii')).hexdigest()
+
+
+def _session_token(request, create=False):
     session = getattr(request, 'session', None)
     if session is None:
         return None
@@ -46,13 +78,36 @@ def get_guest_token(request, create=False):
     return token or None
 
 
+def get_guest_token(request, create=False):
+    """The owner token to stamp on a row this signed-out browser creates:
+    the storefront's per-browser token when sent, else this session's
+    server-side token (``create=True`` mints one, as before)."""
+    return _browser_token(request) or _session_token(request, create=create)
+
+
+def get_guest_tokens(request):
+    """Every owner token this request proves: the per-browser token and the
+    session token (rows stamped before the browser token existed, or by a
+    client that does not send it). Never contains empty values."""
+    tokens = []
+    for token in (_browser_token(request), _session_token(request)):
+        if token and token not in tokens:
+            tokens.append(token)
+    return tokens
+
+
+def _token_matches(request, stored):
+    return bool(stored) and any(
+        secrets.compare_digest(token, stored) for token in get_guest_tokens(request))
+
+
 def owned_complete_sets_q(request):
     """Q filter over CompleteSet for the sets this request may access.
     Returns None when the caller owns nothing at all."""
-    token = get_guest_token(request)
+    tokens = get_guest_tokens(request)
     session_q = None
-    if token:
-        session_q = Q(order__isnull=True, created_by__isnull=True, guest_token=token)
+    if tokens:
+        session_q = Q(order__isnull=True, created_by__isnull=True, guest_token__in=tokens)
 
     if _is_authenticated(request):
         user = request.user
@@ -121,8 +176,7 @@ def caller_made_upload(request, upload):
     session). This is what allows attaching an upload to a cart item."""
     if upload.customer_id is not None:
         return _is_authenticated(request) and request.user.pk == upload.customer_id
-    token = get_guest_token(request)
-    return bool(token and upload.guest_token and secrets.compare_digest(token, upload.guest_token))
+    return _token_matches(request, upload.guest_token)
 
 
 def caller_can_read_upload(request, upload):
@@ -169,9 +223,9 @@ def owned_prescriptions_q(request, include_staff=True):
     q = None
     if _is_authenticated(request):
         q = Q(customer=request.user)
-    token = get_guest_token(request)
-    if token:
-        token_q = Q(customer__isnull=True, guest_token=token)
+    tokens = get_guest_tokens(request)
+    if tokens:
+        token_q = Q(customer__isnull=True, guest_token__in=tokens)
         q = token_q if q is None else (q | token_q)
     sets_q = owned_complete_sets_q(request)
     if sets_q is not None:
@@ -213,6 +267,23 @@ def prescription_owner_fields(request):
     if _is_authenticated(request):
         return {'customer': request.user, 'guest_token': ''}
     return {'customer': None, 'guest_token': get_guest_token(request, create=True)}
+
+
+def claim_guest_prescriptions(request):
+    """Signed in: move the prescriptions this browser typed while signed out
+    (customer NULL, carrying one of this request's guest tokens) onto the
+    account, so they appear in the account's saved list -- the prescription
+    counterpart of the guest-cart merge. Only rows proven by this request's
+    own tokens are touched. Returns the number of rows claimed."""
+    if not _is_authenticated(request):
+        return 0
+    tokens = get_guest_tokens(request)
+    if not tokens:
+        return 0
+    from Prescription.models import PrescriptionInfo
+    return (PrescriptionInfo.objects
+            .filter(customer__isnull=True, guest_token__in=tokens)
+            .update(customer=request.user, guest_token=''))
 
 
 # ── Guest wish lists ─────────────────────────────────────────────────────────
