@@ -70,11 +70,16 @@ class CompleteSetSerializer(serializers.ModelSerializer):
     # Write: the upload's UUID (or null to detach). Read: the upload object.
     prescription_upload = _UploadField(
         queryset=PrescriptionUpload.objects.all(), required=False, allow_null=True)
+    # Lens pricing v2: the whole lens choice in one object (see
+    # CompleteSet.lens_selection). When set, the legacy step ids above are
+    # ignored for pricing.
+    lens_selection = serializers.JSONField(required=False, allow_null=True)
 
     class Meta:
         model = CompleteSet
         fields = [
             'id',
+            'lens_selection',
             'frame',
             'lens_type',
             'function_path',
@@ -94,6 +99,17 @@ class CompleteSetSerializer(serializers.ModelSerializer):
 
     def get_frame(self, obj):
         return obj.frame.sku
+
+    def validate_lens_selection(self, value):
+        if value in (None, {}):
+            return None
+        from lens_workflow.pricing_v2.cart import selection_from_json
+        from lens_workflow.pricing_v2.engine import SelectionError
+        try:
+            selection_from_json(value)
+        except (SelectionError, ValueError, TypeError) as exc:
+            raise serializers.ValidationError(str(exc))
+        return value
 
     def validate_prescription_upload(self, upload):
         """Only the uploader (same account, or the same signed-out session)
@@ -137,6 +153,11 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         rep['is_prescription_required'] = (
             obj.lens_type.is_prescription_required if obj.lens_type else None
         )
+        if obj.lens_selection:
+            from lens_workflow.pricing_v2.labels import selection_labels
+            labels = selection_labels(obj.lens_selection)
+            rep.update({k: v for k, v in labels.items() if k != 'summary'})
+            rep['lens_summary'] = labels['summary']
         # Open carts show the price checkout will charge. A pair already on
         # an order keeps the sub_total that was frozen at checkout.
         rep['lens_unavailable'] = None
@@ -179,6 +200,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
                     index_option=validated_data.get('index_option'),
                     color_option=validated_data.get('color_option'),
                     reader_strength=validated_data.get('reader_strength'),
+                    lens_selection=validated_data.get('lens_selection'),
                     density=validated_data.get('density'),
                     prescription=rx_obj,
                     prescription_upload=validated_data.get('prescription_upload'),
@@ -212,7 +234,7 @@ class CompleteSetSerializer(serializers.ModelSerializer):
         instance.sub_total       = validated_data.get('sub_total',       instance.sub_total)
         instance.saved_for_later = validated_data.get('saved_for_later', instance.saved_for_later)
 
-        for field in ('lens_type', 'function_path', 'tint_type', 'index_option', 'color_option', 'reader_strength', 'density', 'prescription_upload'):
+        for field in ('lens_type', 'function_path', 'tint_type', 'index_option', 'color_option', 'reader_strength', 'density', 'prescription_upload', 'lens_selection'):
             if field in validated_data:
                 setattr(instance, field, validated_data.get(field))
         if 'frame' in validated_data:
@@ -322,6 +344,7 @@ class CompleteSetObjectSerializer(serializers.ModelSerializer):
             'saved_for_later',
             'prescription',
             'prescription_upload',
+            'lens_selection',
         ]
 
     def get_frame(self, obj):

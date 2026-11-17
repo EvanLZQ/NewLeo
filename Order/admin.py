@@ -32,11 +32,19 @@ class CompleteSetAdmin(admin.ModelAdmin):
                     'prescription_file', 'sub_total', 'created_at')
     list_select_related = ('frame', 'lens_type', 'order', 'prescription', 'prescription_upload')
     raw_id_fields = ('prescription_upload',)
-    readonly_fields = ('prescription_file', 'created_by')
+    readonly_fields = ('prescription_file', 'created_by', 'lens_summary', 'lens_selection',
+                       'lens_line', 'price_version', 'pricing_rx', 'price_snapshot')
 
     @admin.display(description='Rx upload')
     def prescription_file(self, obj):
         return _upload_link(obj.prescription_upload)
+
+    @admin.display(description='Lens (v2)')
+    def lens_summary(self, obj):
+        if not obj.lens_selection:
+            return '-'
+        from lens_workflow.pricing_v2.labels import selection_labels
+        return selection_labels(obj.lens_selection)['summary']
 
 
 class CompleteSetInline(admin.TabularInline):
@@ -44,8 +52,15 @@ class CompleteSetInline(admin.TabularInline):
     model = CompleteSet
     extra = 0
     can_delete = False
-    fields = ('id', 'frame', 'lens_type', 'prescription', 'prescription_file', 'sub_total')
+    fields = ('id', 'frame', 'lens_type', 'lens_summary', 'prescription', 'prescription_file', 'sub_total')
     readonly_fields = fields
+
+    @admin.display(description='Lens (v2)')
+    def lens_summary(self, obj):
+        if not obj.lens_selection:
+            return '-'
+        from lens_workflow.pricing_v2.labels import selection_labels
+        return selection_labels(obj.lens_selection)['summary']
     show_change_link = True
 
     @admin.display(description='Rx upload')

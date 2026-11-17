@@ -1,0 +1,12 @@
+# Cell overrides applied while importing the lens price file (pricing v2).
+# Each entry: cell = "Sheet!A1", from = value the file must have now,
+# to = value used instead, source = who decided it and when.
+# If the file already has `to`, the import warns that the entry can go;
+# if it has neither value, the import stops (the file changed: review).
+overrides:
+  - cell: "Premium Lens!D649"
+    from: 1.56
+    to: 1.5
+    source: >-
+      Boss written answer Q3 (2026-11-15): P648 Premium SV Nearsighted Sun/Tint
+      index 1.56 is a typo for 1.50 (duplicate of P657; material CR-39).
