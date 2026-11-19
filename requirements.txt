@@ -18,3 +18,4 @@ bleach[css]
 requests
 django-anymail[mailgun]
 openpyxl
+stripe>=17,<18

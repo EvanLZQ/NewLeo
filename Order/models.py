@@ -57,6 +57,14 @@ class OrderInfo(models.Model):
     address = models.ForeignKey(
         'General.Address', null=True, on_delete=models.SET_NULL)
     issue_order = models.BooleanField(default=False)
+    # Stripe Checkout (second payment method next to PayPal; see
+    # Order/stripe_checkout.py). Blank for PayPal orders. The session id is
+    # the latest Checkout Session made for this order; the payment intent id
+    # is filled in once Stripe reports the payment.
+    stripe_checkout_session_id = models.CharField(
+        max_length=255, blank=True, default='', db_index=True)
+    stripe_payment_intent_id = models.CharField(
+        max_length=255, blank=True, default='', db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -129,6 +137,7 @@ class OrderPayment(models.Model):
     PAYMENT_GATEWAYS = [
         ('paypal', 'PayPal'),
         ('ocean_payment', 'Ocean Payment'),
+        ('stripe', 'Stripe'),
         # ... other gateways
     ]
 

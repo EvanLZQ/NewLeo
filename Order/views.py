@@ -74,6 +74,11 @@ def _cancel_orders(queryset):
         return
     CompleteSet.objects.filter(order_id__in=ids).update(order=None)
     OrderInfo.objects.filter(pk__in=ids).update(order_status='CANCELED')
+    # Close any Stripe Checkout page still open for these orders (after commit).
+    from .stripe_checkout import expire_sessions_later
+    expire_sessions_later(
+        OrderInfo.objects.filter(pk__in=ids).exclude(stripe_checkout_session_id='')
+        .values_list('stripe_checkout_session_id', flat=True))
 
 
 # Fields that identify a shipping address for "is this the same row?" checks.

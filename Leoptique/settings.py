@@ -352,6 +352,23 @@ SITE_BASE_URL = os.environ.get('SITE_BASE_URL', 'https://www.eyelovewear.com')
 # Optional: where storefront contact-form messages are also emailed.
 CONTACT_NOTIFY_EMAIL = os.environ.get('CONTACT_NOTIFY_EMAIL', '')
 
+# ── Stripe (second payment method next to PayPal) ──────────────────────────
+# Everything comes from the environment so the code does not depend on which
+# Stripe account / legal entity is used. OFF by default: with
+# STRIPE_ENABLED unset the Stripe endpoints answer 404 and nothing else
+# changes. See docs/STRIPE_SETUP.md.
+STRIPE_ENABLED = os.environ.get('STRIPE_ENABLED', '').strip().lower() in ('1', 'true', 'yes', 'on')
+STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
+# Not needed by the hosted Checkout redirect; kept so the whole key pair
+# lives in one .env.
+STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+# Storefront origin Stripe sends the shopper back to (success / cancel pages).
+STRIPE_RETURN_BASE_URL = (os.environ.get('STRIPE_RETURN_BASE_URL', '') or FRONTEND_BASE_URL).rstrip('/')
+# Optional: suffix after the account's statement descriptor prefix on card
+# statements (max 22 chars together, Latin letters/digits only).
+STRIPE_STATEMENT_DESCRIPTOR_SUFFIX = os.environ.get('STRIPE_STATEMENT_DESCRIPTOR_SUFFIX', '')
+
 # Rate limiting (login, password reset, guest lookup, order tracking) is
 # built on django.core.cache. With no CACHES configured Django uses a
 # per-process in-memory cache, so with several gunicorn workers each one
